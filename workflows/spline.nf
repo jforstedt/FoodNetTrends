@@ -4,6 +4,7 @@
 include { TRENDY } from '../modules/local/trendy'
 include { PREPROCESS } from '../modules/local/preprocess'
 include { RESOURCE_PROFILER } from '../modules/local/resource_profiler'
+include { DASHBOARD } from '../modules/local/dashboard'
 
 workflow SPLINE {
     // Define input channels
@@ -385,6 +386,17 @@ workflow SPLINE {
             processedFile,
             catchmentConfig
         )
+    }
+
+    // Generate dashboard after all TRENDY jobs complete
+    // Mix csv (always emitted on success) with errors (emitted on failure) for a reliable signal
+    if (!params.skip_dashboard) {
+        trendy_done = TRENDY.out.csv
+            .mix(TRENDY.out.errors)
+            .collect()
+            .map { "done" }
+
+        DASHBOARD(trendy_done, params.projID)
     }
 
     // Log completion

@@ -559,7 +559,14 @@ for (pathogen_name in target_pathogens) {
   
   # Get data for current pathogen
   current_data <- bact_list[[pathogen_name]]
-  
+
+  # Construct output filename prefix including subgroup if specified
+  # (computed before tryCatch so it is available in the error handler)
+  output_prefix <- paste(pathogen_name, opts$subgroup, sep="_")
+  output_prefix <- gsub("[^a-zA-Z0-9_-]", "_", output_prefix)
+  output_prefix <- gsub("_+", "_", output_prefix)
+  output_prefix <- sub("_$", "", output_prefix)
+
   # Fit Bayesian model
   tryCatch({
     # Fit model with parameters from command line
@@ -572,12 +579,6 @@ for (pathogen_name in target_pathogens) {
       max_treedepth = max_treedepth,
       seed = seed
     )
-    
-    # Construct output filename prefix including subgroup if specified
-    output_prefix <- paste(pathogen_name, opts$subgroup, sep="_")
-    output_prefix <- gsub("[^a-zA-Z0-9_-]", "_", output_prefix)
-    output_prefix <- gsub("_+", "_", output_prefix)
-    output_prefix <- sub("_$", "", output_prefix)
     
     # Save model
     saveFile <- paste0(outDir, "/", output_prefix, "_brm.Rds")
@@ -673,8 +674,8 @@ for (pathogen_name in target_pathogens) {
     report_progress("COMPLETE", message=paste("Completed analysis for", pathogen_name))
   }, error = function(e) {
     report_progress("ERROR", message=paste("Error in model fitting for", pathogen_name, ":", e$message))
-    # Create error file with details
-    error_file <- paste0(outDir, "/", pathogen_name, "_error.txt")
+    # Create error file with details (include subgroup to match Nextflow output declaration)
+    error_file <- paste0(outDir, "/", output_prefix, "_error.txt")
     sink(error_file)
     cat(paste("Error processing", pathogen_name, "at", Sys.time(), "\n"))
     cat(paste("Error message:", e$message, "\n"))
