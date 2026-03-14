@@ -4,8 +4,6 @@ process TRENDY {
     shell "/bin/bash"
     container 'foodnet.sif'
 
-    publishDir "${params.outdir}/${projID}/spline_results", mode: 'copy'
-
     input:
     tuple val(pathogenGrouping), val(pathogen), val(subgroup), val(dataMetrics)
     path mmwrFile
