@@ -1,4 +1,4 @@
-name: FootNetTreands_R
+name: FoodNetTrends_R
 channels:
   - conda-forge
   - bioconda
@@ -20,3 +20,5 @@ dependencies:
   - r-cmdstanr=0.8.1
   - r-rstan=2.32.6
   - r-gridExtra=2.3
+  - r-stringdist
+  - r-base64enc

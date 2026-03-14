@@ -324,8 +324,9 @@ mmwrdata <- haven::read_sas(args$mmwrFile) %>%
 mmwrdata <- mmwrdata %>% rename_all(tolower)
 
 # Now filter using lowercase column name
-mmwrdata <- mmwrdata %>% 
-  filter(siteid != "COEX")  # Exclude Colorado expanded catchment
+mmwrdata <- mmwrdata %>%
+  # Exclude COEX pre-2023 only; Colorado expanded to full state in 2023
+  filter(!(siteid == "COEX" & year < 2023))
 
 # Column names already converted to lowercase above
 

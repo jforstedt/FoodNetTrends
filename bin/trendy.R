@@ -112,6 +112,8 @@ parser$add_argument("--max_treedepth", type="integer", default=10,
                     help="Maximum tree depth for MCMC (default: 10)")
 parser$add_argument("--seed", type="integer", default=123,
                     help="Random seed for reproducibility (default: 123)")
+parser$add_argument("--backend", type="character", default="rstan",
+                    help="Stan backend: rstan or cmdstanr (default: rstan)")
 
 # Configuration parameters
 parser$add_argument("--catchment-config", type="character", default=NULL,
@@ -169,7 +171,8 @@ if (opts$debug == FALSE) {
   adapt_delta <- opts$adapt_delta
   max_treedepth <- opts$max_treedepth
   seed <- opts$seed
-  
+  backend <- opts$backend
+
   # Preprocessing parameters
   preprocessed <- opts$preprocessed
   cleanFile <- opts$cleanFile
@@ -196,7 +199,8 @@ if (opts$debug == FALSE) {
   adapt_delta <- 0.8  # Lower for faster debug runs
   max_treedepth <- 8  # Lower for faster debug runs
   seed <- 123
-  
+  backend <- "rstan"
+
   # Preprocessing parameters
   preprocessed <- FALSE
   cleanFile <- NULL
@@ -268,7 +272,7 @@ tryCatch({
 ##############################################################
 
 # Set travel label based on included travel types
-if (("YES" %in% travel) || ("UNKNOWN" %in% travel)) {
+if (("YES" %in% travel) & ("UNKNOWN" %in% travel)) {
   travelLabel <- "All Cases"
 } else if (!("YES" %in% travel) & ("UNKNOWN" %in% travel)) {
   travelLabel <- "Domestically-Acquired (UNK Travel Included)"
@@ -464,20 +468,9 @@ tryCatch({
                                             length(unique(pathDf$pathogen)),
                                             "pathogens"))
 
-  # Process Cyclospora and Salmonella if CIDT+ is included
-  if("CIDT+" %in% cidt) {
-    report_progress("ANALYSIS", message="Processing Cyclospora data")
-    cyloDF <- CYCLOSPORA_ANALYSIS(mmwrdata_filtered, census, catchment_config)%>%as.data.frame()
-
-    report_progress("ANALYSIS", message="Processing Salmonella data")
-    salDF <- SALMONELLA_ANALYSIS(mmwrdata_filtered, census, catchment_config)%>%as.data.frame()
-
-    # Combine all pathogen data
-    bact <- gtools::smartbind(pathDf, cyloDF) %>%
-      gtools::smartbind(salDF)
-  } else {
-    bact <- pathDf
-  }
+  # PATH_ANALYSIS handles all pathogens (bacterial and parasitic) with
+  # appropriate census denominators. No separate processing needed.
+  bact <- pathDf
 
   # Post-processing
   report_progress("ANALYSIS", message="Post-processing pathogen data")
@@ -577,7 +570,8 @@ for (pathogen_name in target_pathogens) {
       iterations = iterations,
       adapt_delta = adapt_delta,
       max_treedepth = max_treedepth,
-      seed = seed
+      seed = seed,
+      backend = backend
     )
     
     # Save model
@@ -591,7 +585,26 @@ for (pathogen_name in target_pathogens) {
     print(summary(proposed))
     sink()
     report_progress("MODEL", message=paste("Saved model summary to", summaryFile))
-    
+
+    # Check convergence diagnostics
+    # Use output_prefix (pathogen_subgroup) so filename matches trendy.nf output declaration
+    report_progress("DIAGNOSTICS", message=paste("Checking convergence for", pathogen_name))
+    convergence <- CHECK_CONVERGENCE(proposed, output_prefix, outDir)
+    if (!convergence$converged) {
+      report_progress("WARNING", message=paste(
+        "CONVERGENCE FAILURE for", pathogen_name,
+        "- results may be unreliable. See diagnostics file."))
+    } else if (length(convergence$warnings) > 0) {
+      report_progress("WARNING", message=paste(
+        "Convergence warnings for", pathogen_name,
+        "- review diagnostics file."))
+    } else {
+      report_progress("DIAGNOSTICS", message=paste(
+        "Convergence OK for", pathogen_name,
+        "(max R-hat:", round(convergence$max_rhat, 4),
+        ", min ESS:", round(convergence$min_ess, 0), ")"))
+    }
+
     # Draw untransformed (link-level) predictions
     report_progress("POST-PROCESSING", message=paste("Generating predictions for", pathogen_name))
     posteriorLinpred <- LINPREAD_DRAW_FN(

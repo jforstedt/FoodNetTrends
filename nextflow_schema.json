@@ -1,8 +1,8 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/cdc/spline/master/nextflow_schema.json",
-    "title": "cdc/spline pipeline parameters",
-    "description": "Spline Modeling",
+    "title": "FoodNet Trends pipeline parameters",
+    "description": "Bayesian spline modeling pipeline for FoodNet surveillance incidence rate trend estimation",
     "type": "object",
     "definitions": {
         "input_output_options": {
@@ -11,22 +11,184 @@
             "fa_icon": "fas fa-terminal",
             "description": "Define where the pipeline should find input data and save output data.",
             "required": [
-                "input",
+                "mmwrFile",
                 "outdir"
             ],
             "properties": {
+                "mmwrFile": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to FoodNet MMWR SAS data file (or preprocessed CSV if preprocessed is true).",
+                    "fa_icon": "fas fa-file"
+                },
+                "censusFileB": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to census population data for bacterial pathogens.",
+                    "fa_icon": "fas fa-file"
+                },
+                "censusFileP": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to census population data for parasitic pathogens.",
+                    "fa_icon": "fas fa-file"
+                },
                 "outdir": {
                     "type": "string",
                     "format": "directory-path",
-                    "description": "The output directory where the results will be saved. You have to use absolute paths to storage on Cloud infrastructure.",
+                    "description": "The output directory where results will be saved.",
+                    "default": "output",
                     "fa_icon": "fas fa-folder-open"
+                },
+                "projID": {
+                    "type": "string",
+                    "description": "Project identifier used as a subdirectory name under outdir. Defaults to a timestamp.",
+                    "fa_icon": "fas fa-tag"
                 },
                 "email": {
                     "type": "string",
                     "description": "Email address for completion summary.",
                     "fa_icon": "fas fa-envelope",
-                    "help_text": "Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits. If set in your user config file (`~/.nextflow/config`) then you don't need to specify this on the command line for every run.",
+                    "help_text": "Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits.",
                     "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
+                }
+            }
+        },
+        "data_filtering_options": {
+            "title": "Data filtering options",
+            "type": "object",
+            "fa_icon": "fas fa-filter",
+            "description": "Parameters controlling which data subsets are included in the analysis.",
+            "properties": {
+                "pathogen": {
+                    "type": "string",
+                    "description": "Comma-separated list of pathogens to analyze. If not specified, all pathogens in the data are analyzed.",
+                    "fa_icon": "fas fa-bacterium"
+                },
+                "pathogen_grouping": {
+                    "type": "string",
+                    "description": "Pathogen subgroup definitions. Format: GENUS~serotype1|GENUS~serotype2 (pipe-separated pairs).",
+                    "fa_icon": "fas fa-layer-group"
+                },
+                "states": {
+                    "type": "string",
+                    "description": "Comma-separated list of state abbreviations to include. If not specified, all states are included.",
+                    "fa_icon": "fas fa-map"
+                },
+                "travel": {
+                    "type": "string",
+                    "default": "NO,UNKNOWN,YES",
+                    "description": "Comma-separated travel status values to include in the analysis.",
+                    "fa_icon": "fas fa-plane"
+                },
+                "cidt": {
+                    "type": "string",
+                    "default": "CIDT+,CX+,PARASITIC",
+                    "description": "Comma-separated CIDT classification values to include.",
+                    "fa_icon": "fas fa-vial"
+                }
+            }
+        },
+        "model_options": {
+            "title": "Model options",
+            "type": "object",
+            "fa_icon": "fas fa-chart-line",
+            "description": "Parameters controlling the Bayesian spline model fitting.",
+            "properties": {
+                "chains": {
+                    "type": "integer",
+                    "default": 2,
+                    "description": "Number of MCMC chains.",
+                    "fa_icon": "fas fa-link"
+                },
+                "iterations": {
+                    "type": "integer",
+                    "default": 500,
+                    "description": "Number of iterations per MCMC chain.",
+                    "fa_icon": "fas fa-redo"
+                },
+                "adapt_delta": {
+                    "type": "number",
+                    "default": 0.95,
+                    "description": "Target acceptance rate for the HMC sampler. Higher values reduce divergences but slow sampling.",
+                    "fa_icon": "fas fa-sliders-h"
+                },
+                "max_treedepth": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Maximum tree depth for the NUTS sampler.",
+                    "fa_icon": "fas fa-tree"
+                },
+                "seed": {
+                    "type": "integer",
+                    "default": 123,
+                    "description": "Random seed for reproducibility.",
+                    "fa_icon": "fas fa-seedling"
+                },
+                "stan_backend": {
+                    "type": "string",
+                    "default": "rstan",
+                    "description": "Stan backend for model fitting.",
+                    "enum": [
+                        "rstan",
+                        "cmdstanr"
+                    ],
+                    "fa_icon": "fas fa-cogs"
+                }
+            }
+        },
+        "preprocessing_options": {
+            "title": "Preprocessing options",
+            "type": "object",
+            "fa_icon": "fas fa-broom",
+            "description": "Options for data preprocessing and input configuration.",
+            "properties": {
+                "preprocessed": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Set to true if mmwrFile points to a pre-cleaned CSV instead of raw SAS data.",
+                    "fa_icon": "fas fa-check"
+                },
+                "cleanFile": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to a pre-cleaned CSV file. Used when preprocessed is true.",
+                    "fa_icon": "fas fa-file-csv"
+                },
+                "skip_preprocessing": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip the preprocessing step entirely.",
+                    "fa_icon": "fas fa-forward"
+                },
+                "skip_dashboard": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip interactive dashboard generation.",
+                    "fa_icon": "fas fa-forward"
+                },
+                "serotype_config": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to CSV file with serotype recoding rules.",
+                    "fa_icon": "fas fa-table"
+                },
+                "catchment_config": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to CSV file with catchment area definitions.",
+                    "fa_icon": "fas fa-table"
+                },
+                "matching_sensitivity": {
+                    "type": "string",
+                    "default": "MEDIUM",
+                    "description": "Pathogen name matching sensitivity for configuration lookups.",
+                    "enum": [
+                        "STRICT",
+                        "MEDIUM",
+                        "RELAXED"
+                    ],
+                    "fa_icon": "fas fa-bullseye"
                 }
             }
         },
@@ -162,14 +324,6 @@
                     "fa_icon": "fas fa-remove-format",
                     "hidden": true
                 },
-                "max_multiqc_email_size": {
-                    "type": "string",
-                    "description": "File size limit when attaching MultiQC reports to summary emails.",
-                    "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$",
-                    "default": "25.MB",
-                    "fa_icon": "fas fa-file-upload",
-                    "hidden": true
-                },
                 "monochrome_logs": {
                     "type": "boolean",
                     "description": "Do not use coloured log outputs.",
@@ -182,24 +336,6 @@
                     "fa_icon": "fas fa-people-group",
                     "help_text": "Incoming hook URL for messaging service. Currently, MS Teams and Slack are supported.",
                     "hidden": true
-                },
-                "multiqc_config": {
-                    "type": "string",
-                    "format": "file-path",
-                    "description": "Custom config file to supply to MultiQC.",
-                    "fa_icon": "fas fa-cog",
-                    "hidden": true
-                },
-                "multiqc_logo": {
-                    "type": "string",
-                    "description": "Custom logo file to supply to MultiQC. File name must also be set in the MultiQC config file",
-                    "fa_icon": "fas fa-image",
-                    "hidden": true
-                },
-                "multiqc_methods_description": {
-                    "type": "string",
-                    "description": "Custom MultiQC yaml file containing HTML including a methods description.",
-                    "fa_icon": "fas fa-cog"
                 },
                 "validate_params": {
                     "type": "boolean",
@@ -220,12 +356,12 @@
                     "fa_icon": "far fa-check-circle",
                     "description": "Validation of parameters fails when an unrecognised parameter is found.",
                     "hidden": true,
-                    "help_text": "By default, when an unrecognised parameter is found, it returns a warinig."
+                    "help_text": "By default, when an unrecognised parameter is found, it returns a warning."
                 },
                 "validationLenientMode": {
                     "type": "boolean",
                     "fa_icon": "far fa-check-circle",
-                    "description": "Validation of parameters in lenient more.",
+                    "description": "Validation of parameters in lenient mode.",
                     "hidden": true,
                     "help_text": "Allows string values that are parseable as numbers or booleans. For further information see [JSONSchema docs](https://github.com/everit-org/json-schema#lenient-mode)."
                 }
@@ -237,7 +373,13 @@
             "$ref": "#/definitions/input_output_options"
         },
         {
-            "$ref": "#/definitions/reference_genome_options"
+            "$ref": "#/definitions/data_filtering_options"
+        },
+        {
+            "$ref": "#/definitions/model_options"
+        },
+        {
+            "$ref": "#/definitions/preprocessing_options"
         },
         {
             "$ref": "#/definitions/institutional_config_options"

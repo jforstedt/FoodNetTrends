@@ -46,9 +46,9 @@ class WorkflowMain {
         // Check AWS batch settings
         NfcoreTemplate.awsBatch(workflow, params)
 
-        // Check input has been provided
-        if (!params.input) {
-            Nextflow.error("Please provide an input samplesheet to the pipeline e.g. '--input samplesheet.csv'")
+        // Check that required FoodNetTrends input files have been provided
+        if (!params.mmwrFile && !params.preprocessed) {
+            Nextflow.error("Please provide the MMWR data file to the pipeline e.g. '--mmwrFile /path/to/mmwr.sas7bdat'")
         }
     }
 

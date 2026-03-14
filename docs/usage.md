@@ -1,161 +1,147 @@
-54# cdc/spline: Usage
-
-> _Documentation of pipeline parameters is generated automatically from the pipeline schema and can no longer be found in markdown files._
+# FoodNet Trends: Usage
 
 ## Introduction
 
-<!-- TODO nf-core: Add documentation about anything specific to running your pipeline. For general topics, please point to (and add to) the main nf-core website. -->
+FoodNet Trends is a Bayesian spline modeling pipeline for estimating incidence rate trends from FoodNet surveillance data. It processes MMWR case data and census population files to fit penalized spline models for each pathogen, producing trend estimates with uncertainty quantification.
 
-## Samplesheet input
+## Input data
 
-You will need to create a samplesheet with information about the samples you would like to analyse before running the pipeline. Use this parameter to specify its location. It has to be a comma-separated file with 3 columns, and a header row as shown in the examples below.
+The pipeline requires three input files:
 
-```bash
---input '[path to samplesheet file]'
-```
+| Parameter      | Description                                      | Format          |
+| -------------- | ------------------------------------------------ | --------------- |
+| `--mmwrFile`   | FoodNet MMWR case data                           | SAS (.sas7bdat) |
+| `--censusFileB`| Census population data for bacterial pathogens   | SAS (.sas7bdat) |
+| `--censusFileP`| Census population data for parasitic pathogens   | SAS (.sas7bdat) |
 
-### Multiple runs of the same sample
+If you have already preprocessed the data, you can skip the preprocessing step by providing:
 
-The `sample` identifiers have to be the same when you have re-sequenced the same sample more than once e.g. to increase sequencing depth. The pipeline will concatenate the raw reads before performing any downstream analysis. Below is an example for the same sample sequenced across 3 lanes:
-
-```csv title="samplesheet.csv"
-sample,fastq_1,fastq_2
-CONTROL_REP1,AEG588A1_S1_L002_R1_001.fastq.gz,AEG588A1_S1_L002_R2_001.fastq.gz
-CONTROL_REP1,AEG588A1_S1_L003_R1_001.fastq.gz,AEG588A1_S1_L003_R2_001.fastq.gz
-CONTROL_REP1,AEG588A1_S1_L004_R1_001.fastq.gz,AEG588A1_S1_L004_R2_001.fastq.gz
-```
-
-### Full samplesheet
-
-The pipeline will auto-detect whether a sample is single- or paired-end using the information provided in the samplesheet. The samplesheet can have as many columns as you desire, however, there is a strict requirement for the first 3 columns to match those defined in the table below.
-
-A final samplesheet file consisting of both single- and paired-end data may look something like the one below. This is for 6 samples, where `TREATMENT_REP3` has been sequenced twice.
-
-```csv title="samplesheet.csv"
-sample,fastq_1,fastq_2
-CONTROL_REP1,AEG588A1_S1_L002_R1_001.fastq.gz,AEG588A1_S1_L002_R2_001.fastq.gz
-CONTROL_REP2,AEG588A2_S2_L002_R1_001.fastq.gz,AEG588A2_S2_L002_R2_001.fastq.gz
-CONTROL_REP3,AEG588A3_S3_L002_R1_001.fastq.gz,AEG588A3_S3_L002_R2_001.fastq.gz
-TREATMENT_REP1,AEG588A4_S4_L003_R1_001.fastq.gz,
-TREATMENT_REP2,AEG588A5_S5_L003_R1_001.fastq.gz,
-TREATMENT_REP3,AEG588A6_S6_L003_R1_001.fastq.gz,
-TREATMENT_REP3,AEG588A6_S6_L004_R1_001.fastq.gz,
-```
-
-| Column    | Description                                                                                                                                                                            |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sample`  | Custom sample name. This entry will be identical for multiple sequencing libraries/runs from the same sample. Spaces in sample names are automatically converted to underscores (`_`). |
-| `fastq_1` | Full path to FastQ file for Illumina short reads 1. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
-| `fastq_2` | Full path to FastQ file for Illumina short reads 2. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
-
-An [example samplesheet](../assets/samplesheet.csv) has been provided with the pipeline.
+| Parameter          | Description                                  |
+| ------------------ | -------------------------------------------- |
+| `--preprocessed`   | Set to `true` to use a pre-cleaned CSV file  |
+| `--cleanFile`      | Path to the preprocessed CSV file            |
+| `--skip_preprocessing` | Set to `true` to skip preprocessing      |
 
 ## Running the pipeline
 
-The typical command for running the pipeline is as follows:
+The typical command for running the pipeline is:
 
 ```bash
-nextflow run cdc/spline --input ./samplesheet.csv --outdir ./results --genome GRCh37 -profile docker
+nextflow run FoodNetTrends \
+    --mmwrFile /path/to/mmwr.sas7bdat \
+    --censusFileB /path/to/census_bacterial.sas7bdat \
+    --censusFileP /path/to/census_parasitic.sas7bdat \
+    --outdir ./results \
+    -profile singularity
 ```
 
-This will launch the pipeline with the `docker` configuration profile. See below for more information about profiles.
+### Key parameters
 
-Note that the pipeline will create the following files in your working directory:
+#### Pathogen selection
 
 ```bash
-work                # Directory containing the nextflow working files
-<OUTDIR>            # Finished results in specified location (defined with --outdir)
-.nextflow_log       # Log file from Nextflow
-# Other nextflow hidden files, eg. history of pipeline runs and old logs.
+--pathogen 'Campylobacter,Salmonella,Shigella'   # Comma-separated list of pathogens
+--pathogen_grouping 'SALMONELLA~Enteritidis|SALMONELLA~Typhimurium'  # Subgroup definitions
 ```
 
-If you wish to repeatedly use the same parameters for multiple runs, rather than specifying each flag in the command, you can specify these in a params file.
-
-Pipeline settings can be provided in a `yaml` or `json` file via `-params-file <file>`.
-
-:::warning
-Do not use `-c <file>` to specify parameters as this will result in errors. Custom config files specified with `-c` must only be used for [tuning process resource specifications](https://nf-co.re/docs/usage/configuration#tuning-workflow-resources), other infrastructural tweaks (such as output directories), or module arguments (args).
-:::
-
-The above pipeline run specified with a params file in yaml format:
+#### Data filtering
 
 ```bash
-nextflow run cdc/spline -profile docker -params-file params.yaml
+--states 'CT,GA,MD,MN,NM,OR,TN,CO,NY'   # States to include (null = all)
+--travel 'NO,UNKNOWN,YES'                 # Travel status filter
+--cidt 'CIDT+,CX+,PARASITIC'             # CIDT classification filter
 ```
 
-with `params.yaml` containing:
+#### Model parameters
+
+```bash
+--chains 4              # Number of MCMC chains (default: 2)
+--iterations 2000       # Iterations per chain (default: 500)
+--adapt_delta 0.99      # HMC adaptation target (default: 0.95)
+--max_treedepth 15      # Maximum HMC tree depth (default: 10)
+--seed 123              # Random seed (default: 123)
+--stan_backend rstan     # Stan backend: "rstan" or "cmdstanr" (default: rstan)
+```
+
+#### Configuration files
+
+```bash
+--serotype_config /path/to/serotype_config.csv      # Serotype recoding rules
+--catchment_config /path/to/catchment_config.csv    # Catchment area definitions
+--matching_sensitivity MEDIUM                        # Name matching: STRICT, MEDIUM, or RELAXED
+```
+
+#### Output options
+
+```bash
+--outdir ./results       # Output directory (default: output)
+--projID my_analysis     # Project identifier (default: timestamp)
+--skip_dashboard true    # Skip dashboard generation
+```
+
+### Using a params file
+
+Rather than specifying each flag on the command line, you can provide parameters in a YAML file:
+
+```bash
+nextflow run FoodNetTrends -profile singularity -params-file params.yaml
+```
+
+With `params.yaml` containing:
 
 ```yaml
-input: './samplesheet.csv'
-outdir: './results/'
-genome: 'GRCh37'
-<...>
+mmwrFile: '/path/to/mmwr.sas7bdat'
+censusFileB: '/path/to/census_bacterial.sas7bdat'
+censusFileP: '/path/to/census_parasitic.sas7bdat'
+outdir: './results'
+pathogen: 'Campylobacter,Salmonella'
+chains: 4
+iterations: 2000
 ```
 
-You can also generate such `YAML`/`JSON` files via [nf-core/launch](https://nf-co.re/launch).
+### Profiles
+
+The pipeline supports the following profiles:
+
+- `test` - Minimal test configuration with reduced iterations for fast validation
+- `singularity` - Run with Singularity containers (recommended for HPC)
+- `production` - Production settings with 4 chains, 2000 iterations, and stricter adaptation
+- `debug` - Enable verbose logging and hash dumping
+
+Multiple profiles can be combined: `-profile test,singularity`
 
 ### Updating the pipeline
 
 When you run the above command, Nextflow automatically pulls the pipeline code from GitHub and stores it as a cached version. When running the pipeline after this, it will always use the cached version if available - even if the pipeline has been updated since. To make sure that you're running the latest version of the pipeline, make sure that you regularly update the cached version of the pipeline:
 
 ```bash
-nextflow pull cdc/spline
+nextflow pull FoodNetTrends
 ```
 
 ### Reproducibility
 
 It is a good idea to specify a pipeline version when running the pipeline on your data. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since.
 
-First, go to the [cdc/spline releases page](https://github.com/cdc/spline/releases) and find the latest pipeline version - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`. Of course, you can switch to another version by changing the number after the `-r` flag.
+First, go to the releases page and find the latest pipeline version - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`.
 
-This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future. For example, at the bottom of the MultiQC reports.
-
-To further assist in reproducbility, you can use share and re-use [parameter files](#running-the-pipeline) to repeat pipeline runs with the same settings without having to write out a command with every single parameter.
-
-:::tip
-If you wish to share such profile (such as upload as supplementary material for academic publications), make sure to NOT include cluster specific paths to files, nor institutional specific profiles.
-:::
+To further assist in reproducibility, you can use share and re-use [parameter files](#using-a-params-file) to repeat pipeline runs with the same settings without having to write out a command with every single parameter.
 
 ## Core Nextflow arguments
 
-:::note
 These options are part of Nextflow and use a _single_ hyphen (pipeline parameters use a double-hyphen).
-:::
 
 ### `-profile`
 
 Use this parameter to choose a configuration profile. Profiles can give configuration presets for different compute environments.
 
-Several generic profiles are bundled with the pipeline which instruct the pipeline to use software packaged using different methods (Docker, Singularity, Podman, Shifter, Charliecloud, Apptainer, Conda) - see below.
-
-:::info
-We highly recommend the use of Docker or Singularity containers for full pipeline reproducibility, however when this is not possible, Conda is also supported.
-:::
+We highly recommend the use of Singularity containers for full pipeline reproducibility.
 
 The pipeline also dynamically loads configurations from [https://github.com/nf-core/configs](https://github.com/nf-core/configs) when it runs, making multiple config profiles for various institutional clusters available at run time. For more information and to see if your system is available in these configs please see the [nf-core/configs documentation](https://github.com/nf-core/configs#documentation).
 
-Note that multiple profiles can be loaded, for example: `-profile test,docker` - the order of arguments is important!
+Note that multiple profiles can be loaded, for example: `-profile test,singularity` - the order of arguments is important!
 They are loaded in sequence, so later profiles can overwrite earlier profiles.
 
-If `-profile` is not specified, the pipeline will run locally and expect all software to be installed and available on the `PATH`. This is _not_ recommended, since it can lead to different results on different machines dependent on the computer enviroment.
-
-- `test`
-  - A profile with a complete configuration for automated testing
-  - Includes links to test data so needs no other parameters
-- `docker`
-  - A generic configuration profile to be used with [Docker](https://docker.com/)
-- `singularity`
-  - A generic configuration profile to be used with [Singularity](https://sylabs.io/docs/)
-- `podman`
-  - A generic configuration profile to be used with [Podman](https://podman.io/)
-- `shifter`
-  - A generic configuration profile to be used with [Shifter](https://nersc.gitlab.io/development/shifter/how-to-use/)
-- `charliecloud`
-  - A generic configuration profile to be used with [Charliecloud](https://hpc.github.io/charliecloud/)
-- `apptainer`
-  - A generic configuration profile to be used with [Apptainer](https://apptainer.org/)
-- `conda`
-  - A generic configuration profile to be used with [Conda](https://conda.io/docs/). Please only use Conda as a last resort i.e. when it's not possible to run the pipeline with Docker, Singularity, Podman, Shifter, Charliecloud, or Apptainer.
+If `-profile` is not specified, the pipeline will run locally and expect all software to be installed and available on the `PATH`. This is _not_ recommended, since it can lead to different results on different machines dependent on the computer environment.
 
 ### `-resume`
 
@@ -171,37 +157,15 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 
 ### Resource requests
 
-Whilst the default requirements set within the pipeline will hopefully work for most people and with most input data, you may find that you want to customise the compute resources that the pipeline requests. Each step in the pipeline has a default set of requirements for number of CPUs, memory and time. For most of the steps in the pipeline, if the job exits with any of the error codes specified [here](https://github.com/nf-core/rnaseq/blob/4c27ef5610c87db00c3c5a3eed10b1d161abf575/conf/base.config#L18) it will automatically be resubmitted with higher requests (2 x original, then 3 x original). If it still fails after the third attempt then the pipeline execution is stopped.
+The default requirements set within the pipeline will work for most analyses. The TRENDY process dynamically allocates CPUs based on the number of chains and memory based on data complexity. If a job exits with a retriable error code, it will automatically be resubmitted with higher resource requests (up to 3 retries).
 
 To change the resource requests, please see the [max resources](https://nf-co.re/docs/usage/configuration#max-resources) and [tuning workflow resources](https://nf-co.re/docs/usage/configuration#tuning-workflow-resources) section of the nf-core website.
-
-### Custom Containers
-
-In some cases you may wish to change which container or conda environment a step of the pipeline uses for a particular tool. By default nf-core pipelines use containers and software from the [biocontainers](https://biocontainers.pro/) or [bioconda](https://bioconda.github.io/) projects. However in some cases the pipeline specified version maybe out of date.
-
-To use a different container from the default container or conda environment specified in a pipeline, please see the [updating tool versions](https://nf-co.re/docs/usage/configuration#updating-tool-versions) section of the nf-core website.
-
-### Custom Tool Arguments
-
-A pipeline might not always support every possible argument or option of a particular tool used in pipeline. Fortunately, nf-core pipelines provide some freedom to users to insert additional parameters that the pipeline does not include by default.
-
-To learn how to provide additional arguments to a particular tool of the pipeline, please see the [customising tool arguments](https://nf-co.re/docs/usage/configuration#customising-tool-arguments) section of the nf-core website.
 
 ### nf-core/configs
 
 In most cases, you will only need to create a custom config as a one-off but if you and others within your organisation are likely to be running nf-core pipelines regularly and need to use the same settings regularly it may be a good idea to request that your custom config file is uploaded to the `nf-core/configs` git repository. Before you do this please can you test that the config file works with your pipeline of choice using the `-c` parameter. You can then create a pull request to the `nf-core/configs` repository with the addition of your config file, associated documentation file (see examples in [`nf-core/configs/docs`](https://github.com/nf-core/configs/tree/master/docs)), and amending [`nfcore_custom.config`](https://github.com/nf-core/configs/blob/master/nfcore_custom.config) to include your custom profile.
 
 See the main [Nextflow documentation](https://www.nextflow.io/docs/latest/config.html) for more information about creating your own configuration files.
-
-If you have any questions or issues please send us a message on [Slack](https://nf-co.re/join/slack) on the [`#configs` channel](https://nfcore.slack.com/channels/configs).
-
-## Azure Resource Requests
-
-To be used with the `azurebatch` profile by specifying the `-profile azurebatch`.
-We recommend providing a compute `params.vm_type` of `Standard_D16_v3` VMs by default but these options can be changed if required.
-
-Note that the choice of VM size depends on your quota and the overall workload during the analysis.
-For a thorough list, please refer the [Azure Sizes for virtual machines in Azure](https://docs.microsoft.com/en-us/azure/virtual-machines/sizes).
 
 ## Running in the background
 

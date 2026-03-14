@@ -26,8 +26,9 @@ process TRENDY {
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}*_EstIRRCatch_*.csv", emit: irr, optional: true
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_summary.txt", emit: summary, optional: true
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_error.txt", optional: true, emit: errors
+    path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_convergence_diagnostics.csv", emit: diagnostics, optional: true
 
-    errorStrategy { task.exitStatus in [143,137,104,134,139] ? 'retry' : 'finish' }
+    errorStrategy { task.exitStatus in [143,137,104,134,140] ? 'retry' : 'finish' }
     maxRetries 3
 
     script:
@@ -84,6 +85,7 @@ process TRENDY {
       --adapt_delta ${params.adapt_delta} \\
       --max_treedepth ${params.max_treedepth} \\
       --seed ${params.seed} \\
+      --backend ${params.stan_backend} \\
       ${catchmentConfigArg} \\
       --debug FALSE
     """

@@ -44,19 +44,24 @@ suppressPackageStartupMessages({
   library(gridExtra)  # for arranging multiple plots
 })
 
-# Try to load HDInterval for hdi() function
-hdi_available <- requireNamespace("HDInterval", quietly = TRUE)
-if (hdi_available) {
-  suppressPackageStartupMessages(library(HDInterval))
-} else {
-  # Define a fallback hdi function using quantiles
-  hdi <- function(x, credMass = 0.95) {
-    # Simple approximation using equal-tailed intervals
-    alpha <- 1 - credMass
-    c(quantile(x, probs = alpha/2, na.rm = TRUE),
-      quantile(x, probs = 1 - alpha/2, na.rm = TRUE))
+# HDInterval is required -- the fallback of labeling ETI as HDI is incorrect
+if (!requireNamespace("HDInterval", quietly = TRUE)) {
+  stop("Required package 'HDInterval' is not installed. ",
+       "Install with: install.packages('HDInterval')")
+}
+suppressPackageStartupMessages(library(HDInterval))
+
+# Compute HDI on log scale and back-transform (matches published methodology).
+# Positive draws only; warns if >5% of draws are zero.
+log_hdi <- function(x, credMass = 0.95) {
+  n_total <- length(x)
+  x_pos <- x[x > 0]
+  if (length(x_pos) < n_total * 0.95) {
+    warning("log_hdi: >5% of draws are zero or negative (",
+            n_total - length(x_pos), "/", n_total, ")")
   }
-  warning("HDInterval package not available. Using quantile-based approximation for HDI.")
+  if (length(x_pos) < 2) return(c(NA_real_, NA_real_))
+  exp(hdi(log(x_pos), credMass = credMass))
 }
 
 # --- Catchment Configuration Functions ---
@@ -239,8 +244,12 @@ PATH_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL) {
     catchment_config <- read_catchment_config()
   }
   
-  # Apply catchment filter  
-  selectDf <- apply_catchment_filter(selectDf, catchment_config, "bacterial")
+  # Apply catchment filter per pathogen type so each uses its own surveillance periods
+  bacterial_subset <- selectDf %>% filter(!pathogen %in% parasitic_pathogens)
+  parasitic_subset <- selectDf %>% filter(pathogen %in% parasitic_pathogens)
+  bacterial_subset <- apply_catchment_filter(bacterial_subset, catchment_config, "bacterial")
+  parasitic_subset <- apply_catchment_filter(parasitic_subset, catchment_config, "parasitic")
+  selectDf <- bind_rows(bacterial_subset, parasitic_subset)
   
   return(selectDf)
 }
@@ -346,7 +355,8 @@ SALMONELLA_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL) {
 # - iterations: Publication quality typically requires 5000-10000
 ################################################################################
 PROPOSED_BM <- function(data, cores = 16, chains = 2, iterations = 500,
-                        adapt_delta = 0.95, max_treedepth = 10, seed = 123) {
+                        adapt_delta = 0.95, max_treedepth = 10, seed = 123,
+                        backend = "rstan") {
   # Ensure data is properly formatted
   data <- as.data.frame(data)
   
@@ -407,13 +417,100 @@ PROPOSED_BM <- function(data, cores = 16, chains = 2, iterations = 500,
       cores = cores,
       seed = seed,
       control = list(adapt_delta = adapt_delta, max_treedepth = max_treedepth),
-      backend = "rstan"  # Explicitly use rstan backend for stability
+      backend = backend
     )
   }, error = function(e) {
-    stop("Model did not converge. May need to run a simpler version, use more iterations, or more robust adapt_delta/max_treedepth values.")
+    stop(paste0("Model fitting failed. Original error: ", e$message,
+                "\nConsider: more iterations, higher adapt_delta, or higher max_treedepth."))
   })
   
   return(model)
+}
+
+################################################################################
+# CHECK_CONVERGENCE - Programmatic convergence diagnostics for fitted brms model
+#
+# Thresholds (Stan development team recommendations):
+#   R-hat: warning > 1.01, failure > 1.05
+#   ESS: warning < 400
+#   Divergent transitions: warning > 0
+################################################################################
+CHECK_CONVERGENCE <- function(model, pathogen_name, output_dir) {
+  diagnostics <- list(pathogen = pathogen_name, converged = TRUE, warnings = character(0))
+
+  # R-hat
+  rhat_values <- brms::rhat(model)
+  rhat_values <- rhat_values[!is.na(rhat_values)]
+  max_rhat <- max(rhat_values)
+  n_rhat_warn <- sum(rhat_values > 1.01)
+  n_rhat_fail <- sum(rhat_values > 1.05)
+
+  if (n_rhat_fail > 0) {
+    diagnostics$converged <- FALSE
+    diagnostics$warnings <- c(diagnostics$warnings,
+      paste0("CONVERGENCE FAILURE: ", n_rhat_fail,
+             " parameters with R-hat > 1.05 (max: ", round(max_rhat, 4), ")"))
+  } else if (n_rhat_warn > 0) {
+    diagnostics$warnings <- c(diagnostics$warnings,
+      paste0("CONVERGENCE WARNING: ", n_rhat_warn,
+             " parameters with R-hat > 1.01 (max: ", round(max_rhat, 4), ")"))
+  }
+
+  # ESS via neff_ratio (ESS / total_draws)
+  neff_values <- brms::neff_ratio(model)
+  neff_values <- neff_values[!is.na(neff_values)]
+  total_draws <- nrow(as.matrix(model))
+  min_ess <- min(neff_values) * total_draws
+  n_low_ess <- sum(neff_values * total_draws < 400)
+
+  if (n_low_ess > 0) {
+    diagnostics$warnings <- c(diagnostics$warnings,
+      paste0("ESS WARNING: ", n_low_ess,
+             " parameters with ESS < 400 (min ESS: ", round(min_ess, 0), ")"))
+  }
+
+  # Divergent transitions
+  n_divergent <- NA
+  tryCatch({
+    np <- brms::nuts_params(model)
+    n_divergent <- sum(np$Value[np$Parameter == "divergent__"])
+    if (n_divergent > 0) {
+      diagnostics$warnings <- c(diagnostics$warnings,
+        paste0("DIVERGENCE WARNING: ", n_divergent, " divergent transitions"))
+    }
+  }, error = function(e) {
+    diagnostics$warnings <<- c(diagnostics$warnings,
+      paste0("Could not extract divergent transition info: ", e$message))
+  })
+
+  diagnostics$max_rhat <- max_rhat
+  diagnostics$min_ess <- min_ess
+  diagnostics$n_divergent <- n_divergent
+
+  # Write diagnostics CSV
+  diag_df <- data.frame(
+    pathogen = pathogen_name,
+    max_rhat = round(max_rhat, 4),
+    n_rhat_above_1.01 = n_rhat_warn,
+    n_rhat_above_1.05 = n_rhat_fail,
+    min_ess = round(min_ess, 0),
+    n_params_low_ess = n_low_ess,
+    n_divergent = n_divergent,
+    converged = diagnostics$converged,
+    warnings = paste(diagnostics$warnings, collapse = "; "),
+    stringsAsFactors = FALSE
+  )
+  diag_file <- file.path(output_dir,
+    paste0(pathogen_name, "_convergence_diagnostics.csv"))
+  write.csv(diag_df, diag_file, row.names = FALSE)
+
+  if (length(diagnostics$warnings) > 0) {
+    for (w in diagnostics$warnings) {
+      warning(paste0("[", pathogen_name, "] ", w))
+    }
+  }
+
+  return(diagnostics)
 }
 
 ################################################################################
@@ -509,15 +606,15 @@ LINPRED_TO_CATCHIR <- function(catchment_data) {
       mean=round(mean(.epred),6),
       lower_equitailed=round(quantile(.epred, probs = 0.025, na.rm=TRUE),6),
       upper_equitailed=round(quantile(.epred, probs = 0.975, na.rm=TRUE),6),
-      lower_hdi = round(hdi(.epred, credMass = 0.95)[1],6),
-      upper_hdi = round(hdi(.epred, credMass = 0.95)[2],6),
+      lower_hdi = round(log_hdi(.epred)[1],6),
+      upper_hdi = round(log_hdi(.epred)[2],6),
       # Estimated Incidence
       median_ir= round(median(ir),6),
       mean_ir= round(mean(ir),6),
       lower_equitailed_ir=round(quantile(ir, probs = 0.025, na.rm=TRUE),6),
       upper_equitailed_ir=round(quantile(ir, probs = 0.975, na.rm=TRUE),6),
-      lower_hdi_ir = round(hdi(ir, credMass = 0.95)[1],6),
-      upper_hdi_ir = round(hdi(ir, credMass = 0.95)[2],6))%>%
+      lower_hdi_ir = round(log_hdi(ir)[1],6),
+      upper_hdi_ir = round(log_hdi(ir)[2],6))%>%
     # Arrange by Year and State for better readability
     arrange(year)
   return(ir_data)
@@ -554,15 +651,15 @@ LINPRED_TO_SITEIR <- function(site_data) {
       mean=round(mean(.epred),6),
       lower_equitailed=round(quantile(.epred, probs = 0.025, na.rm=TRUE),6),
       upper_equitailed=round(quantile(.epred, probs = 0.975, na.rm=TRUE),6),
-      lower_hdi = round(hdi(.epred, credMass = 0.95)[1],6),
-      upper_hdi = round(hdi(.epred, credMass = 0.95)[2],6),
+      lower_hdi = round(log_hdi(.epred)[1],6),
+      upper_hdi = round(log_hdi(.epred)[2],6),
       # Estimated Incidence
       median_ir= round(median(ir),6),
       mean_ir= round(mean(ir),6),
       lower_equitailed_ir=round(quantile(ir, probs = 0.025, na.rm=TRUE),6),
       upper_equitailed_ir=round(quantile(ir, probs = 0.975, na.rm=TRUE),6),
-      lower_hdi_ir = round(hdi(ir, credMass = 0.95)[1],6),
-      upper_hdi_ir = round(hdi(ir, credMass = 0.95)[2],6))%>%
+      lower_hdi_ir = round(log_hdi(ir)[1],6),
+      upper_hdi_ir = round(log_hdi(ir)[2],6))%>%
     # Arrange by Year and State for better readability
     arrange(year)
   return(ir_data)
@@ -666,13 +763,19 @@ PLOT_OVERALL_TREND <- function(catchir_data, pathogen, outDir, subgroup = "combi
 ################################################################################
 IR_COMP_CATCH <- function(catch, start_year, end_year, output_file = NULL) {
   
-  # Filter data for the comparison period
+  # Baseline IR: population-weighted mean across the baseline period per draw.
+  # IR = sum(cases) / sum(person-time), the standard epidemiological definition.
   period_data <- catch %>%
-    filter(year >= start_year & year <= end_year)%>% group_by(.draw)%>%
-    mutate(ir=.epred/(population/100000))%>%
-    summarise(baseline_ir=median(ir),
-              baseline_count=median(count))
-  colnames(period_data)<-c(".draw", "baseline_ir", "baseline_count")
+    filter(year >= start_year & year <= end_year) %>%
+    group_by(.draw) %>%
+    summarise(
+      baseline_value = mean(.epred),
+      baseline_pop = mean(population),
+      baseline_count = mean(count)
+    ) %>%
+    mutate(baseline_ir = baseline_value / (baseline_pop / 100000))
+  colnames(period_data) <- c(".draw", "baseline_value", "baseline_pop",
+                              "baseline_count", "baseline_ir")
   
   # Check if we have data for the requested period
   if (nrow(period_data) == 0) {
@@ -700,15 +803,15 @@ IR_COMP_CATCH <- function(catch, start_year, end_year, output_file = NULL) {
      mean=round(mean(.epred),6),
      lower_equitailed=round(quantile(.epred, probs = 0.025, na.rm=TRUE),6),
      upper_equitailed=round(quantile(.epred, probs = 0.975, na.rm=TRUE),6),
-     lower_hdi = round(hdi(.epred, credMass = 0.95)[1],6),
-     upper_hdi = round(hdi(.epred, credMass = 0.95)[2],6),
+     lower_hdi = round(log_hdi(.epred)[1],6),
+     upper_hdi = round(log_hdi(.epred)[2],6),
      # Estimated Incidence
      median_ir= round(median(ir),6),
      mean_ir= round(mean(ir),6),
      lower_equitailed_ir=round(quantile(ir, probs = 0.025, na.rm=TRUE),6),
      upper_equitailed_ir=round(quantile(ir, probs = 0.975, na.rm=TRUE),6),
-     lower_hdi_ir = round(hdi(ir, credMass = 0.95)[1],6),
-     upper_hdi_ir = round(hdi(ir, credMass = 0.95)[2],6),
+     lower_hdi_ir = round(log_hdi(ir)[1],6),
+     upper_hdi_ir = round(log_hdi(ir)[2],6),
      # Relative Risk and Percent Change
      relative_risk_lower_hdi = round(hdi(relative_risk, credMass = 0.95)[1],6),
      relative_risk_upper_hdi = round(hdi(relative_risk, credMass = 0.95)[2],6),
@@ -744,12 +847,12 @@ IR_COMP_CATCH <- function(catch, start_year, end_year, output_file = NULL) {
 
 
 # New function: Plot percent change trend
-PLOT_PCTCHange_TREND <- function(hp30) {
+PLOT_PCTCHange_TREND <- function(hp30, pathogen, outDir) {
   # Create the plot
   p <- ggplot(hp30, aes(x = year, y = relative_risk_est)) +
     geom_line(linewidth = 1.5) +
     geom_ribbon(aes(ymin = relative_risk_lower_hdi, ymax = relative_risk_upper_hdi), alpha = 0.3) +
-    geom_vline(aes(xintercept = 2004), type="dashed", color="red")+
+    geom_vline(aes(xintercept = 2004), linetype="dashed", color="red")+
     labs(
       title = paste("Overall Trend for", pathogen),
       subtitle = "Median incidence with 95% HDI intervals",
@@ -761,11 +864,11 @@ PLOT_PCTCHange_TREND <- function(hp30) {
       plot.title = element_text(hjust = 0.5, face = "bold"),
       plot.subtitle = element_text(hjust = 0.5)
     )
-  
+
   # Save the plot
   plot_file <- file.path(outDir, paste0(pathogen, "_overall_trend.png"))
   ggsave(plot_file, p, width = 10, height = 6, dpi = 300)
-  
+
   return(p)
 }
 
