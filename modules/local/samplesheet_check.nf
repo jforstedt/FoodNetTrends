@@ -17,7 +17,7 @@ process SAMPLESHEET_CHECK {
     when:
     task.ext.when == null || task.ext.when
 
-    script: // This script is bundled with the pipeline, in cdc/spline/bin/
+    script: // This script is bundled with the pipeline, in cdcgov/foodnettrends/bin/
     """
     check_samplesheet.py \\
         $samplesheet \\

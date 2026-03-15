@@ -17,7 +17,7 @@
                         "size": "Large",
                         "weight": "Bolder",
                         "color": "<% if (success) { %>Good<% } else { %>Attention<%} %>",
-                        "text": "cdc/spline v${version} - ${runName}",
+                        "text": "cdcgov/foodnettrends v${version} - ${runName}",
                         "wrap": true
                     },
                     {

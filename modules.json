@@ -1,6 +1,6 @@
 {
-    "name": "cdc/spline",
-    "homePage": "https://github.com/cdc/spline",
+    "name": "cdcgov/foodnettrends",
+    "homePage": "https://github.com/CDCgov/FoodNetTrends",
     "repos": {
         "https://github.com/nf-core/modules.git": {
             "modules": {

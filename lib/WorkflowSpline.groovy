@@ -1,5 +1,5 @@
 //
-// This file holds several functions specific to the workflow/spline.nf in the cdc/spline pipeline
+// This file holds several functions specific to the workflow/spline.nf in the cdcgov/foodnettrends pipeline
 //
 
 import nextflow.Nextflow
