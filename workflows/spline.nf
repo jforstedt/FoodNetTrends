@@ -399,8 +399,6 @@ workflow SPLINE {
         DASHBOARD(trendy_done, params.projID)
     }
 
-    // Log completion
-    log.info "Pipeline completed successfully"
 }
 
 /*
