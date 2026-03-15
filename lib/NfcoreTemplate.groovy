@@ -94,22 +94,20 @@ class NfcoreTemplate {
         email_fields['projectDir']   = workflow.projectDir
         email_fields['summary']      = summary << misc_fields
 
-        // On success try attach the multiqc report
+        // Attempt to attach an optional report if one was provided
         def mqc_report = null
         try {
-            if (workflow.success) {
+            if (workflow.success && multiqc_report) {
                 mqc_report = multiqc_report.getVal()
                 if (mqc_report.getClass() == ArrayList && mqc_report.size() >= 1) {
                     if (mqc_report.size() > 1) {
-                        log.warn "[$workflow.manifest.name] Found multiple reports from process 'MULTIQC', will use only one"
+                        log.warn "[$workflow.manifest.name] Found multiple reports, will use only one"
                     }
                     mqc_report = mqc_report[0]
                 }
             }
         } catch (all) {
-            if (multiqc_report) {
-                log.warn "[$workflow.manifest.name] Could not attach MultiQC report to summary email"
-            }
+            // No report available to attach; continuing without attachment
         }
 
         // Check if we are only sending emails on failure

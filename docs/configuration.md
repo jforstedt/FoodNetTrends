@@ -1,19 +1,42 @@
-# Data Configuration Options for FoodNetTrends Pipeline
-
-**Important**: These are CSV data configuration files, NOT Nextflow configuration files.
-
-The FoodNetTrends pipeline now supports optional CSV configuration files to customize serotype recoding rules and catchment area definitions. This document explains how to use these features.
+# FoodNetTrends: Configuration
 
 ## Table of Contents
-- [Serotype Configuration](#serotype-configuration)
-- [Catchment Configuration](#catchment-configuration)
-- [Usage Examples](#usage-examples)
+- [Nextflow configuration files](#nextflow-configuration-files)
+- [Serotype configuration](#serotype-configuration)
+- [Catchment configuration](#catchment-configuration)
+- [Pathogen name matching](#pathogen-name-matching)
+- [R environment (pixi)](#r-environment-pixi)
+- [Usage examples](#usage-examples)
 
-## Serotype Configuration
+## Nextflow configuration files
 
-The serotype configuration feature allows you to customize which serotype values are recoded as "Missing" or mapped to other values.
+The pipeline's behavior is controlled by several Nextflow config files that are loaded automatically:
 
-### Default Behavior
+| File | Purpose |
+|------|---------|
+| `nextflow.config` | Main config: default parameter values, SGE executor settings, process resource allocation, Singularity/registry setup, trace/report/timeline/DAG output paths, and profile definitions (`test`, `singularity`, `production`, `debug`). |
+| `conf/base.config` | Base resource defaults and retry strategy. Defines process labels (`process_single`, `process_low`, `process_medium`, `process_high`, `process_long`, `process_high_memory`) used by DSL2 modules. |
+| `conf/fnt.scicomp.config` | CDC SciComp HPC profiles: `singularity`, `conda`, `local`, `scicomp_rosalind`, `training`, `debug`. Also defines special queue labels (`process_gpu`, `process_extralong`, `process_highmem`). |
+| `conf/modules.config` | DSL2 module publishing paths and dynamic resource allocation for the TRENDY process (memory scaled by data complexity). |
+| `conf/test.config` | Test profile overrides: 2 chains, 50 iterations, CAMPYLOBACTER only, dashboard skipped, reduced resource limits for CI. |
+
+To override settings without editing these files, use Nextflow's `-c` flag:
+
+```bash
+nextflow run main.nf -profile singularity -c my_overrides.config
+```
+
+Or pass individual parameters on the command line with `--` (double hyphen):
+
+```bash
+nextflow run main.nf -profile singularity --chains 4 --iterations 2000
+```
+
+## Serotype configuration
+
+The serotype configuration feature allows you to customize which serotype values are recoded as "Missing" or mapped to other values during preprocessing.
+
+### Default behavior
 
 By default, the following serotype values are recoded to "Missing":
 - NOT SPECIATED
@@ -23,7 +46,7 @@ By default, the following serotype values are recoded to "Missing":
 - (empty string)
 - Any value containing "UNDET"
 
-### Custom Configuration
+### Custom configuration
 
 Create a CSV file with the following columns:
 
@@ -40,7 +63,7 @@ Example configuration file (`analysis_configs/examples/serotype_config.csv`):
 ```csv
 serotype_value,replacement,pathogen,match_type,notes
 NOT SPECIATED,Missing,all,exact,Default missing value
-UNKNOWN,Missing,all,exact,Default missing value  
+UNKNOWN,Missing,all,exact,Default missing value
 PARTIAL SERO,Missing,all,exact,Default missing value
 NOT SERO,Missing,all,exact,Default missing value
 "",Missing,all,exact,Empty string missing value
@@ -49,7 +72,7 @@ ROUGH,Missing,SALMONELLA,exact,Salmonella-specific non-informative value
 NONTYPEABLE,Missing,SALMONELLA,exact,Salmonella-specific non-informative value
 ```
 
-### Using the Configuration
+### Using the configuration
 
 #### With Nextflow
 ```bash
@@ -60,7 +83,7 @@ nextflow run main.nf \
   --serotype_config config/my_serotype_rules.csv
 ```
 
-#### With R Script Directly
+#### With R script directly
 ```bash
 Rscript bin/preprocess.R \
   --mmwrFile data/mmwr.sas7bdat \
@@ -68,11 +91,11 @@ Rscript bin/preprocess.R \
   --serotype-config config/my_serotype_rules.csv
 ```
 
-## Catchment Configuration
+## Catchment configuration
 
 The catchment configuration feature allows you to define custom geographic and temporal boundaries for analysis.
 
-### Default Behavior
+### Default behavior
 
 By default, the pipeline uses the standard FoodNet catchment areas:
 - CA: 1996-present
@@ -86,7 +109,7 @@ By default, the pipeline uses the standard FoodNet catchment areas:
 - OR: 1996-present
 - TN: 2000-present
 
-### Custom Configuration
+### Custom configuration
 
 Create a CSV file with the following columns:
 
@@ -114,7 +137,7 @@ OR,1996,9999,both,Original FoodNet site
 TN,2000,9999,both,Joined 2000
 ```
 
-### Using the Configuration
+### Using the configuration
 
 #### With Nextflow
 ```bash
@@ -125,7 +148,7 @@ nextflow run main.nf \
   --catchment_config config/my_catchment_areas.csv
 ```
 
-#### With R Script Directly
+#### With R script directly
 ```bash
 Rscript bin/trendy.R \
   --mmwrFile data/mmwr.sas7bdat \
@@ -135,11 +158,39 @@ Rscript bin/trendy.R \
   --catchment-config config/my_catchment_areas.csv
 ```
 
-## Usage Examples
+## Pathogen name matching
 
-### Example 1: Custom Analysis for Research Study
+The `--matching_sensitivity` parameter controls how strictly pathogen names in the input data are matched to canonical names during preprocessing. This is handled by `preprocess.R`.
 
-If you're conducting a study focusing on specific states and years:
+| Level | Behavior |
+|-------|----------|
+| `STRICT` | Exact case-insensitive match only. No fuzzy matching. |
+| `MEDIUM` | Allows minor variations (whitespace, punctuation). Default. |
+| `RELAXED` | Uses string distance (Levenshtein) to match similar names. Requires the `stringdist` R package. |
+
+```bash
+nextflow run main.nf --matching_sensitivity STRICT ...
+```
+
+## R environment (pixi)
+
+The pipeline's R dependencies are managed through [pixi](https://pixi.sh), a conda-compatible package manager. The container image (`foodnet.sif`) ships with a pixi environment pre-installed at `/opt/pipeline/.pixi/envs/default/`. The `nextflow.config` sets `R_LIBS` to point to this environment's R library path:
+
+```
+R_LIBS = "/opt/pipeline/.pixi/envs/default/lib/R/library"
+```
+
+The environment is defined by `pixi.toml` and locked by `pixi.lock` in the repository root. To rebuild the environment locally (e.g., for development outside the container), run:
+
+```bash
+pixi install
+```
+
+## Usage examples
+
+### Example 1: Custom analysis for a research study
+
+If you are conducting a study focusing on specific states and years:
 
 1. Create a custom catchment configuration:
 ```csv
@@ -158,7 +209,7 @@ nextflow run main.nf \
   --catchment_config config/study_catchment.csv
 ```
 
-### Example 2: Pathogen-Specific Serotype Rules
+### Example 2: Pathogen-specific serotype rules
 
 For a Salmonella-focused analysis with custom serotype mapping:
 
@@ -180,7 +231,7 @@ nextflow run main.nf \
   --pathogen SALMONELLA
 ```
 
-### Example 3: Both Configurations Together
+### Example 3: Both configurations together
 
 ```bash
 nextflow run main.nf \
@@ -189,17 +240,18 @@ nextflow run main.nf \
   --censusFileP data/census_p.sas7bdat \
   --serotype_config config/custom_serotypes.csv \
   --catchment_config config/custom_catchment.csv \
+  --matching_sensitivity STRICT \
   --projID custom_analysis_2024
 ```
 
-## Best Practices
+## Best practices
 
-1. **Test with Small Datasets**: When using custom configurations, test with a subset of data first.
+1. **Test with small datasets**: When using custom configurations, test with a subset of data first using `-profile test`.
 
-2. **Document Your Rules**: Use the notes column to explain why certain rules exist.
+2. **Document your rules**: Use the notes column to explain why certain rules exist.
 
-3. **Version Control**: Keep your configuration files in version control alongside your analysis code.
+3. **Version control**: Keep your configuration files in version control alongside your analysis code.
 
 4. **Validation**: The pipeline validates configuration files and will provide clear error messages if issues are found.
 
-5. **Backward Compatibility**: If no configuration files are provided, the pipeline uses the original hardcoded defaults.
+5. **Backward compatibility**: If no configuration files are provided, the pipeline uses the original hardcoded defaults.

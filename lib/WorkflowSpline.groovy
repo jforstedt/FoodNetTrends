@@ -15,7 +15,7 @@ class WorkflowSpline {
     }
 
     //
-    // Get workflow summary for MultiQC
+    // Get workflow summary as an HTML report section
     //
     public static String paramsSummaryMultiqc(workflow, summary) {
         String summary_section = ''
@@ -42,18 +42,15 @@ class WorkflowSpline {
     }
 
     //
-    // Generate methods description for MultiQC
+    // Generate methods description for reports
     //
 
     public static String toolCitationText(params) {
 
-        // TODO nf-core: Optionally add in-text citation tools to this list.
-        // Can use ternary operators to dynamically construct based conditions, e.g. params["run_xyz"] ? "Tool (Foo et al. 2023)" : "",
-        // Uncomment function in methodsDescriptionText to render in MultiQC report
         def citation_text = [
                 "Tools used in the workflow included:",
-                "FastQC (Andrews 2010),",
-                "MultiQC (Ewels et al. 2016)",
+                "brms (Buerkner 2017),",
+                "Stan (Carpenter et al. 2017)",
                 "."
             ].join(' ').trim()
 
@@ -62,19 +59,16 @@ class WorkflowSpline {
 
     public static String toolBibliographyText(params) {
 
-        // TODO Optionally add bibliographic entries to this list.
-        // Can use ternary operators to dynamically construct based conditions, e.g. params["run_xyz"] ? "<li>Author (2023) Pub name, Journal, DOI</li>" : "",
-        // Uncomment function in methodsDescriptionText to render in MultiQC report
         def reference_text = [
-                "<li>Andrews S, (2010) FastQC, URL: https://www.bioinformatics.babraham.ac.uk/projects/fastqc/).</li>",
-                "<li>Ewels, P., Magnusson, M., Lundin, S., & Käller, M. (2016). MultiQC: summarize analysis results for multiple tools and samples in a single report. Bioinformatics , 32(19), 3047–3048. doi: /10.1093/bioinformatics/btw354</li>"
+                "<li>Buerkner, P.-C. (2017). brms: An R Package for Bayesian Multilevel Models Using Stan. Journal of Statistical Software, 80(1), 1-28. doi: 10.18637/jss.v080.i01</li>",
+                "<li>Carpenter, B., Gelman, A., Hoffman, M. D., Lee, D., Goodrich, B., Betancourt, M., Brubaker, M., Guo, J., Li, P., & Riddell, A. (2017). Stan: A Probabilistic Programming Language. Journal of Statistical Software, 76(1), 1-32. doi: 10.18637/jss.v076.i01</li>"
             ].join(' ').trim()
 
         return reference_text
     }
 
     public static String methodsDescriptionText(run_workflow, mqc_methods_yaml, params) {
-        // Convert  to a named map so can be used as with familar NXF ${workflow} variable syntax in the MultiQC YML file
+        // Convert to a named map so can be used with familiar NXF ${workflow} variable syntax in the methods YML file
         def meta = [:]
         meta.workflow = run_workflow.toMap()
         meta["manifest_map"] = run_workflow.manifest.toMap()
@@ -87,9 +81,8 @@ class WorkflowSpline {
         meta["tool_citations"] = ""
         meta["tool_bibliography"] = ""
 
-        // TODO Only uncomment below if logic in toolCitationText/toolBibliographyText has been filled!
-        //meta["tool_citations"] = toolCitationText(params).replaceAll(", \\.", ".").replaceAll("\\. \\.", ".").replaceAll(", \\.", ".")
-        //meta["tool_bibliography"] = toolBibliographyText(params)
+        meta["tool_citations"] = toolCitationText(params).replaceAll(", \\.", ".").replaceAll("\\. \\.", ".").replaceAll(", \\.", ".")
+        meta["tool_bibliography"] = toolBibliographyText(params)
 
 
         def methods_text = mqc_methods_yaml.text

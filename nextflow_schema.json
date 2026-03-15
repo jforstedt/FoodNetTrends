@@ -25,13 +25,15 @@
                     "type": "string",
                     "format": "file-path",
                     "description": "Path to census population data for bacterial pathogens.",
-                    "fa_icon": "fas fa-file"
+                    "fa_icon": "fas fa-file",
+                    "help_text": "Required when running the full pipeline (preprocessed = false). Not needed if skip_preprocessing is true and a cleanFile is provided."
                 },
                 "censusFileP": {
                     "type": "string",
                     "format": "file-path",
                     "description": "Path to census population data for parasitic pathogens.",
-                    "fa_icon": "fas fa-file"
+                    "fa_icon": "fas fa-file",
+                    "help_text": "Required when running the full pipeline (preprocessed = false). Not needed if skip_preprocessing is true and a cleanFile is provided."
                 },
                 "outdir": {
                     "type": "string",
@@ -153,7 +155,8 @@
                     "type": "string",
                     "format": "file-path",
                     "description": "Path to a pre-cleaned CSV file. Used when preprocessed is true.",
-                    "fa_icon": "fas fa-file-csv"
+                    "fa_icon": "fas fa-file-csv",
+                    "help_text": "This parameter must be provided when preprocessed is set to true. It should point to a cleaned CSV file produced by a prior preprocessing run. The pipeline will fail at runtime if preprocessed is true and cleanFile is not set."
                 },
                 "skip_preprocessing": {
                     "type": "boolean",
@@ -250,7 +253,7 @@
                 "max_cpus": {
                     "type": "integer",
                     "description": "Maximum number of CPUs that can be requested for any single job.",
-                    "default": 16,
+                    "default": 32,
                     "fa_icon": "fas fa-microchip",
                     "hidden": true,
                     "help_text": "Use to set an upper-limit for the CPU requirement for each process. Should be an integer e.g. `--max_cpus 1`"

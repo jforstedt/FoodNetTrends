@@ -27,7 +27,7 @@ If you have already preprocessed the data, you can skip the preprocessing step b
 The typical command for running the pipeline is:
 
 ```bash
-nextflow run FoodNetTrends \
+nextflow run main.nf \
     --mmwrFile /path/to/mmwr.sas7bdat \
     --censusFileB /path/to/census_bacterial.sas7bdat \
     --censusFileP /path/to/census_parasitic.sas7bdat \
@@ -35,21 +35,50 @@ nextflow run FoodNetTrends \
     -profile singularity
 ```
 
+When pulling from GitHub, use `nextflow run cdcgov/foodnettrends` instead of `nextflow run main.nf`.
+
+### Interactive launcher
+
+The `run_workflow.sh` script provides an interactive menu-driven launcher for the pipeline on CDC HPC systems. It handles module loading (Nextflow, Singularity, Java), prompts for pathogen selection and subgroup options (e.g., STEC O157/non-O157 split, Salmonella serotype selection), Stan backend choice, and optional configuration files. It can also launch the pipeline in the background and start the monitor script automatically.
+
+```bash
+./run_workflow.sh
+```
+
+The launcher supports `AUTO_DISCOVER` mode: if the `--pathogen` parameter is left empty, all pathogens present in the preprocessed data are discovered automatically.
+
+### Pipeline monitor
+
+The `bin/monitor_pipeline.sh` script provides a real-time terminal dashboard that tracks per-pathogen progress by reading the Nextflow execution trace file.
+
+```bash
+./bin/monitor_pipeline.sh output/20260313_160520           # 5s refresh (default)
+./bin/monitor_pipeline.sh -i 10 output/20260313_160520     # 10s refresh
+./bin/monitor_pipeline.sh -1 output/20260313_160520        # single snapshot, no loop
+```
+
+Options:
+- `-i SECONDS` -- refresh interval (default: 5)
+- `-1` -- print a single snapshot and exit
+- `-h` -- show help
+
 ### Key parameters
 
 #### Pathogen selection
 
 ```bash
---pathogen 'Campylobacter,Salmonella,Shigella'   # Comma-separated list of pathogens
---pathogen_grouping 'SALMONELLA~Enteritidis|SALMONELLA~Typhimurium'  # Subgroup definitions
+--pathogen 'CAMPYLOBACTER,SALMONELLA,SHIGELLA'   # Comma-separated list of pathogens
+--pathogen_grouping 'STEC~O157|STEC~nonO157|SALMONELLA~Enteritidis'  # Subgroup definitions
 ```
+
+When `--pathogen` is omitted and preprocessed data is provided, the pipeline can auto-discover all pathogens present in the dataset.
 
 #### Data filtering
 
 ```bash
 --states 'CT,GA,MD,MN,NM,OR,TN,CO,NY'   # States to include (null = all)
---travel 'NO,UNKNOWN,YES'                 # Travel status filter
---cidt 'CIDT+,CX+,PARASITIC'             # CIDT classification filter
+--travel 'NO,UNKNOWN,YES'                 # Travel status filter (default: NO,UNKNOWN,YES)
+--cidt 'CIDT+,CX+,PARASITIC'             # CIDT classification filter (default: CIDT+,CX+,PARASITIC)
 ```
 
 #### Model parameters
@@ -68,15 +97,17 @@ nextflow run FoodNetTrends \
 ```bash
 --serotype_config /path/to/serotype_config.csv      # Serotype recoding rules
 --catchment_config /path/to/catchment_config.csv    # Catchment area definitions
---matching_sensitivity MEDIUM                        # Name matching: STRICT, MEDIUM, or RELAXED
+--matching_sensitivity MEDIUM                        # Pathogen name matching: STRICT, MEDIUM, or RELAXED (default: MEDIUM)
 ```
+
+See [configuration.md](configuration.md) for details on the CSV formats and matching sensitivity levels.
 
 #### Output options
 
 ```bash
 --outdir ./results       # Output directory (default: output)
---projID my_analysis     # Project identifier (default: timestamp)
---skip_dashboard true    # Skip dashboard generation
+--projID my_analysis     # Project identifier (default: auto-generated timestamp)
+--skip_dashboard true    # Skip dashboard generation (default: false)
 ```
 
 ### Using a params file
@@ -84,7 +115,7 @@ nextflow run FoodNetTrends \
 Rather than specifying each flag on the command line, you can provide parameters in a YAML file:
 
 ```bash
-nextflow run FoodNetTrends -profile singularity -params-file params.yaml
+nextflow run main.nf -profile singularity -params-file params.yaml
 ```
 
 With `params.yaml` containing:
@@ -94,37 +125,63 @@ mmwrFile: '/path/to/mmwr.sas7bdat'
 censusFileB: '/path/to/census_bacterial.sas7bdat'
 censusFileP: '/path/to/census_parasitic.sas7bdat'
 outdir: './results'
-pathogen: 'Campylobacter,Salmonella'
+pathogen: 'CAMPYLOBACTER,SALMONELLA'
 chains: 4
 iterations: 2000
 ```
 
 ### Profiles
 
-The pipeline supports the following profiles:
+The pipeline supports the following profiles, defined across `nextflow.config` and `conf/fnt.scicomp.config`:
 
-- `test` - Minimal test configuration with reduced iterations for fast validation
-- `singularity` - Run with Singularity containers (recommended for HPC)
-- `production` - Production settings with 4 chains, 2000 iterations, and stricter adaptation
-- `debug` - Enable verbose logging and hash dumping
+| Profile | Source | Description |
+|---------|--------|-------------|
+| `test` | nextflow.config | Minimal test run: 2 chains, 50 iterations, CAMPYLOBACTER only, dashboard skipped |
+| `singularity` | nextflow.config + fnt.scicomp.config | Run with Singularity containers (recommended for HPC) |
+| `production` | nextflow.config | Production settings: 4 chains, 2000 iterations, adapt_delta 0.99, max_treedepth 15 |
+| `debug` | nextflow.config + fnt.scicomp.config | Verbose logging, hash dumping, NXF_DEBUG=3, bash -x tracing |
+| `conda` | fnt.scicomp.config | Use Conda environments instead of containers; loads miniconda module |
+| `local` | fnt.scicomp.config | Run all processes on the local machine (4 CPUs, 16 GB); useful for interactive qlogin testing |
+| `scicomp_rosalind` | fnt.scicomp.config | CDC Rosalind HPC cluster: SGE executor, queue routing (short.q/all.q/long.q), scratch dirs |
+| `training` | fnt.scicomp.config | Routes all jobs to `training.q`; combine with `scicomp_rosalind` |
 
-Multiple profiles can be combined: `-profile test,singularity`
+Multiple profiles can be combined with commas. Order matters -- later profiles override earlier ones.
+
+```bash
+# CDC HPC with Singularity containers
+-profile singularity,scicomp_rosalind
+
+# CDC HPC on training queue
+-profile singularity,scicomp_rosalind,training
+
+# Production settings on CDC HPC
+-profile singularity,scicomp_rosalind,production
+
+# Local testing in a qlogin session
+-profile singularity,local
+```
+
+Note that lightweight processes (PREPROCESS, RESOURCE_PROFILER, DASHBOARD) always run on the local executor regardless of profile, to avoid scheduler overhead.
 
 ### Updating the pipeline
 
-When you run the above command, Nextflow automatically pulls the pipeline code from GitHub and stores it as a cached version. When running the pipeline after this, it will always use the cached version if available - even if the pipeline has been updated since. To make sure that you're running the latest version of the pipeline, make sure that you regularly update the cached version of the pipeline:
+If you are running the pipeline from a remote GitHub repository:
 
 ```bash
-nextflow pull FoodNetTrends
+nextflow pull cdcgov/foodnettrends
 ```
+
+For local checkouts, use `git pull` to update the code.
 
 ### Reproducibility
 
-It is a good idea to specify a pipeline version when running the pipeline on your data. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since.
+Specify a pipeline version with `-r` (one hyphen) when running from a remote repository to pin a specific release:
 
-First, go to the releases page and find the latest pipeline version - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`.
+```bash
+nextflow run cdcgov/foodnettrends -r 1.0.0 -profile singularity
+```
 
-To further assist in reproducibility, you can use share and re-use [parameter files](#using-a-params-file) to repeat pipeline runs with the same settings without having to write out a command with every single parameter.
+To further assist in reproducibility, use [parameter files](#using-a-params-file) to repeat pipeline runs with the same settings.
 
 ## Core Nextflow arguments
 
@@ -132,16 +189,7 @@ These options are part of Nextflow and use a _single_ hyphen (pipeline parameter
 
 ### `-profile`
 
-Use this parameter to choose a configuration profile. Profiles can give configuration presets for different compute environments.
-
-We highly recommend the use of Singularity containers for full pipeline reproducibility.
-
-The pipeline also dynamically loads configurations from [https://github.com/nf-core/configs](https://github.com/nf-core/configs) when it runs, making multiple config profiles for various institutional clusters available at run time. For more information and to see if your system is available in these configs please see the [nf-core/configs documentation](https://github.com/nf-core/configs#documentation).
-
-Note that multiple profiles can be loaded, for example: `-profile test,singularity` - the order of arguments is important!
-They are loaded in sequence, so later profiles can overwrite earlier profiles.
-
-If `-profile` is not specified, the pipeline will run locally and expect all software to be installed and available on the `PATH`. This is _not_ recommended, since it can lead to different results on different machines dependent on the computer environment.
+Use this parameter to choose a configuration profile. See the [Profiles](#profiles) section above for available options.
 
 ### `-resume`
 
@@ -151,21 +199,16 @@ You can also supply a run name to resume a specific run: `-resume [run-name]`. U
 
 ### `-c`
 
-Specify the path to a specific config file (this is a core Nextflow command). See the [nf-core website documentation](https://nf-co.re/usage/configuration) for more information.
+Specify the path to a specific config file (this is a core Nextflow command). See the [Nextflow documentation](https://www.nextflow.io/docs/latest/config.html) for more information.
 
-## Custom configuration
+## Resource allocation
 
-### Resource requests
+The default resource settings work for most analyses. The TRENDY process dynamically allocates CPUs based on the number of chains (one CPU per chain) and memory based on data complexity. If a job exits with a retriable error code, it is automatically resubmitted with higher resource requests (up to 3 retries).
 
-The default requirements set within the pipeline will work for most analyses. The TRENDY process dynamically allocates CPUs based on the number of chains and memory based on data complexity. If a job exits with a retriable error code, it will automatically be resubmitted with higher resource requests (up to 3 retries).
-
-To change the resource requests, please see the [max resources](https://nf-co.re/docs/usage/configuration#max-resources) and [tuning workflow resources](https://nf-co.re/docs/usage/configuration#tuning-workflow-resources) section of the nf-core website.
-
-### nf-core/configs
-
-In most cases, you will only need to create a custom config as a one-off but if you and others within your organisation are likely to be running nf-core pipelines regularly and need to use the same settings regularly it may be a good idea to request that your custom config file is uploaded to the `nf-core/configs` git repository. Before you do this please can you test that the config file works with your pipeline of choice using the `-c` parameter. You can then create a pull request to the `nf-core/configs` repository with the addition of your config file, associated documentation file (see examples in [`nf-core/configs/docs`](https://github.com/nf-core/configs/tree/master/docs)), and amending [`nfcore_custom.config`](https://github.com/nf-core/configs/blob/master/nfcore_custom.config) to include your custom profile.
-
-See the main [Nextflow documentation](https://www.nextflow.io/docs/latest/config.html) for more information about creating your own configuration files.
+Resource limits vary by profile:
+- **Default (SGE)**: up to 32 CPUs, 128 GB memory, 240 hours
+- **scicomp_rosalind**: up to 44 CPUs, 356 GB memory, 28 days
+- **local**: up to 4 CPUs, 16 GB memory, 4 hours
 
 ## Running in the background
 
@@ -173,13 +216,11 @@ Nextflow handles job submissions and supervises the running jobs. The Nextflow p
 
 The Nextflow `-bg` flag launches Nextflow in the background, detached from your terminal so that the workflow does not stop if you log out of your session. The logs are saved to a file.
 
-Alternatively, you can use `screen` / `tmux` or similar tool to create a detached session which you can log back into at a later time.
-Some HPC setups also allow you to run nextflow within a cluster job submitted your job scheduler (from where it submits more jobs).
+Alternatively, you can use `screen` / `tmux` or similar tool to create a detached session which you can log back into at a later time. Some HPC setups also allow you to run Nextflow within a cluster job submitted to your job scheduler (from where it submits more jobs).
 
 ## Nextflow memory requirements
 
-In some cases, the Nextflow Java virtual machines can start to request a large amount of memory.
-We recommend adding the following line to your environment to limit this (typically in `~/.bashrc` or `~./bash_profile`):
+In some cases, the Nextflow Java virtual machines can start to request a large amount of memory. We recommend adding the following line to your environment to limit this (typically in `~/.bashrc` or `~/.bash_profile`):
 
 ```bash
 NXF_OPTS='-Xms1g -Xmx4g'
