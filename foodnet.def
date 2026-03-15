@@ -27,10 +27,11 @@ From: ubuntu:22.04
     pixi install --locked
 
     # Compile CmdStan binary for optional cmdstanr backend
-    pixi run Rscript -e "cmdstanr::install_cmdstan(cores = 4, quiet = TRUE)"
+    pixi run Rscript -e "cmdstanr::install_cmdstan(cores = 4, quiet = FALSE)" || \
+        echo "WARNING: CmdStan installation failed. cmdstanr backend will not be available."
 
-    # Clean up build artifacts
-    rm -rf /tmp/* /root/.cache
+    # Clean up pixi cache only (don't touch shared /tmp)
+    rm -rf /root/.cache/rattler
 
 %environment
     export PATH="/opt/pixi/bin:/opt/pipeline/.pixi/envs/default/bin:$PATH"
