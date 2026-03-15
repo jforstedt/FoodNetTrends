@@ -27,6 +27,7 @@ From: ubuntu:22.04
     pixi install --locked
 
     # Compile CmdStan binary for optional cmdstanr backend
+    export TBB_CXX_TYPE=gcc
     pixi run Rscript -e "cmdstanr::install_cmdstan(cores = 4, quiet = FALSE)" || \
         echo "WARNING: CmdStan installation failed. cmdstanr backend will not be available."
 
