@@ -4,7 +4,7 @@ nextflow.enable.dsl = 2
 if (params.help) {
     println """
     ============================================
-    FoodNet Trends Pipeline
+    FoodNetTrends Pipeline
     ============================================
     Usage:
         nextflow run main.nf [options]

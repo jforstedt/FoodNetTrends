@@ -3,7 +3,7 @@ From: ubuntu:22.04
 
 %labels
     version 2.0.0
-    description FoodNet Trends pipeline container with R, brms, and Stan
+    description FoodNetTrends pipeline container with R, brms, and Stan
 
 %files
     pixi.toml

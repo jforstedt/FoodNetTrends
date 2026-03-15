@@ -1,7 +1,7 @@
-# FoodNet Trends Pipeline
+# FoodNetTrends Pipeline
 
 ## Introduction
-**FoodNet Trends** is a bioinformatics pipeline that performs spline-based modeling of foodborne illness surveillance data. The pipeline processes FoodNet MMWR data and applies Bayesian hierarchical models to estimate incidence rates and trends across different pathogens and sites.
+**FoodNetTrends** is a bioinformatics pipeline that performs spline-based modeling of foodborne illness surveillance data. The pipeline processes FoodNet MMWR data and applies Bayesian hierarchical models to estimate incidence rates and trends across different pathogens and sites.
 
 ## Features
 1. Preprocesses raw MMWR surveillance data with pathogen name standardization
@@ -252,7 +252,7 @@ Common issues and solutions:
 7. **STEC Grouping Issues**: Ensure stec_class column is present for O157/non-O157 splitting
 
 ## Credits
-The FoodNet Trends pipeline was developed by Samantha Sevilla, Josh Forstedt, and OAMD's SciComp Team with support from Daniel Weller (CDC/DFWED/EDEB), based on R scripts developed by Daniel Weller (CDC/DFWED/EDEB) with support from Beau Bruce (CDC/DFWED/EDEB) and Erica Billig Rose (CDC/DFWED/EDEB).
+The FoodNetTrends pipeline was developed by Samantha Sevilla, Josh Forstedt, and OAMD's SciComp Team with support from Daniel Weller (CDC/DFWED/EDEB), based on R scripts developed by Daniel Weller (CDC/DFWED/EDEB) with support from Beau Bruce (CDC/DFWED/EDEB) and Erica Billig Rose (CDC/DFWED/EDEB).
 
 ## Contributions and Support
 If you would like to contribute to this pipeline, please see the [contributing guidelines](.github/CONTRIBUTING.md).

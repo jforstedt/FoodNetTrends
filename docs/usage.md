@@ -1,8 +1,8 @@
-# FoodNet Trends: Usage
+# FoodNetTrends: Usage
 
 ## Introduction
 
-FoodNet Trends is a Bayesian spline modeling pipeline for estimating incidence rate trends from FoodNet surveillance data. It processes MMWR case data and census population files to fit penalized spline models for each pathogen, producing trend estimates with uncertainty quantification.
+FoodNetTrends is a Bayesian spline modeling pipeline for estimating incidence rate trends from FoodNet surveillance data. It processes MMWR case data and census population files to fit penalized spline models for each pathogen, producing trend estimates with uncertainty quantification.
 
 ## Input data
 

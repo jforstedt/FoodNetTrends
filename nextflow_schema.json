@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://raw.githubusercontent.com/cdc/spline/master/nextflow_schema.json",
-    "title": "FoodNet Trends pipeline parameters",
+    "title": "FoodNetTrends pipeline parameters",
     "description": "Bayesian spline modeling pipeline for FoodNet surveillance incidence rate trend estimation",
     "type": "object",
     "definitions": {

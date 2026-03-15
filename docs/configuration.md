@@ -1,8 +1,8 @@
-# Data Configuration Options for FoodNet Trends Pipeline
+# Data Configuration Options for FoodNetTrends Pipeline
 
 **Important**: These are CSV data configuration files, NOT Nextflow configuration files.
 
-The FoodNet Trends pipeline now supports optional CSV configuration files to customize serotype recoding rules and catchment area definitions. This document explains how to use these features.
+The FoodNetTrends pipeline now supports optional CSV configuration files to customize serotype recoding rules and catchment area definitions. This document explains how to use these features.
 
 ## Table of Contents
 - [Serotype Configuration](#serotype-configuration)

@@ -61,7 +61,7 @@ workflow SPLINE {
     // Log pipeline start
     log.info """
     ==============================================
-    FoodNet Trends Pipeline
+    FoodNetTrends Pipeline
     ==============================================
     Project ID    : ${params.projID}
     MMWR File     : ${params.mmwrFile}

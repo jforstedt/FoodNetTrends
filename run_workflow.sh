@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# FoodNet Trends Analysis Pipeline - Interactive Launcher
+# FoodNetTrends Analysis Pipeline - Interactive Launcher
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -297,7 +297,7 @@ get_state_name() {
 # =============================================================================
 
 echo -e "${BLUE}=========================================${NC}"
-echo -e "${BLUE}   FoodNet Trends Analysis Pipeline      ${NC}"
+echo -e "${BLUE}   FoodNetTrends Analysis Pipeline      ${NC}"
 echo -e "${BLUE}=========================================${NC}"
 echo ""
 

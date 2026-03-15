@@ -1,8 +1,8 @@
-# FoodNet Trends: Output
+# FoodNetTrends: Output
 
 ## Introduction
 
-This document describes the output produced by the FoodNet Trends pipeline. The pipeline performs Bayesian spline modeling on FoodNet surveillance data to estimate incidence rate trends for foodborne pathogens.
+This document describes the output produced by the FoodNetTrends pipeline. The pipeline performs Bayesian spline modeling on FoodNet surveillance data to estimate incidence rate trends for foodborne pathogens.
 
 All output directories listed below are created under `<outdir>/<projID>/` after the pipeline finishes. The `projID` defaults to a timestamp if not specified.
 
