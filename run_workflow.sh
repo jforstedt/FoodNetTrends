@@ -919,27 +919,6 @@ elif [[ "$flag" == "custom" ]]; then
         echo -e "${YELLOW}Continuing with max_treedepth=$max_treedepth.${NC}"
     fi
 
-    # Stan backend selection (custom mode only)
-    echo ""
-    echo -e "${BLUE}======== Stan Backend ========${NC}"
-    echo "Select Stan backend for model fitting:"
-    echo "1) rstan (default)"
-    echo "2) cmdstanr"
-    while true; do
-        read -p "Enter selection [1]: " backend_choice
-        backend_choice=${backend_choice:-1}
-        if [[ "$backend_choice" =~ ^[12]$ ]]; then
-            break
-        else
-            echo -e "${RED}Invalid selection: '$backend_choice'. Please enter 1 or 2.${NC}"
-        fi
-    done
-    case $backend_choice in
-        1) stan_backend="rstan" ;;
-        2) stan_backend="cmdstanr" ;;
-    esac
-    echo -e "Stan backend: ${GREEN}$stan_backend${NC}"
-
 elif [[ "$flag" == "resume" ]]; then
     chains=2
     iterations=500
@@ -958,6 +937,35 @@ elif [[ "$flag" == "resume" ]]; then
 fi
 
 fi  # end skip_to_summary guard for MCMC params
+
+# ---------------------------------------------------------------------------
+# Step 6b: Stan backend selection (all analysis modes)
+# ---------------------------------------------------------------------------
+if [[ "$skip_to_summary" != true ]] && [[ "$flag" != "preprocess" ]]; then
+    echo ""
+    echo -e "${BLUE}======== Stan Backend ========${NC}"
+    echo "Select Stan backend for model fitting:"
+    echo "  1) rstan    - Compiles models in-session. Stable and well-tested."
+    echo "               Each run recompiles the model from scratch."
+    echo "  2) cmdstanr - Faster compilation, caches compiled models between runs,"
+    echo "               and supports within-chain threading for parallel math."
+    echo "               Produces equivalent results but draws will differ"
+    echo "               numerically due to different RNG streams."
+    while true; do
+        read -p "Enter selection [1]: " backend_choice
+        backend_choice=${backend_choice:-1}
+        if [[ "$backend_choice" =~ ^[12]$ ]]; then
+            break
+        else
+            echo -e "${RED}Invalid selection: '$backend_choice'. Please enter 1 or 2.${NC}"
+        fi
+    done
+    case $backend_choice in
+        1) stan_backend="rstan" ;;
+        2) stan_backend="cmdstanr" ;;
+    esac
+    echo -e "Stan backend: ${GREEN}$stan_backend${NC}"
+fi
 
 # ---------------------------------------------------------------------------
 # Step 7: Pathogen grouping (skip for resume, preprocess, quick-run)

@@ -574,8 +574,6 @@ for (pathogen_name in target_pathogens) {
     cat("Traceback:\n")
     cat(paste(capture.output(traceback()), collapse = "\n"))
     sink()
-
-    next
   })
 }
 

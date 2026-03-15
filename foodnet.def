@@ -31,6 +31,12 @@ From: ubuntu:22.04
     pixi run Rscript -e "cmdstanr::install_cmdstan(cores = 4, quiet = FALSE)" || \
         echo "WARNING: CmdStan installation failed. cmdstanr backend will not be available."
 
+    # Write CmdStan path to Renviron so cmdstanr finds it at runtime
+    CMDSTAN_DIR=$(ls -d /root/.cmdstan/cmdstan-* 2>/dev/null | head -1)
+    if [ -n "$CMDSTAN_DIR" ]; then
+        echo "CMDSTAN=$CMDSTAN_DIR" >> /opt/pipeline/.pixi/envs/default/lib/R/etc/Renviron
+    fi
+
     # Clean up pixi cache only (don't touch shared /tmp)
     rm -rf /root/.cache/rattler
 
