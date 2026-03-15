@@ -242,6 +242,20 @@ All comments, messages, pull requests, and other submissions received through CD
 
 This repository is not a source of government records but is a copy to increase collaboration and code sharing. All government records will be published through the [CDC web site](https://www.cdc.gov).
 
+## SHARE IT Act Compliance
+
+```
+Organization: NCEZID/AMD
+
+Contact email: ncezid_shareit@cdc.gov
+
+Exemption: NA
+
+Exemption Justification: NA
+
+Description fields:
+```
+
 ## Additional Standard Notices
 
 Please refer to [CDC's Template Repository](https://github.com/CDCgov/template) for more information about [contributing to this repository](https://github.com/CDCgov/template/blob/master/CONTRIBUTING.md), [public domain notices and disclaimers](https://github.com/CDCgov/template/blob/master/DISCLAIMER.md), and [code of conduct](https://github.com/CDCgov/template/blob/master/code-of-conduct.md).
