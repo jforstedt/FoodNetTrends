@@ -1,6 +1,6 @@
 process PREPROCESS {
     tag "Preprocessing MMWR data"
-    label 'process_medium'
+    label 'process_low'
     shell "/bin/bash"
     container 'foodnet.sif'
 
