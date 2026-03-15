@@ -119,7 +119,7 @@ img { max-width: 100%; display: block; }
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 .app-header .logo { font-size: 1.25rem; font-weight: 700; letter-spacing: .5px; white-space: nowrap; }
-.app-header .logo span { color: var(--teal-light); }
+.app-header .logo span { color: #24B064; }
 .app-header .run-info {
   margin-left: auto; font-size: .8rem; opacity: .85; display: flex; gap: 18px;
 }
@@ -568,7 +568,7 @@ img { max-width: 100%; display: block; }
   </div>
 
   <div class="card">
-    <div class="card-header">Overall Trends at a Glance</div>
+    <div class="card-header">Trends at a Glance</div>
     <div class="thumb-grid" id="overview-thumbs"></div>
   </div>
 
@@ -624,8 +624,8 @@ img { max-width: 100%; display: block; }
   <h1 class="section-title">Pipeline Information</h1>
   <p class="section-subtitle">Nextflow execution reports and pipeline metadata</p>
 
-  <div class="summary-cards" style="margin-bottom:28px;">
-    <div class="summary-card">
+  <div style="margin-bottom:28px; width:100%;">
+    <div class="summary-card" style="width:100%;">
       <div class="sc-header">Run Parameters</div>
       <div class="sc-body" id="pipeline-params"></div>
     </div>
@@ -836,6 +836,7 @@ window.toggleSidebar = function() {
 // LIGHTBOX
 // ========================================================================
 var lightboxScale = 1;
+var lightboxFitScale = 1;
 var lightboxImg = null;
 var lightboxPanX = 0;
 var lightboxPanY = 0;
@@ -851,7 +852,6 @@ function applyLightboxTransform() {
 }
 
 function openLightbox(src) {
-  lightboxScale = 1;
   lightboxPanX = 0;
   lightboxPanY = 0;
   var inner = document.getElementById('lightbox-inner');
@@ -861,6 +861,14 @@ function openLightbox(src) {
     img.src = src;
     img.draggable = false;
     lightboxImg = img;
+    img.onload = function() {
+      var vw = window.innerWidth * 0.9;
+      var vh = window.innerHeight * 0.9;
+      lightboxFitScale = Math.min(vw / img.naturalWidth, vh / img.naturalHeight, 1) * 0.9;
+      lightboxScale = lightboxFitScale;
+      applyLightboxTransform();
+    };
+    lightboxScale = 1;
     applyLightboxTransform();
     inner.appendChild(img);
   }
@@ -875,7 +883,7 @@ function closeLightbox() {
 
 window.lightboxZoom = function(dir) {
   if (!lightboxImg) return;
-  if (dir === 0) { lightboxScale = 1; lightboxPanX = 0; lightboxPanY = 0; }
+  if (dir === 0) { lightboxScale = lightboxFitScale; lightboxPanX = 0; lightboxPanY = 0; }
   else lightboxScale = Math.max(0.25, Math.min(5, lightboxScale + dir * 0.25));
   applyLightboxTransform();
 };
@@ -1144,9 +1152,26 @@ analysisKeys.forEach(function(key) {
     }).join('');
   }
 
-  // Overview thumbnails grouped by parent pathogen
+  // Overview thumbnails: per pathogen show overall trend, all-site trend, then per-state alphabetically
   var grid = document.getElementById('overview-thumbs');
+  var stateOrder = ['CA','CO','CT','GA','MD','MN','NM','NY','OR','TN'];
   var lastPathogen = '';
+
+  function makeThumbCard(imgSrc, label, sublabel, clickAction) {
+    var div = document.createElement('div');
+    div.className = 'thumb-card';
+    if (imgSrc) {
+      div.innerHTML = '<div class="thumb-img"><img src="' + imgSrc + '" alt="' + esc(label) + '"></div>' +
+        '<div class="thumb-label">' + esc(label) + '<small>' + esc(sublabel) + '</small></div>';
+      div.addEventListener('click', function() { openLightbox(imgSrc); });
+    } else {
+      div.innerHTML = '<div class="thumb-img" style="background:var(--gray-100);display:flex;align-items:center;justify-content:center;color:var(--gray-500);">No plot</div>' +
+        '<div class="thumb-label">' + esc(label) + '<small>' + esc(sublabel) + '</small></div>';
+      if (clickAction) div.addEventListener('click', clickAction);
+    }
+    return div;
+  }
+
   analysisKeys.forEach(function(key) {
     var a = analyses[key];
     if (a.pathogen !== lastPathogen) {
@@ -1157,23 +1182,44 @@ analysisKeys.forEach(function(key) {
       grid.appendChild(header);
     }
 
-    var div = document.createElement('div');
-    div.className = 'thumb-card';
-
     if (a.status === 'failed') {
+      var div = document.createElement('div');
+      div.className = 'thumb-card';
       div.innerHTML = '<div class="thumb-img" style="background:var(--red-bg);display:flex;align-items:center;justify-content:center;color:var(--red);font-weight:600;">Model Failed</div>' +
         '<div class="thumb-label">' + esc(getAnalysisLabel(a)) + '<small>Error encountered during modeling</small></div>';
       div.addEventListener('click', function() { navigate('analysis-' + key); });
-    } else if (a.overall_trend_b64) {
-      div.innerHTML = '<div class="thumb-img"><img src="' + a.overall_trend_b64 + '" alt="' + esc(getAnalysisLabel(a)) + ' trend"></div>' +
-        '<div class="thumb-label">' + esc(getAnalysisLabel(a)) + '<small>Overall catchment trend \u2022 Click to expand</small></div>';
-      div.addEventListener('click', function() { openLightbox(a.overall_trend_b64); });
-    } else {
-      div.innerHTML = '<div class="thumb-img" style="background:var(--gray-100);display:flex;align-items:center;justify-content:center;color:var(--gray-500);">No trend plot</div>' +
-        '<div class="thumb-label">' + esc(getAnalysisLabel(a)) + '<small>Click to view analysis details</small></div>';
-      div.addEventListener('click', function() { navigate('analysis-' + key); });
+      grid.appendChild(div);
+      return;
     }
-    grid.appendChild(div);
+
+    // 1) Overall trend thumbnail
+    grid.appendChild(makeThumbCard(a.overall_trend_b64, getAnalysisLabel(a), 'Overall catchment trend', function() { navigate('analysis-' + key); }));
+
+    // 2) All-site (faceted) trend thumbnail
+    if (a.site_trends_b64) {
+      grid.appendChild(makeThumbCard(a.site_trends_b64, getAnalysisLabel(a), 'All-site faceted trend'));
+    }
+
+    // 3) Per-state trend thumbnails in alphabetical state order
+    var statePlots = {};
+    var allStates = D.states || {};
+    Object.keys(allStates).forEach(function(st) {
+      var stp = (allStates[st].state_trend_plots || {})[key];
+      if (stp) statePlots[st] = stp;
+    });
+    stateOrder.forEach(function(st) {
+      if (statePlots[st]) {
+        var sName = allStates[st] ? allStates[st].name : st;
+        grid.appendChild(makeThumbCard(statePlots[st], getAnalysisLabel(a) + ' \u2014 ' + st, sName + ' state trend'));
+      }
+    });
+    // Include any states not in the hardcoded order
+    Object.keys(statePlots).sort().forEach(function(st) {
+      if (stateOrder.indexOf(st) < 0) {
+        var sName = allStates[st] ? allStates[st].name : st;
+        grid.appendChild(makeThumbCard(statePlots[st], getAnalysisLabel(a) + ' \u2014 ' + st, sName + ' state trend'));
+      }
+    });
   });
 
   // State profile cards
@@ -1518,6 +1564,11 @@ function getSignificanceClass(row) {
 
       // SUMMARY TAB
       '<div class="sub-content active" data-tab-content="summary" data-state="' + st + '">' +
+        '<div class="card">' +
+          '<div class="card-header">Multi-Pathogen Overlay <span class="badge badge-info">Median IR per 100,000</span></div>' +
+          '<div id="overlay-toggles-' + st + '" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>' +
+          '<div style="overflow-x:auto;"><canvas id="overlay-canvas-' + st + '" style="width:100%;max-height:400px;"></canvas></div>' +
+        '</div>' +
         (latestYear ?
           '<div class="card">' +
             '<div class="card-header">Latest Year Comparison (' + latestYear + ') <span class="badge badge-info">Median IR per 100,000</span></div>' +
@@ -1650,25 +1701,213 @@ function getSignificanceClass(row) {
       sparkGrid.appendChild(card);
     });
 
-    // All Trends tab: prefer per-state R-generated PNGs, fall back to multi-state site_trends_b64
+    // Multi-pathogen overlay chart for state Summary tab
+    (function buildOverlayChart() {
+      var canvas = document.getElementById('overlay-canvas-' + st);
+      var togglesEl = document.getElementById('overlay-toggles-' + st);
+      if (!canvas || !togglesEl) return;
+
+      // Collect series data for each pathogen in this state
+      var seriesList = [];
+      analysisKeysForState.forEach(function(ak) {
+        var aa = analyses[ak];
+        if (!aa) return;
+        var rows = (irsiteByAnalysis[ak] || []).slice().sort(function(a,b) { return a.year - b.year; });
+        if (rows.length === 0) return;
+        seriesList.push({
+          key: ak,
+          label: getAnalysisLabel(aa),
+          color: getColor(aa),
+          data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0 }; }),
+          visible: true
+        });
+      });
+
+      if (seriesList.length === 0) {
+        canvas.parentElement.parentElement.style.display = 'none';
+        return;
+      }
+
+      // Build toggle checkboxes
+      seriesList.forEach(function(s, idx) {
+        var lbl = document.createElement('label');
+        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px;border:1px solid ' + s.color + ';color:' + s.color + ';user-select:none;';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.style.accentColor = s.color;
+        cb.addEventListener('change', function() {
+          seriesList[idx].visible = cb.checked;
+          drawOverlay();
+        });
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(s.label));
+        togglesEl.appendChild(lbl);
+      });
+
+      function drawOverlay() {
+        var ctx = canvas.getContext('2d');
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.parentElement.getBoundingClientRect();
+        var W = rect.width || 700;
+        var H = 360;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        var pad = { top: 20, right: 20, bottom: 40, left: 55 };
+        var plotW = W - pad.left - pad.right;
+        var plotH = H - pad.top - pad.bottom;
+
+        // Compute axis ranges from visible series only
+        var minYear = Infinity, maxYear = -Infinity, maxIR = 0;
+        var anyVisible = false;
+        seriesList.forEach(function(s) {
+          if (!s.visible) return;
+          anyVisible = true;
+          s.data.forEach(function(d) {
+            if (d.year < minYear) minYear = d.year;
+            if (d.year > maxYear) maxYear = d.year;
+            if (d.ir > maxIR) maxIR = d.ir;
+          });
+        });
+
+        // Clear canvas
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        ctx.fillStyle = isDark ? '#1a2233' : '#f8f9fa';
+        ctx.fillRect(0, 0, W, H);
+
+        if (!anyVisible) {
+          ctx.fillStyle = isDark ? '#6b7a8d' : '#adb5bd';
+          ctx.font = '13px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('Toggle pathogens above to display trends', W / 2, H / 2);
+          return;
+        }
+
+        if (maxIR === 0) maxIR = 1;
+        maxIR *= 1.1;
+        var yearSpan = maxYear - minYear || 1;
+
+        function xPos(year) { return pad.left + ((year - minYear) / yearSpan) * plotW; }
+        function yPos(ir) { return pad.top + plotH - (ir / maxIR) * plotH; }
+
+        // Grid lines and axis labels
+        ctx.strokeStyle = isDark ? '#263044' : '#dee2e6';
+        ctx.lineWidth = 0.5;
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = isDark ? '#97a4b5' : '#868e96';
+        ctx.textAlign = 'right';
+
+        var nYTicks = 5;
+        for (var i = 0; i <= nYTicks; i++) {
+          var irVal = (maxIR / nYTicks) * i;
+          var yy = yPos(irVal);
+          ctx.beginPath(); ctx.moveTo(pad.left, yy); ctx.lineTo(W - pad.right, yy); ctx.stroke();
+          ctx.fillText(irVal.toFixed(1), pad.left - 6, yy + 4);
+        }
+
+        ctx.textAlign = 'center';
+        for (var yr = minYear; yr <= maxYear; yr++) {
+          var xx = xPos(yr);
+          ctx.beginPath(); ctx.moveTo(xx, pad.top); ctx.lineTo(xx, pad.top + plotH); ctx.stroke();
+          if ((maxYear - minYear) <= 30 || yr % 2 === 0) {
+            ctx.fillText(yr, xx, H - pad.bottom + 16);
+          }
+        }
+
+        // Draw lines for each visible series
+        seriesList.forEach(function(s) {
+          if (!s.visible) return;
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          s.data.forEach(function(d, i) {
+            var x = xPos(d.year), y = yPos(d.ir);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+
+          // Draw dots
+          ctx.fillStyle = s.color;
+          s.data.forEach(function(d) {
+            ctx.beginPath();
+            ctx.arc(xPos(d.year), yPos(d.ir), 3, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        });
+
+        // Y-axis label
+        ctx.save();
+        ctx.translate(14, pad.top + plotH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillStyle = isDark ? '#97a4b5' : '#495057';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Median IR per 100k', 0, 0);
+        ctx.restore();
+      }
+
+      drawOverlay();
+      // Redraw on resize
+      var resizeTimer;
+      window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(drawOverlay, 150);
+      });
+    })();
+
+    // All Trends tab: prefer per-state R-generated PNGs, fall back to JS sparkline card
     var trendsContainer = section.querySelector('#state-trends-container-' + st);
     var stateTrendPlots = s.state_trend_plots || {};
     analysisKeysForState.forEach(function(ak) {
       var aa = analyses[ak];
       if (!aa) return;
+      var rows = (irsiteByAnalysis[ak] || []).slice().sort(function(a,b) { return a.year - b.year; });
       var perStatePng = stateTrendPlots[ak];
-      var fallbackPng = aa.site_trends_b64;
-      if (!perStatePng && !fallbackPng) return;
-      var imgSrc = perStatePng || fallbackPng;
-      var sourceLabel = perStatePng ? 'Per-state trend' : 'All-site trends';
+      var color = getColor(aa);
+
+      // Compute IR change stats: latest year first, then earliest
+      var latestRow = rows.length > 0 ? rows[rows.length - 1] : null;
+      var firstRow = rows.length > 0 ? rows[0] : null;
+      var netChange = '\u2014';
+      if (latestRow && firstRow && latestRow.median_ir != null && firstRow.median_ir != null) {
+        var diff = round2(latestRow.median_ir - firstRow.median_ir);
+        netChange = (diff > 0 ? '+' : '') + diff;
+      }
+
+      var statsHtml = '<div style="display:flex;gap:20px;padding:12px 16px;font-size:.82rem;color:var(--text-secondary);border-top:1px solid var(--border-color);">' +
+        '<div><span style="font-weight:700;color:var(--text-primary);font-size:.95rem;">' + (latestRow ? round2(latestRow.median_ir) : '\u2014') + '</span> IR (' + (latestRow ? latestRow.year : '') + ')</div>' +
+        '<div><span style="font-weight:700;color:var(--text-primary);font-size:.95rem;">' + (firstRow ? round2(firstRow.median_ir) : '\u2014') + '</span> IR (' + (firstRow ? firstRow.year : '') + ')</div>' +
+        '<div><span style="font-weight:700;color:var(--text-primary);font-size:.95rem;">' + netChange + '</span> Net Change</div>' +
+      '</div>';
+
       var trendCard = document.createElement('div');
       trendCard.className = 'card';
-      trendCard.innerHTML =
-        '<div class="card-header" style="color:' + getColor(aa) + '">' + esc(getAnalysisLabel(aa)) + ' \u2014 ' + esc(s.name) +
-          '<span class="badge badge-info" style="margin-left:8px;">' + sourceLabel + '</span>' +
-          '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')" style="margin-left:auto;font-size:.78rem;">View full analysis \u2192</a>' +
-        '</div>' +
-        '<div class="plot-container"><img src="' + imgSrc + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend for ' + esc(s.name) + '" onclick="openLightbox(this.src)"></div>';
+
+      if (perStatePng) {
+        // Use R-generated per-state PNG
+        trendCard.innerHTML =
+          '<div class="card-header" style="color:' + color + '">' + esc(getAnalysisLabel(aa)) + ' \u2014 ' + esc(s.name) +
+            '<span class="badge badge-info" style="margin-left:8px;">Per-state trend</span>' +
+            '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')" style="margin-left:auto;font-size:.78rem;">View full analysis \u2192</a>' +
+          '</div>' +
+          '<div class="plot-container"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend for ' + esc(s.name) + '" onclick="openLightbox(this.src)"></div>' +
+          statsHtml;
+      } else if (rows.length > 0) {
+        // Fallback: JS sparkline
+        trendCard.innerHTML =
+          '<div class="card-header" style="color:' + color + '">' + esc(getAnalysisLabel(aa)) + ' \u2014 ' + esc(s.name) +
+            '<span class="badge badge-info" style="margin-left:8px;">JS trend</span>' +
+            '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')" style="margin-left:auto;font-size:.78rem;">View full analysis \u2192</a>' +
+          '</div>' +
+          '<div style="padding:16px;">' + makeSparklineSVG(rows, color, 600, 120) + '</div>' +
+          statsHtml;
+      } else {
+        return;
+      }
       trendsContainer.appendChild(trendCard);
     });
 
@@ -1787,8 +2026,27 @@ function getSignificanceClass(row) {
 
     var hmEl = document.getElementById('crosstab-heatmap');
     var cols = Object.keys(ct.crosstab[0]);
-    var pathogenCol = cols[0]; // First column is pathogen
-    var yearCols = cols.slice(1);
+
+    /* Identify the pathogen label column vs year-data columns.
+       The label column contains non-numeric pathogen names; year columns are numeric headers. */
+    var pathogenCol = null;
+    var yearCols = [];
+    cols.forEach(function(c) {
+      if (/^\d{4}$/.test(c)) {
+        yearCols.push(c);
+      } else {
+        /* Pick the column whose values are strings (pathogen names), not all zeros */
+        var allZero = ct.crosstab.every(function(row) { return Number(row[c]) === 0 || row[c] === 0; });
+        if (!allZero || pathogenCol === null) {
+          if (pathogenCol === null || !allZero) pathogenCol = c;
+        }
+      }
+    });
+    /* If no suitable label column found, fall back to first column */
+    if (!pathogenCol) pathogenCol = cols[0];
+    /* Remove pathogenCol from yearCols if it ended up there, and exclude non-year non-label columns */
+    yearCols = yearCols.filter(function(c) { return c !== pathogenCol; });
+    yearCols.sort();
 
     // Find min/max for color scale
     var allVals = [];
@@ -1797,7 +2055,7 @@ function getSignificanceClass(row) {
     });
     var maxVal = Math.max.apply(null, allVals) || 1;
 
-    var html = '<table class="heatmap-table"><thead><tr><th>' + esc(pathogenCol) + '</th>';
+    var html = '<table class="heatmap-table"><thead><tr><th>Pathogen</th>';
     yearCols.forEach(function(y) { html += '<th>' + esc(y) + '</th>'; });
     html += '</tr></thead><tbody>';
     ct.crosstab.forEach(function(row) {
