@@ -26,16 +26,12 @@ From: ubuntu:22.04
     cd /opt/pipeline
     pixi install --locked
 
-    # Compile CmdStan binary for optional cmdstanr backend
+    # Compile CmdStan to /opt (accessible regardless of user mapping)
     export TBB_CXX_TYPE=gcc
-    pixi run Rscript -e "cmdstanr::install_cmdstan(cores = 4, quiet = FALSE)" || \
+    mkdir -p /opt/cmdstan
+    pixi run Rscript -e "cmdstanr::install_cmdstan(dir='/opt/cmdstan', cores=4, quiet=FALSE)" || \
         echo "WARNING: CmdStan installation failed. cmdstanr backend will not be available."
-
-    # Write CmdStan path to Renviron so cmdstanr finds it at runtime
-    CMDSTAN_DIR=$(ls -d /root/.cmdstan/cmdstan-* 2>/dev/null | head -1)
-    if [ -n "$CMDSTAN_DIR" ]; then
-        echo "CMDSTAN=$CMDSTAN_DIR" >> /opt/pipeline/.pixi/envs/default/lib/R/etc/Renviron
-    fi
+    chmod -R a+rX /opt/cmdstan
 
     # Clean up pixi cache only (don't touch shared /tmp)
     rm -rf /root/.cache/rattler
