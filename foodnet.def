@@ -31,6 +31,11 @@ From: ubuntu:22.04
     mkdir -p /opt/cmdstan
     pixi run Rscript -e "cmdstanr::install_cmdstan(dir='/opt/cmdstan', cores=4, quiet=FALSE)" || \
         echo "WARNING: CmdStan installation failed. cmdstanr backend will not be available."
+
+    # Pre-compile Stan headers so runtime compilation doesn't need to write to /opt
+    cd /opt/cmdstan/cmdstan-*/
+    pixi run make build -j4 2>/dev/null || true
+
     chmod -R a+rX /opt/cmdstan
 
     # Clean up pixi cache only (don't touch shared /tmp)

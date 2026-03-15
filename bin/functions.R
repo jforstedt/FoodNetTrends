@@ -269,12 +269,16 @@ PROPOSED_BM <- function(data, cores = 16, chains = 2, iterations = 500,
     data$state <- as.factor(data$state)
   }
 
-  # Ensure cmdstanr can find the CmdStan installation
+  # Ensure cmdstanr can find CmdStan and has a writable dir for compiled models
   if (backend == "cmdstanr") {
     cmdstan_env <- Sys.getenv("CMDSTAN", unset = "")
     if (nchar(cmdstan_env) > 0 && dir.exists(cmdstan_env)) {
       cmdstanr::set_cmdstan_path(cmdstan_env)
     }
+    # Singularity containers are read-only; use work dir for model compilation
+    tmpdir <- file.path(getwd(), ".cmdstan_tmp")
+    dir.create(tmpdir, showWarnings = FALSE, recursive = TRUE)
+    Sys.setenv(TMPDIR = tmpdir)
   }
 
   set.seed(seed)
