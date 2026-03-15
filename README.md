@@ -252,7 +252,7 @@ Common issues and solutions:
 7. **STEC Grouping Issues**: Ensure stec_class column is present for O157/non-O157 splitting
 
 ## Credits
-The FoodNetTrends pipeline was developed by Samantha Sevilla, Josh Forstedt, and OAMD's SciComp Team with support from Daniel Weller (CDC/DFWED/EDEB), based on R scripts developed by Daniel Weller (CDC/DFWED/EDEB) with support from Beau Bruce (CDC/DFWED/EDEB) and Erica Billig Rose (CDC/DFWED/EDEB).
+The FoodNetTrends pipeline was developed by Josh Forstedt (CDC/OAMD SciComp) and Daniel Weller (CDC/DFWED/EDEB), with support from Beau Bruce (CDC/DFWED/EDEB) and Erica Billig Rose (CDC/DFWED/EDEB).
 
 ## Contributions and Support
 If you would like to contribute to this pipeline, please see the [contributing guidelines](.github/CONTRIBUTING.md).

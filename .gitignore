@@ -49,5 +49,20 @@ bin/file_headers_output.txt
 
 # Reference/historical source files
 source/
+
+# Local working directories
 .local/
 .vscode/
+.idea/
+.Rproj.user/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# R session files
+.RData
+.Rhistory
+
+# Pixi
+.pixi/
