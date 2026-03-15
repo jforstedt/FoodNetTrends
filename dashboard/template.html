@@ -383,7 +383,8 @@ img { max-width: 100%; display: block; }
   display: flex; align-items: center; justify-content: center;
 }
 .lightbox-inner img {
-  display: block; max-width: none; cursor: grab; transition: transform .2s ease;
+  display: block; max-width: none; cursor: zoom-in; transform-origin: center center;
+  transition: transform .15s ease; user-select: none;
 }
 .lightbox-close {
   position: fixed; top: 16px; right: 20px;
@@ -836,16 +837,31 @@ window.toggleSidebar = function() {
 // ========================================================================
 var lightboxScale = 1;
 var lightboxImg = null;
+var lightboxPanX = 0;
+var lightboxPanY = 0;
+var lightboxDragging = false;
+var lightboxDragStartX = 0;
+var lightboxDragStartY = 0;
+var lightboxPanStartX = 0;
+var lightboxPanStartY = 0;
+
+function applyLightboxTransform() {
+  if (!lightboxImg) return;
+  lightboxImg.style.transform = 'translate(' + lightboxPanX + 'px,' + lightboxPanY + 'px) scale(' + lightboxScale + ')';
+}
 
 function openLightbox(src) {
   lightboxScale = 1;
+  lightboxPanX = 0;
+  lightboxPanY = 0;
   var inner = document.getElementById('lightbox-inner');
   inner.innerHTML = '';
   if (src) {
     var img = document.createElement('img');
     img.src = src;
-    img.style.transform = 'scale(1)';
+    img.draggable = false;
     lightboxImg = img;
+    applyLightboxTransform();
     inner.appendChild(img);
   }
   document.getElementById('lightbox').classList.add('open');
@@ -854,17 +870,52 @@ function openLightbox(src) {
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('open');
   lightboxImg = null;
+  lightboxDragging = false;
 }
 
 window.lightboxZoom = function(dir) {
   if (!lightboxImg) return;
-  if (dir === 0) lightboxScale = 1;
+  if (dir === 0) { lightboxScale = 1; lightboxPanX = 0; lightboxPanY = 0; }
   else lightboxScale = Math.max(0.25, Math.min(5, lightboxScale + dir * 0.25));
-  lightboxImg.style.transform = 'scale(' + lightboxScale + ')';
+  applyLightboxTransform();
 };
 
 window.openLightbox = openLightbox;
 window.closeLightbox = closeLightbox;
+
+// Mouse wheel zoom on lightbox
+document.getElementById('lightbox').addEventListener('wheel', function(e) {
+  if (!lightboxImg) return;
+  e.preventDefault();
+  var delta = e.deltaY > 0 ? -0.15 : 0.15;
+  lightboxScale = Math.max(0.25, Math.min(5, lightboxScale + delta));
+  applyLightboxTransform();
+}, { passive: false });
+
+// Pan via click-and-drag when zoomed
+document.getElementById('lightbox-inner').addEventListener('mousedown', function(e) {
+  if (!lightboxImg || lightboxScale <= 1) return;
+  e.preventDefault();
+  lightboxDragging = true;
+  lightboxDragStartX = e.clientX;
+  lightboxDragStartY = e.clientY;
+  lightboxPanStartX = lightboxPanX;
+  lightboxPanStartY = lightboxPanY;
+  lightboxImg.style.cursor = 'grabbing';
+});
+
+document.addEventListener('mousemove', function(e) {
+  if (!lightboxDragging || !lightboxImg) return;
+  lightboxPanX = lightboxPanStartX + (e.clientX - lightboxDragStartX);
+  lightboxPanY = lightboxPanStartY + (e.clientY - lightboxDragStartY);
+  applyLightboxTransform();
+});
+
+document.addEventListener('mouseup', function() {
+  if (!lightboxDragging) return;
+  lightboxDragging = false;
+  if (lightboxImg) lightboxImg.style.cursor = lightboxScale > 1 ? 'grab' : 'zoom-in';
+});
 
 // Close lightbox on Escape or background click
 document.addEventListener('keydown', function(e) {
@@ -1599,23 +1650,30 @@ function getSignificanceClass(row) {
       sparkGrid.appendChild(card);
     });
 
-    // All Trends tab: show overall trend images for each pathogen in this state
+    // All Trends tab: prefer per-state R-generated PNGs, fall back to multi-state site_trends_b64
     var trendsContainer = section.querySelector('#state-trends-container-' + st);
+    var stateTrendPlots = s.state_trend_plots || {};
     analysisKeysForState.forEach(function(ak) {
       var aa = analyses[ak];
-      if (!aa || !aa.site_trends_b64) return;
+      if (!aa) return;
+      var perStatePng = stateTrendPlots[ak];
+      var fallbackPng = aa.site_trends_b64;
+      if (!perStatePng && !fallbackPng) return;
+      var imgSrc = perStatePng || fallbackPng;
+      var sourceLabel = perStatePng ? 'Per-state trend' : 'All-site trends';
       var trendCard = document.createElement('div');
       trendCard.className = 'card';
       trendCard.innerHTML =
         '<div class="card-header" style="color:' + getColor(aa) + '">' + esc(getAnalysisLabel(aa)) + ' \u2014 ' + esc(s.name) +
+          '<span class="badge badge-info" style="margin-left:8px;">' + sourceLabel + '</span>' +
           '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')" style="margin-left:auto;font-size:.78rem;">View full analysis \u2192</a>' +
         '</div>' +
-        '<div class="plot-container"><img src="' + aa.site_trends_b64 + '" alt="' + esc(getAnalysisLabel(aa)) + ' trends" onclick="openLightbox(this.src)"></div>';
+        '<div class="plot-container"><img src="' + imgSrc + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend for ' + esc(s.name) + '" onclick="openLightbox(this.src)"></div>';
       trendsContainer.appendChild(trendCard);
     });
 
     if (trendsContainer.children.length === 0) {
-      trendsContainer.innerHTML = '<div class="card"><div class="card-header">Trend Plots</div><p style="color:var(--gray-500);padding:20px;">No site trend plots available for this state.</p></div>';
+      trendsContainer.innerHTML = '<div class="card"><div class="card-header">Trend Plots</div><p style="color:var(--gray-500);padding:20px;">No trend plots available for this state.</p></div>';
     }
 
     // Detailed data table

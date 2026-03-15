@@ -217,6 +217,12 @@ site_trends_files <- if (dir.exists(spline_dir)) {
   Sys.glob(file.path(spline_dir, "*_site_trends.png"))
 } else character(0)
 
+# Per-state individual trend plots (exclude overall_trend and site_trends)
+state_trend_files <- if (dir.exists(spline_dir)) {
+  all_trend_pngs <- Sys.glob(file.path(spline_dir, "*_trend.png"))
+  all_trend_pngs[!grepl("_(overall_trend|site_trends)\\.png$", all_trend_pngs)]
+} else character(0)
+
 # Pipeline info files
 execution_reports <- if (dir.exists(pipeline_info_dir)) {
   Sys.glob(file.path(pipeline_info_dir, "execution_*.html"))
@@ -405,7 +411,8 @@ for (aid in names(analysis_ids)) {
     summary_txt = NULL,
     error_txt = NULL,
     overall_trend_b64 = NULL,
-    site_trends_b64 = NULL
+    site_trends_b64 = NULL,
+    state_plots = list()
   )
 
   # Check for error file
@@ -455,6 +462,17 @@ for (aid in names(analysis_ids)) {
     entry$site_trends_b64 <- encode_png_b64(site_png)
   }
 
+  # Encode per-state trend PNGs
+  state_plot_prefix <- paste0(prefix, "_")
+  matching_state_pngs <- state_trend_files[startsWith(state_trend_files, state_plot_prefix)]
+  for (sp_file in matching_state_pngs) {
+    sp_base <- sub("_trend\\.png$", "", basename(sp_file))
+    state_code <- sub(paste0(".*", info$pathogen, "_", info$subgroup, "_"), "", sp_base)
+    if (nchar(state_code) > 0 && nchar(state_code) <= 3) {
+      entry$state_plots[[state_code]] <- encode_png_b64(sp_file)
+    }
+  }
+
   # Set status if we only have error
   if (entry$status == "unknown") {
     entry$status <- "no_data"
@@ -495,11 +513,21 @@ for (st in all_states) {
     }
   }
 
+  # Collect per-state trend plots for this state
+  state_trend_plots <- list()
+  for (aid in names(analyses_data)) {
+    e <- analyses_data[[aid]]
+    if (length(e$state_plots) > 0 && st %in% names(e$state_plots)) {
+      state_trend_plots[[aid]] <- e$state_plots[[st]]
+    }
+  }
+
   states_data[[st]] <- list(
     code = st,
     name = si$name,
     joinYear = si$joinYear,
-    irsite_by_analysis = state_irsite
+    irsite_by_analysis = state_irsite,
+    state_trend_plots = state_trend_plots
   )
 }
 
@@ -609,7 +637,8 @@ dashboard_data <- list(
       summary_txt = entry$summary_txt,
       error_txt = entry$error_txt,
       overall_trend_b64 = entry$overall_trend_b64,
-      site_trends_b64 = entry$site_trends_b64
+      site_trends_b64 = entry$site_trends_b64,
+      state_plots = entry$state_plots
     )
   }),
 
@@ -618,7 +647,8 @@ dashboard_data <- list(
       code = s$code,
       name = s$name,
       joinYear = s$joinYear,
-      irsite_by_analysis = lapply(s$irsite_by_analysis, df_to_list)
+      irsite_by_analysis = lapply(s$irsite_by_analysis, df_to_list),
+      state_trend_plots = s$state_trend_plots
     )
   }),
 

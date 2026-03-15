@@ -479,6 +479,36 @@ PLOT_SITE_TRENDS <- function(site, pathogen, outDir, subgroup = "combined") {
   return(p)
 }
 
+# Individual per-state incidence trend plot with 95% HDI ribbon
+PLOT_STATE_TREND <- function(site_data, state_code, pathogen, outDir, subgroup = "combined") {
+  state_df <- site_data %>% filter(state == state_code)
+  if (nrow(state_df) == 0) return(NULL)
+
+  display_name <- if (subgroup != "combined") {
+    paste(pathogen, subgroup, "\u2014", state_code)
+  } else {
+    paste(pathogen, "\u2014", state_code)
+  }
+
+  p <- ggplot(state_df, aes(x = year, y = median_ir)) +
+    geom_line(linewidth = 1.5) +
+    geom_ribbon(aes(ymin = lower_hdi_ir, ymax = upper_hdi_ir), alpha = 0.3) +
+    geom_vline(aes(xintercept = 2004), linetype = "dashed", color = "red") +
+    labs(
+      title = display_name,
+      subtitle = "Median incidence with 95% HDI intervals",
+      y = "Incidence per 100,000 population",
+      x = "Year"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5)
+    )
+
+  return(p)
+}
+
 # Catchment-wide incidence trend plot with 95% HDI ribbon
 PLOT_OVERALL_TREND <- function(catchir_data, pathogen, outDir, subgroup = "combined") {
   display_name <- if (subgroup != "combined") paste(pathogen, subgroup) else pathogen

@@ -548,6 +548,17 @@ for (pathogen_name in target_pathogens) {
           ggsave(paste0(outDir, "/", output_prefix, "_overall_trend.png"), overall_plot,
                  width = 10, height = 6, dpi = 300)
         }
+
+        # Per-state individual trend charts
+        if (exists("PLOT_STATE_TREND", mode = "function")) {
+          for (st in unique(as.character(site$state))) {
+            state_plot <- PLOT_STATE_TREND(site, st, pathogen_name, outDir, opts$subgroup)
+            if (!is.null(state_plot)) {
+              ggsave(paste0(outDir, "/", output_prefix, "_", st, "_trend.png"),
+                     state_plot, width = 8, height = 5, dpi = 300)
+            }
+          }
+        }
       }, error = function(e) {
         report_progress("WARNING", message=paste("Visualization skipped:", e$message))
       })
