@@ -138,7 +138,7 @@ extract_project_id() {
 # typically include: task_id, hash, native_id, name, status, exit,
 # submit, start, complete, duration, realtime, %cpu, peak_rss, ...
 #
-# We look for process names containing pathogen identifiers and extract
+# Look for process names containing pathogen identifiers and extract
 # status, duration, and peak memory.
 # ---------------------------------------------------------------------------
 parse_trace() {

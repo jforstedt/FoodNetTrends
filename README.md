@@ -2,7 +2,7 @@
 
 A Nextflow pipeline for Bayesian hierarchical spline modeling of CDC FoodNet surveillance data. FoodNetTrends fits pathogen-specific incidence models using `brms`/Stan, producing trend estimates, site-level comparisons, and relative risk calculations across FoodNet catchment areas.
 
-**Primary citation:** Weller et al. 2026, doi: [10.15212/ZOONOSES-2025-0030](https://doi.org/10.15212/ZOONOSES-2025-0030)
+**Primary citation:** Weller DL, et al. Enhanced Bayesian Spline Regression Approach for Modelling Trends in Infections Caused by Pathogens Commonly Transmitted Through Food. *Zoonoses*. 2026;6:3. doi: [10.15212/ZOONOSES-2025-0030](https://doi.org/10.15212/ZOONOSES-2025-0030)
 
 ## Features
 
