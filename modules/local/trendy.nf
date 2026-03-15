@@ -60,10 +60,15 @@ process TRENDY {
     # Copy functions.R to the current directory
     cp ${workflow.projectDir}/bin/functions.R .
 
-    # Ensure the file was copied successfully
     if [ ! -f functions.R ]; then
         echo "Error: Failed to copy functions.R"
         exit 1
+    fi
+
+    # Copy CmdStan to writable work dir (container filesystem is read-only)
+    if [ "${params.stan_backend}" = "cmdstanr" ] && [ -d /opt/cmdstan ]; then
+        cp -r /opt/cmdstan/cmdstan-* .cmdstan_local
+        export CMDSTAN=\$(pwd)/.cmdstan_local
     fi
 
     Rscript ${whichScript} \\
