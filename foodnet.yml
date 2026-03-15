@@ -2,9 +2,6 @@ name: FoodNetTrends_R
 channels:
   - conda-forge
   - bioconda
-  - defaults
-  - r
-  - stan
 dependencies:
   - r-base=4.3.2
   - r-argparse=2.2.5
