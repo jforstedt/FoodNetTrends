@@ -269,6 +269,14 @@ PROPOSED_BM <- function(data, cores = 16, chains = 2, iterations = 500,
     data$state <- as.factor(data$state)
   }
 
+  # Ensure cmdstanr can find the CmdStan installation
+  if (backend == "cmdstanr") {
+    cmdstan_env <- Sys.getenv("CMDSTAN", unset = "")
+    if (nchar(cmdstan_env) > 0 && dir.exists(cmdstan_env)) {
+      cmdstanr::set_cmdstan_path(cmdstan_env)
+    }
+  }
+
   set.seed(seed)
 
   model <- tryCatch({
