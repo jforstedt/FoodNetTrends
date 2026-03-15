@@ -49,3 +49,4 @@ bin/file_headers_output.txt
 
 # Reference/historical source files
 source/
+.local/
