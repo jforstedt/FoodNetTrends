@@ -2010,7 +2010,7 @@ function getSignificanceClass(row) {
 
       var imgHtml;
       if (perStatePng) {
-        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src,\'' + splinePath(ak + '_' + stCode + '_trend.png') + '\')"></div>';
+        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src,\'' + splinePath(ak + '_' + st + '_trend.png') + '\')"></div>';
       } else {
         imgHtml = '<div class="tile-img" style="padding:10px;align-items:center;">' + makeSparklineSVG(sortedRows, color, 280, 120) + '</div>';
       }
@@ -2230,7 +2230,7 @@ function getSignificanceClass(row) {
 
       var imgHtml;
       if (perStatePng) {
-        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src,\'' + splinePath(ak + '_' + stCode + '_trend.png') + '\')"></div>';
+        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src,\'' + splinePath(ak + '_' + st + '_trend.png') + '\')"></div>';
       } else if (rows.length > 0) {
         imgHtml = '<div class="tile-img" style="padding:10px;align-items:center;">' + makeSparklineSVG(rows, color, 280, 120) + '</div>';
       } else {
