@@ -1042,8 +1042,37 @@ if [[ "$flag" != "resume" ]] && [[ "$flag" != "preprocess" ]] && [[ "$pathogens"
                                 grouping="SALMONELLA~combined"
                             fi
                         else
-                            echo -e "${YELLOW}Using combined analysis.${NC}" >&2
-                            grouping="SALMONELLA~combined"
+                            echo "" >&2
+                            echo -e "${YELLOW}Without preprocessing, serotype-level analysis is not possible.${NC}" >&2
+                            echo -e "${YELLOW}The pipeline will run all Salmonella serotypes as a single combined analysis.${NC}" >&2
+                            echo -e "${YELLOW}To run individual serotypes later, use: ./run_workflow.sh and select PREPROCESS_ONLY first.${NC}" >&2
+                            echo "" >&2
+                            read -p "Proceed with combined analysis? (y) or go back and preprocess? (p) [y]: " fallback_choice
+                            fallback_choice=${fallback_choice:-y}
+                            if [[ "$fallback_choice" == "p" ]]; then
+                                preprocess_projID=$(date +%Y%m%d_%H%M%S)
+                                echo -e "${BLUE}Submitting preprocessing to cluster...${NC}" >&2
+                                nextflow run main.nf -profile singularity -entry PREPROCESS_ONLY \
+                                    --mmwrFile "${MMWR_FILE}" \
+                                    --outdir "$outDir" \
+                                    --projID "$preprocess_projID" \
+                                    --matching_sensitivity "$matching_sensitivity"
+                                preprocess_clean="$outDir/${preprocess_projID}/preprocessed/clean_mmwr.csv"
+                                if [[ -f "$preprocess_clean" ]]; then
+                                    echo -e "${GREEN}Preprocessing complete.${NC}" >&2
+                                    data_file="$preprocess_clean"
+                                    use_preprocessed=true
+                                    preprocessed_file="$preprocess_clean"
+                                    export _FNT_SAL_CHOICE="$sal_quick_choice"
+                                    grouping=$(handle_pathogen_grouping "$pathogen" "$data_file")
+                                    unset _FNT_SAL_CHOICE
+                                else
+                                    echo -e "${RED}Preprocessing failed. Using combined analysis.${NC}" >&2
+                                    grouping="SALMONELLA~combined"
+                                fi
+                            else
+                                grouping="SALMONELLA~combined"
+                            fi
                         fi
                     else
                         grouping="SALMONELLA~combined"
