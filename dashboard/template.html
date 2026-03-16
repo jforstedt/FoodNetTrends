@@ -1087,9 +1087,53 @@ function exportOverlayAsSVG(seriesList, options) {
 }
 
 // ========================================================================
+// LAZY SECTION RENDERING
+// ========================================================================
+var _sectionRendered = { 'overview': true };
+var _sectionBuilders = {};
+
+function registerSectionBuilder(sectionId, buildFn) {
+  _sectionBuilders[sectionId] = buildFn;
+}
+
+function ensureSectionRendered(sectionId) {
+  if (_sectionRendered[sectionId]) return;
+  var builder = _sectionBuilders[sectionId];
+  if (builder) {
+    builder();
+    _sectionRendered[sectionId] = true;
+  }
+}
+
+// After the active section is rendered, progressively build remaining sections in the background
+function renderRemainingInBackground() {
+  var pending = Object.keys(_sectionBuilders).filter(function(id) { return !_sectionRendered[id]; });
+  if (pending.length === 0) return;
+  var idx = 0;
+  function renderNext(deadline) {
+    var hasDeadline = deadline && typeof deadline.timeRemaining === 'function';
+    // Render one section per setTimeout tick, or as many as fit in the idle deadline
+    do {
+      if (idx >= pending.length) return;
+      ensureSectionRendered(pending[idx]);
+      idx++;
+    } while (hasDeadline && deadline.timeRemaining() > 5 && idx < pending.length);
+    if (idx < pending.length) {
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(renderNext);
+      else setTimeout(function() { renderNext(); }, 50);
+    }
+  }
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(renderNext);
+  else setTimeout(function() { renderNext(); }, 50);
+}
+
+// ========================================================================
 // NAVIGATION
 // ========================================================================
 function navigate(sectionId) {
+  // Ensure the target section is rendered before displaying it
+  ensureSectionRendered(sectionId);
+
   document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
   document.querySelectorAll('.sidebar-nav a').forEach(function(a) { a.classList.remove('active'); });
   var target = document.getElementById('section-' + sectionId);
@@ -1098,6 +1142,9 @@ function navigate(sectionId) {
   if (link) link.classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   window.scrollTo(0, 0);
+
+  // After rendering the active section, fill in remaining sections in the background
+  renderRemainingInBackground();
 }
 
 function navigateToState(stateCode, subTab) {
@@ -1594,11 +1641,13 @@ analysisKeys.forEach(function(key) {
   var color = getColor(a);
   var label = getAnalysisLabel(a);
 
+  // Create placeholder section element so navigation targets exist
   var section = document.createElement('div');
   section.className = 'section';
   section.id = 'section-analysis-' + key;
+  mainContent.insertBefore(section, dataQualitySection);
 
-  // --- FAILED analysis ---
+  // Failed analyses are cheap to render eagerly
   if (a.status === 'failed') {
     section.innerHTML =
       '<div class="pathogen-header">' +
@@ -1612,9 +1661,12 @@ analysisKeys.forEach(function(key) {
         '<p>The Bayesian model did not complete for this analysis unit. Error details below:</p>' +
         '<pre>' + esc(a.error_txt || 'No error details available.') + '</pre>' +
       '</div>';
-    mainContent.insertBefore(section, dataQualitySection);
+    _sectionRendered['analysis-' + key] = true;
     return;
   }
+
+  // Defer heavy rendering for successful analyses
+  registerSectionBuilder('analysis-' + key, function() {
 
   // --- SUCCESSFUL analysis ---
   var hasCatch = a.ircatch && a.ircatch.length > 0;
@@ -1724,8 +1776,6 @@ analysisKeys.forEach(function(key) {
       '</div>' +
     '</div>';
 
-  mainContent.insertBefore(section, dataQualitySection);
-
   // Wire sub-tabs
   section.querySelectorAll('.sub-tab').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -1771,7 +1821,7 @@ analysisKeys.forEach(function(key) {
       return {
         key: st, label: st,
         color: stateColorPalette[idx % stateColorPalette.length],
-        data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
+        data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, raw_ir: r.raw_ir, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
         visible: true, hdiVisible: false
       };
     });
@@ -1781,10 +1831,12 @@ analysisKeys.forEach(function(key) {
       var cRows = a.ircatch.slice().sort(function(a,b) { return a.year - b.year; });
       seriesList.unshift({
         key: '_overall', label: 'Overall', color: document.documentElement.getAttribute('data-theme') === 'dark' ? '#ffffff' : '#222222', isOverall: true,
-        data: cRows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
+        data: cRows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, raw_ir: r.raw_ir, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
         visible: true, hdiVisible: false
       });
     }
+
+    var showObservedState = { on: false };
 
     // Control buttons
     var allCbs = [], allHdiCbs = [];
@@ -1806,6 +1858,14 @@ analysisKeys.forEach(function(key) {
         exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-State Overlay \u2014 ' + label });
       });
       controlsEl.appendChild(svgBtn);
+
+      // Show observed data toggle
+      var obsLbl = document.createElement('label');
+      obsLbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;padding:4px 10px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
+      var obsCb = document.createElement('input'); obsCb.type = 'checkbox'; obsCb.checked = false;
+      obsCb.addEventListener('change', function() { showObservedState.on = obsCb.checked; drawStateOverlay(); });
+      obsLbl.appendChild(obsCb); obsLbl.appendChild(document.createTextNode('Show observed'));
+      controlsEl.appendChild(obsLbl);
 
       // Axis range and chart dimension controls
       var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
@@ -1900,6 +1960,7 @@ analysisKeys.forEach(function(key) {
         s.data.forEach(function(d) {
           if (d.year > maxYear) maxYear = d.year;
           if (d.ir > maxIR) maxIR = d.ir;
+          if (showObservedState.on && d.raw_ir != null && d.raw_ir > maxIR) maxIR = d.raw_ir;
           if (s.hdiVisible && d.upper_hdi != null && d.upper_hdi > maxIR) maxIR = d.upper_hdi;
         });
       });
@@ -1972,6 +2033,21 @@ analysisKeys.forEach(function(key) {
         for (var j=pts.length-1;j>=0;j--) ctx.lineTo(xPos(pts[j].year),yPos(pts[j].lower_hdi));
         ctx.closePath(); ctx.fill();
       });
+
+      // Observed data dots (drawn behind trend lines but in front of HDI fills)
+      if (showObservedState.on) {
+        seriesList.forEach(function(s) {
+          if (!s.visible) return;
+          ctx.globalAlpha = 0.5;
+          ctx.fillStyle = s.color;
+          s.data.forEach(function(d) {
+            if (d.raw_ir != null) {
+              ctx.beginPath(); ctx.arc(xPos(d.year), yPos(d.raw_ir), 3, 0, Math.PI * 2); ctx.fill();
+            }
+          });
+          ctx.globalAlpha = 1.0;
+        });
+      }
 
       // Lines
       seriesList.forEach(function(s) {
@@ -2129,6 +2205,7 @@ analysisKeys.forEach(function(key) {
       irrContainer.innerHTML = '<div class="card"><div class="card-header">Relative Risk</div><p style="color:var(--gray-500);padding:20px;">No comparison data available.</p></div>';
     }
   }
+  }); // end registerSectionBuilder callback
 });
 
 function isSignificant(row) {
@@ -2146,15 +2223,19 @@ function getSignificanceClass(row) {
 // ========================================================================
 // STATE VIEW SECTIONS
 // ========================================================================
-(function buildStateViews() {
+(function registerStateViews() {
   var states = D.states || {};
   var stateKeys = Object.keys(states).sort();
 
   stateKeys.forEach(function(st) {
-    var s = states[st];
+    // Create placeholder section element so navigation targets exist
     var section = document.createElement('div');
     section.className = 'section';
     section.id = 'section-state-' + st;
+    mainContent.insertBefore(section, dataQualitySection);
+
+    registerSectionBuilder('state-' + st, function() {
+    var s = states[st];
 
     var irsiteByAnalysis = s.irsite_by_analysis || {};
     var analysisKeysForState = Object.keys(irsiteByAnalysis);
@@ -2244,8 +2325,6 @@ function getSignificanceClass(row) {
         '</div>' +
         '<div style="font-size:.85rem;color:var(--gray-600);padding:12px 0;"><strong>Note:</strong> Relative risk (IRR) estimates are computed at the catchment level, not per state.</div>' +
       '</div>';
-
-    mainContent.insertBefore(section, dataQualitySection);
 
     // Wire sub-tabs
     section.querySelectorAll('.sub-tab').forEach(function(btn) {
@@ -2362,7 +2441,7 @@ function getSignificanceClass(row) {
         if (rows.length === 0) return;
         seriesList.push({
           key: ak, label: getAnalysisLabel(aa), color: getColor(aa),
-          data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
+          data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, raw_ir: r.raw_ir, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
           visible: true, hdiVisible: false
         });
       });
@@ -2379,6 +2458,8 @@ function getSignificanceClass(row) {
         canvas.parentElement.parentElement.style.display = 'none';
         return;
       }
+
+      var showObservedMp = { on: false };
 
       // Control buttons
       var allCbs = [], allHdiCbs = [];
@@ -2401,6 +2482,14 @@ function getSignificanceClass(row) {
           exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-Pathogen Overlay \u2014 ' + (sInfo.name || st) });
         });
         controlsEl.appendChild(svgBtn);
+
+        // Show observed data toggle
+        var obsLblMp = document.createElement('label');
+        obsLblMp.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;padding:4px 10px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
+        var obsCbMp = document.createElement('input'); obsCbMp.type = 'checkbox'; obsCbMp.checked = false;
+        obsCbMp.addEventListener('change', function() { showObservedMp.on = obsCbMp.checked; drawOverlay(); });
+        obsLblMp.appendChild(obsCbMp); obsLblMp.appendChild(document.createTextNode('Show observed'));
+        controlsEl.appendChild(obsLblMp);
 
         // Axis range and chart dimension controls
         var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
@@ -2486,6 +2575,7 @@ function getSignificanceClass(row) {
           s.data.forEach(function(d) {
             if (d.year > maxYear) maxYear = d.year;
             if (d.ir > maxIR) maxIR = d.ir;
+            if (showObservedMp.on && d.raw_ir != null && d.raw_ir > maxIR) maxIR = d.raw_ir;
             if (s.hdiVisible && d.upper_hdi != null && d.upper_hdi > maxIR) maxIR = d.upper_hdi;
           });
         });
@@ -2559,6 +2649,21 @@ function getSignificanceClass(row) {
           for (var j=pts.length-1;j>=0;j--) ctx.lineTo(xPos(pts[j].year),yPos(pts[j].lower_hdi));
           ctx.closePath(); ctx.fill();
         });
+
+        // Observed data dots (drawn behind trend lines but in front of HDI fills)
+        if (showObservedMp.on) {
+          seriesList.forEach(function(s) {
+            if (!s.visible) return;
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = s.color;
+            s.data.forEach(function(d) {
+              if (d.raw_ir != null) {
+                ctx.beginPath(); ctx.arc(xPos(d.year), yPos(d.raw_ir), 3, 0, Math.PI * 2); ctx.fill();
+              }
+            });
+            ctx.globalAlpha = 1.0;
+          });
+        }
 
         // Lines
         seriesList.forEach(function(s) {
@@ -2679,13 +2784,14 @@ function getSignificanceClass(row) {
       var filtered = pf ? allDetailRows.filter(function(r) { return r._analysisId === pf; }) : allDetailRows;
       detailCtrl.render(filtered);
     });
-  });
+    }); // end registerSectionBuilder callback
+  }); // end stateKeys.forEach
 })();
 
 // ========================================================================
 // DATA QUALITY SECTION
 // ========================================================================
-(function buildDataQuality() {
+registerSectionBuilder('data-quality', function buildDataQuality() {
   var pp = D.preprocessing || {};
 
   // State metadata
@@ -2796,12 +2902,12 @@ function getSignificanceClass(row) {
     html += '</tbody></table>';
     hmEl.innerHTML = html;
   }
-})();
+});
 
 // ========================================================================
 // PIPELINE INFO SECTION
 // ========================================================================
-(function buildPipelineInfo() {
+registerSectionBuilder('pipeline-info', function buildPipelineInfo() {
   var pi = D.pipeline_info || {};
   var m = D.metadata || {};
 
@@ -2886,7 +2992,7 @@ function getSignificanceClass(row) {
       });
     });
   }
-})();
+});
 
 // ========================================================================
 // FOOTER
@@ -2971,6 +3077,9 @@ if (typeof mediumZoom === 'function') {
   // Initial draw after page load ensures visible canvases get correct width
   requestAnimationFrame(function() { redrawAllCanvases(); });
 })();
+
+// Begin progressive background rendering of deferred sections after initial paint
+renderRemainingInBackground();
 
 })();
 </script>
