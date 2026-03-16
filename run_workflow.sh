@@ -1464,3 +1464,6 @@ if [[ "$proceed" =~ ^[Yy]$ ]]; then
 else
     echo -e "${RED}Analysis cancelled.${NC}"
 fi
+
+# Restore terminal settings (Nextflow/Singularity can leave the terminal in a broken state)
+stty sane 2>/dev/null
