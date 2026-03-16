@@ -239,11 +239,18 @@ PROPOSED_BM <- function(data, cores = 16, chains = 2, iterations = 500,
 
   set.seed(seed)
 
+  # Explicit priors for reproducibility across brms versions
+  model_priors <- c(
+    prior(student_t(3, 0, 2.5), class = "Intercept"),
+    prior(inv_gamma(1, 1), class = "shape")
+  )
+
   model <- tryCatch({
     brm(
       count ~ s(year, by = state) + state + offset(log(population)),
       data = data,
       family = negbinomial(),
+      prior = model_priors,
       chains = chains,
       iter = iterations,
       cores = cores,
@@ -350,7 +357,7 @@ LINPREAD_DRAW_FN <- function(data, model) {
 
     return(draws)
   }, error = function(e) {
-    stop("Error generating predictions")
+    stop("Error generating predictions: ", e$message)
   })
 }
 

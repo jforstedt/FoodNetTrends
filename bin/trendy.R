@@ -477,9 +477,16 @@ for (pathogen_name in target_pathogens) {
     report_progress("MODEL", message=paste("Saved model to", saveFile))
 
     summaryFile <- paste0(outDir, "/", output_prefix, "_summary.txt")
-    sink(summaryFile)
-    print(summary(proposed))
-    sink()
+    tryCatch({
+      sink(summaryFile)
+      on.exit(sink(), add = TRUE)
+      print(summary(proposed))
+      sink()
+      on.exit(NULL)
+    }, error = function(e) {
+      try(sink(), silent = TRUE)
+      warning("Failed to write model summary: ", e$message)
+    })
     report_progress("MODEL", message=paste("Saved model summary to", summaryFile))
 
     report_progress("DIAGNOSTICS", message=paste("Checking convergence for", pathogen_name))
@@ -568,12 +575,18 @@ for (pathogen_name in target_pathogens) {
   }, error = function(e) {
     report_progress("ERROR", message=paste("Error in model fitting for", pathogen_name, ":", e$message))
     error_file <- paste0(outDir, "/", output_prefix, "_error.txt")
-    sink(error_file)
-    cat(paste("Error processing", pathogen_name, "at", Sys.time(), "\n"))
-    cat(paste("Error message:", e$message, "\n"))
-    cat("Traceback:\n")
-    cat(paste(capture.output(traceback()), collapse = "\n"))
-    sink()
+    tryCatch({
+      sink(error_file)
+      on.exit(sink(), add = TRUE)
+      cat(paste("Error processing", pathogen_name, "at", Sys.time(), "\n"))
+      cat(paste("Error message:", e$message, "\n"))
+      cat("Traceback:\n")
+      cat(paste(capture.output(traceback()), collapse = "\n"))
+      sink()
+      on.exit(NULL)
+    }, error = function(e2) {
+      try(sink(), silent = TRUE)
+    })
   })
 }
 
