@@ -27,8 +27,7 @@ process TRENDY {
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_error.txt", optional: true, emit: errors
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_convergence_diagnostics.csv", emit: diagnostics, optional: true
 
-    errorStrategy { task.exitStatus in [143,137,104,134,140] ? 'retry' : 'finish' }
-    maxRetries 3
+    // errorStrategy and maxRetries defined in nextflow.config withName:TRENDY
 
     // Chain-based memory: each chain needs ~10 GB + 8 GB overhead
     memory = {
@@ -38,12 +37,14 @@ process TRENDY {
         return req > max ? max : req
     }
 
-    // One CPU per chain, plus BLAS bonus for large datasets
+    // Chains + BLAS threads scaled by posterior difficulty
     cpus = {
         def chains = params.chains ?: 2
-        def rows = dataMetrics?.rows ?: 10000
-        def bonus = rows > 50000 ? 2 : 0
-        return Math.min(chains + bonus, params.max_cpus as int)
+        def cat = dataMetrics?.difficulty_category ?: 'moderate'
+        def blas = cat == 'very_hard' ? 8 :
+                   cat == 'hard' ? 6 :
+                   cat == 'moderate' ? 4 : 2
+        return Math.min(chains + blas, params.max_cpus as int)
     }
 
     // Difficulty-based time allocation from resource profiler metrics
