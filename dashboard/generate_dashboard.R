@@ -126,6 +126,8 @@ parser$add_argument("--output", type = "character", default = "dashboard.html",
                     help = "Output HTML file path (default: dashboard.html)")
 parser$add_argument("--cleanFile", type = "character", default = NULL,
                     help = "Path to the clean_mmwr.csv file (optional; used to locate preprocessing metadata when data comes from a different run directory)")
+parser$add_argument("--pipeline_params", type = "character", default = NULL,
+                    help = "Path to JSON file with pipeline run parameters (for re-run command)")
 
 opts <- tryCatch(parser$parse_args(), error = function(e) {
   msg("FATAL: Argument parsing failed: ", e$message)
@@ -593,7 +595,7 @@ year_range <- if (length(all_years) > 0) range(all_years, na.rm = TRUE) else c(N
 
 # Build the main data object
 dashboard_data <- list(
-  metadata = list(
+  metadata = c(list(
     projID = projID,
     generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
     output_dir = output_dir,
@@ -604,7 +606,9 @@ dashboard_data <- list(
     n_states = length(all_states),
     year_range = year_range,
     pathogens = unique_pathogens
-  ),
+  ), if (!is.null(opts$pipeline_params) && file.exists(opts$pipeline_params)) {
+    tryCatch(fromJSON(opts$pipeline_params), error = function(e) list())
+  } else list()),
 
   preprocessing = list(
     report = df_to_list(preprocess_report),
