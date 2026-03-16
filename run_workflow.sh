@@ -4,6 +4,9 @@
 # FoodNetTrends Analysis Pipeline - Interactive Launcher
 # =============================================================================
 
+# Restore terminal on exit, interrupt, or suspend
+trap 'stty sane 2>/dev/null' EXIT INT TSTP
+
 # ---------------------------------------------------------------------------
 # Data file paths (edit these when data files change)
 # ---------------------------------------------------------------------------
@@ -1464,6 +1467,3 @@ if [[ "$proceed" =~ ^[Yy]$ ]]; then
 else
     echo -e "${RED}Analysis cancelled.${NC}"
 fi
-
-# Restore terminal settings (Nextflow/Singularity can leave the terminal in a broken state)
-stty sane 2>/dev/null
