@@ -572,6 +572,10 @@ img { max-width: 100%; display: block; }
   .app-header .run-info { display: none; }
 }
 
+/* ===== OVERLAY OVERALL LABEL ===== */
+.overlay-overall-label { color: var(--text-primary); font-weight: 700; }
+.overlay-overall-label input { accent-color: var(--text-primary); }
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: var(--gray-100); }
@@ -766,7 +770,7 @@ function toggleTheme() {
   var html = document.documentElement;
   var isDark = html.getAttribute('data-theme') === 'dark';
   if (isDark) {
-    html.removeAttribute('data-theme');
+    html.setAttribute('data-theme', 'light');
     localStorage.setItem('fnt-theme', 'light');
     document.getElementById('theme-toggle').innerHTML = '&#9790;';
   } else {
@@ -820,10 +824,27 @@ function getAnalysisLabel(a) {
   return titleCase(a.pathogen) + ' \u2014 ' + a.subgroup;
 }
 
+// Colorblind-friendly palette for distinguishing many analysis units
+var _analysisColorPalette = [
+  '#332288','#88CCEE','#44AA99','#117733','#999933',
+  '#DDCC77','#CC6677','#882255','#AA4499','#661100',
+  '#6699CC','#E68613','#0072B2','#D55E00','#009E73',
+  '#F0E442','#56B4E9','#CC79A7','#E69F00','#000000',
+  '#1B9E77','#D95F02','#7570B3','#E7298A','#66A61E',
+  '#E6AB02','#A6761D','#A6CEE3','#B2DF8A','#FB9A99'
+];
+var _analysisColorMap = {};
+var _analysisColorIdx = 0;
+
 function getColor(a) {
   if (a.color) return a.color;
-  var colors = D.pathogen_colors || {};
-  return colors[a.pathogen] || '#666666';
+  // Build a unique key from pathogen + subgroup to distinguish serotypes
+  var aKey = a.pathogen + (a.subgroup ? '_' + a.subgroup : '');
+  if (_analysisColorMap[aKey]) return _analysisColorMap[aKey];
+  // Assign a unique color from the palette
+  _analysisColorMap[aKey] = _analysisColorPalette[_analysisColorIdx % _analysisColorPalette.length];
+  _analysisColorIdx++;
+  return _analysisColorMap[aKey];
 }
 
 // Is this pathogen hierarchical (has subgroups)?
@@ -1564,16 +1585,18 @@ analysisKeys.forEach(function(key) {
     seriesList.forEach(function(s, idx) {
       var wrap = document.createElement('span');
       wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
-      var bC = s.key === '_overall' ? '#222' : s.color;
-      var textC = s.key === '_overall' ? 'var(--text-primary)' : bC;
+      var isOverall = s.key === '_overall';
+      var bC = isOverall ? '#222' : s.color;
       var lbl = document.createElement('label');
-      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+bC+';color:'+textC+';user-select:none;'+(s.key==='_overall'?'font-weight:700;':'');
+      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+bC+';'+(isOverall?'':'color:'+bC+';')+'user-select:none;';
+      if (isOverall) lbl.className = 'overlay-overall-label';
       var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=s.visible; cb.style.accentColor=bC;
       cb.addEventListener('change', function(){ seriesList[idx].visible=cb.checked; drawStateOverlay(); });
       allCbs.push(cb);
       lbl.appendChild(cb); lbl.appendChild(document.createTextNode(s.label));
       var hLbl = document.createElement('label');
-      hLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+bC+';border-left:none;color:'+textC+';user-select:none;opacity:.75;';
+      hLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+bC+';border-left:none;'+(isOverall?'':'color:'+bC+';')+'user-select:none;opacity:.75;';
+      if (isOverall) hLbl.className = 'overlay-overall-label';
       var hCb = document.createElement('input'); hCb.type='checkbox'; hCb.checked=false; hCb.style.accentColor=bC;
       hCb.addEventListener('change', function(){ seriesList[idx].hdiVisible=hCb.checked; drawStateOverlay(); });
       allHdiCbs.push(hCb);
@@ -2535,61 +2558,67 @@ if (typeof mediumZoom === 'function') {
 // ========================================================================
 (function() {
   var mo = new MutationObserver(function() {
-    if (window._fntCanvasRedrawFns) {
-      window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e) {} });
-    }
+    // Delay redraw to let CSS custom properties propagate after theme change
+    setTimeout(function() {
+      if (window._fntCanvasRedrawFns) {
+        window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e) {} });
+      }
+    }, 50);
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 })();
 
 // ========================================================================
 // FIX: Canvas initial sizing (task 4)
-// Canvases rendered inside hidden tabs have zero width. Redraw all
-// registered canvas draw functions when a sub-tab becomes visible.
-// Also use ResizeObserver on each canvas parent for robust sizing.
+// Canvases inside hidden tabs report zero width until visible. Force
+// a redraw after the DOM reflows when any tab or section becomes visible.
 // ========================================================================
 (function() {
-  // Redraw on sub-tab activation
+  function redrawAllCanvases() {
+    if (window._fntCanvasRedrawFns) {
+      window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e2) {} });
+    }
+  }
+
+  // Redraw on sub-tab activation with enough delay for reflow
   document.addEventListener('click', function(e) {
     var tab = e.target.closest('.sub-tab');
     if (!tab) return;
-    // Allow DOM to update (the active class is set by the handler above)
-    setTimeout(function() {
-      if (window._fntCanvasRedrawFns) {
-        window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e2) {} });
-      }
-    }, 60);
+    // Two-phase redraw: immediate attempt after short reflow, plus a deferred pass
+    setTimeout(redrawAllCanvases, 50);
+    setTimeout(redrawAllCanvases, 200);
   });
 
-  // Also redraw when a top-level section becomes visible (sidebar nav)
+  // Redraw when a top-level section becomes visible (sidebar nav)
   document.addEventListener('click', function(e) {
     var link = e.target.closest('a[data-section]');
     if (!link) return;
-    setTimeout(function() {
-      if (window._fntCanvasRedrawFns) {
-        window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e2) {} });
-      }
-    }, 80);
+    setTimeout(redrawAllCanvases, 50);
+    setTimeout(redrawAllCanvases, 200);
   });
 
-  // ResizeObserver: redraw canvases when their container gains width (e.g. hidden tab becomes visible)
+  // ResizeObserver: attach to each canvas parent after a delay so dynamically
+  // created canvases are present in the DOM
   if (typeof ResizeObserver !== 'undefined') {
-    var canvases = document.querySelectorAll('canvas[id*="overlay-canvas"], canvas[id*="state-overlay-canvas"]');
-    canvases.forEach(function(cvs) {
-      var parent = cvs.parentElement;
-      if (!parent) return;
-      var lastW = 0;
-      new ResizeObserver(function(entries) {
-        var w = entries[0].contentRect.width;
-        if (w > 0 && w !== lastW) {
-          lastW = w;
-          if (window._fntCanvasRedrawFns) {
-            window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e3) {} });
+    setTimeout(function() {
+      var canvases = document.querySelectorAll('canvas[id*="overlay-canvas"], canvas[id*="state-overlay-canvas"]');
+      canvases.forEach(function(cvs) {
+        var parent = cvs.parentElement;
+        if (!parent) return;
+        var lastW = 0;
+        new ResizeObserver(function(entries) {
+          var w = entries[0].contentRect.width;
+          if (w > 0 && w !== lastW) {
+            lastW = w;
+            redrawAllCanvases();
           }
-        }
-      }).observe(parent);
-    });
+        }).observe(parent);
+      });
+    }, 100);
   }
+
+  // Initial draw after page load ensures visible canvases get correct width
+  setTimeout(redrawAllCanvases, 300);
 })();
 
 })();
