@@ -1458,12 +1458,21 @@ analysisKeys.forEach(function(key) {
   // Resource profile table
   var rp = (D.preprocessing || {}).resource_profile;
   if (rp && rp.length) {
+    // Filter to only show pathogens/subgroups that were actually analyzed
+    var analyzedPathogens = {};
+    Object.keys(D.analyses || {}).forEach(function(k) {
+      var a = D.analyses[k];
+      if (a.pathogen) analyzedPathogens[a.pathogen] = true;
+    });
+    var filteredRp = rp.filter(function(row) { return analyzedPathogens[row.pathogen]; });
+    if (filteredRp.length === 0) filteredRp = rp; // fallback to all if no match
+
     var rpTable = document.getElementById('resource-table');
-    var rpCols = Object.keys(rp[0]);
+    var rpCols = Object.keys(filteredRp[0]);
     rpTable.querySelector('thead tr').innerHTML = rpCols.map(function(c) {
       return '<th>' + esc(c) + '</th>';
     }).join('');
-    rpTable.querySelector('tbody').innerHTML = rp.map(function(row) {
+    rpTable.querySelector('tbody').innerHTML = filteredRp.map(function(row) {
       return '<tr>' + rpCols.map(function(c) {
         var val = row[c];
         if (c === 'pathogen') return '<td style="font-weight:600">' + esc(val) + '</td>';
