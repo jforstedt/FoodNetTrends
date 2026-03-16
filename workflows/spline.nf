@@ -6,7 +6,7 @@ include { PREPROCESS } from '../modules/local/preprocess'
 include { RESOURCE_PROFILER } from '../modules/local/resource_profiler'
 include { DASHBOARD } from '../modules/local/dashboard'
 
-workflow SPLINE {
+workflow FOODNETTRENDS {
     // Define input channels
     if (params.pathogen && params.pathogen != 'AUTO_DISCOVER') {
         // Convert comma-separated string to a channel of pathogens

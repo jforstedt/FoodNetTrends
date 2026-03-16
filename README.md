@@ -115,7 +115,7 @@ The launcher walks you through selecting pathogens, configuring STEC/Salmonella 
 ```bash
 nextflow run main.nf \
   -profile singularity \
-  -entry SPLINE \
+  -entry FOODNETTRENDS \
   --mmwrFile "/path/to/mmwr.sas7bdat" \
   --censusFileB "/path/to/census_b.sas7bdat" \
   --censusFileP "/path/to/census_p.sas7bdat" \

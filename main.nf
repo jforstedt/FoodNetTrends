@@ -51,9 +51,9 @@ if (params.help) {
 }
 
 // Include workflows
-include { SPLINE } from './workflows/spline.nf'
+include { FOODNETTRENDS } from './workflows/spline.nf'
 include { PREPROCESS_ONLY } from './workflows/spline.nf'
 
-workflow FoodNetTrends {
-    SPLINE()
+workflow {
+    FOODNETTRENDS()
 }

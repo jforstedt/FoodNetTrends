@@ -1257,7 +1257,7 @@ if [[ "$flag" == "preprocess" ]]; then
       --matching_sensitivity \"$matching_sensitivity\""
 
 elif [[ "$flag" == "resume" ]]; then
-    cmd="nextflow run main.nf -profile singularity -resume -entry SPLINE \
+    cmd="nextflow run main.nf -profile singularity -resume -entry FOODNETTRENDS \
   --mmwrFile \"$MMWR_FILE\" \
   --censusFileB \"$CENSUS_FILE_B\" \
   --censusFileP \"$CENSUS_FILE_P\" \
@@ -1271,7 +1271,7 @@ elif [[ "$flag" == "resume" ]]; then
   --projID \"$timestamp\""
 
 else
-    cmd="nextflow run main.nf -profile singularity -entry SPLINE \
+    cmd="nextflow run main.nf -profile singularity -entry FOODNETTRENDS \
       --mmwrFile \"$MMWR_FILE\" \
       --censusFileB \"$CENSUS_FILE_B\" \
       --censusFileP \"$CENSUS_FILE_P\" \
