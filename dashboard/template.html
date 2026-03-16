@@ -619,7 +619,7 @@ img { max-width: 100%; display: block; }
       <span class="nav-icon">&#9733;</span> Preprocess Summary
     </a>
     <a href="#" data-section="pipeline-info">
-      <span class="nav-icon">&#9881;</span> Pipeline Info
+      <span class="nav-icon">&#9881;</span> Pipeline Execution
     </a>
     <div class="section-label">Pathogens</div>
     <div class="pathogen-list" id="pathogen-nav"></div>
@@ -701,8 +701,8 @@ img { max-width: 100%; display: block; }
 
 <!-- ==================== PIPELINE INFO ==================== -->
 <div class="section" id="section-pipeline-info">
-  <h1 class="section-title">Pipeline Information</h1>
-  <p class="section-subtitle">Nextflow execution reports and pipeline metadata</p>
+  <h1 class="section-title">Pipeline Execution</h1>
+  <p class="section-subtitle">Execution details, resource usage, and pipeline metadata</p>
 
   <div style="margin-bottom:28px; width:100%;">
     <div class="summary-card" style="width:100%;">
@@ -721,7 +721,7 @@ img { max-width: 100%; display: block; }
   </div>
 
   <div class="card" style="margin-top:24px; display:none;" id="trace-card">
-    <div class="card-header">Execution Trace <span class="badge badge-info">execution_trace.txt</span></div>
+    <div class="card-header">Per-Job Resource Usage <span class="badge badge-info">execution_trace.txt</span></div>
     <div class="table-wrapper" style="max-height:400px; overflow-y:auto;">
       <table class="data-table" id="trace-table">
         <thead><tr></tr></thead>
@@ -1674,8 +1674,7 @@ analysisKeys.forEach(function(key) {
     '<div class="sub-content" data-tab-content="ircatch" data-analysis="' + key + '">' +
       '<div class="card">' +
         '<div class="card-header">Catchment-Level Incidence Rates <span class="badge badge-info">' + esc(key) + '_IRCatch.csv</span>' +
-          '<button class="btn-export" style="margin-left:auto;" onclick="exportTableCSV(this.closest(\'.card\').querySelector(\'.data-table\'), \'' + esc(key) + '_IRCatch.csv\')">Export CSV</button>' +
-        '</div>' +
+                  '</div>' +
         '<div class="table-wrapper"><table class="data-table ircatch-table" data-analysis="' + key + '"><thead><tr></tr></thead><tbody></tbody></table></div>' +
       '</div>' +
     '</div>' +
@@ -1690,8 +1689,7 @@ analysisKeys.forEach(function(key) {
           '<select class="irsite-state-filter" data-analysis="' + key + '"><option value="">All States</option>' +
             statesInData.sort().map(function(s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
           '</select>' +
-          '<button class="btn-export" onclick="exportTableCSV(this.closest(\'.card\').querySelector(\'.data-table\'), \'' + esc(key) + '_IRSite.csv\')">Export CSV</button>' +
-          '<span class="result-count irsite-count" data-analysis="' + key + '"></span>' +
+                    '<span class="result-count irsite-count" data-analysis="' + key + '"></span>' +
         '</div>' +
         '<div class="table-wrapper scrollable-table"><table class="data-table irsite-table" data-analysis="' + key + '"><thead><tr></tr></thead><tbody></tbody></table></div>' +
       '</div>' +
