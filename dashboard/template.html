@@ -2719,13 +2719,13 @@ function getSignificanceClass(row) {
   var linksEl = document.getElementById('pipeline-links');
   var linkCards = [];
 
-  (pi.execution_reports || []).forEach(function(f) {
+  [].concat(pi.execution_reports || []).forEach(function(f) {
     linkCards.push({ icon: '&#128202;', title: 'Execution Report', desc: f, path: 'pipeline_info/' + f });
   });
-  (pi.pipeline_dags || []).forEach(function(f) {
+  [].concat(pi.pipeline_dags || []).forEach(function(f) {
     linkCards.push({ icon: '&#128296;', title: 'Pipeline DAG', desc: f, path: 'pipeline_info/' + f });
   });
-  (pi.execution_traces || []).forEach(function(f) {
+  [].concat(pi.execution_traces || []).forEach(function(f) {
     linkCards.push({ icon: '&#128209;', title: 'Execution Trace', desc: f, path: 'pipeline_info/' + f });
   });
 
