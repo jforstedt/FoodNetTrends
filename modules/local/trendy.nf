@@ -30,10 +30,12 @@ process TRENDY {
     errorStrategy { task.exitStatus in [143,137,104,134,140] ? 'retry' : 'finish' }
     maxRetries 3
 
-    // Chain-based memory: each chain needs ~10 GB + 8 GB overhead.
+    // Chain-based memory: each chain needs ~10 GB + 8 GB overhead
     memory = {
         def chains = params.chains ?: 2
-        return check_max(((chains * 10 + 8) as int).GB * task.attempt, 'memory')
+        def req = ((chains * 10 + 8) as int).GB * task.attempt
+        def max = params.max_memory as nextflow.util.MemoryUnit
+        return req > max ? max : req
     }
 
     // One CPU per chain, plus BLAS bonus for large datasets
@@ -41,7 +43,7 @@ process TRENDY {
         def chains = params.chains ?: 2
         def rows = dataMetrics?.rows ?: 10000
         def bonus = rows > 50000 ? 2 : 0
-        return check_max(chains + bonus, 'cpus')
+        return Math.min(chains + bonus, params.max_cpus as int)
     }
 
     // Difficulty-based time allocation from resource profiler metrics
@@ -50,7 +52,9 @@ process TRENDY {
         def base = cat == 'very_hard' ? 72.h :
                    cat == 'hard' ? 48.h :
                    cat == 'moderate' ? 24.h : 12.h
-        return check_max(base * task.attempt, 'time')
+        def req = base * task.attempt
+        def max = params.max_time as nextflow.util.Duration
+        return req > max ? max : req
     }
 
     script:
