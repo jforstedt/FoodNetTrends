@@ -254,6 +254,50 @@ img { max-width: 100%; display: block; }
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
 }
 
+/* Horizontal scroll rows for Trends at a Glance */
+.thumb-row-container { display: flex; flex-direction: column; gap: 6px; }
+.thumb-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 0; border-bottom: 1px solid var(--border-color);
+}
+.thumb-row:last-child { border-bottom: none; }
+.thumb-row-label {
+  min-width: 160px; flex-shrink: 0; font-size: .85rem; font-weight: 600;
+  color: var(--text-primary); display: flex; align-items: center; gap: 8px;
+}
+.thumb-row-label .group-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.thumb-row-scroll {
+  display: flex; gap: 12px; overflow-x: auto; flex-wrap: nowrap;
+  padding-bottom: 4px; flex: 1; min-width: 0;
+}
+.thumb-row-scroll .thumb-card { flex-shrink: 0; width: 280px; }
+
+/* Compact tile grid for state trend cards */
+.state-trend-tile-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;
+}
+.state-trend-tile {
+  background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm); overflow: hidden;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.state-trend-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.state-trend-tile .tile-header {
+  padding: 8px 12px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--border-color); font-size: .82rem; font-weight: 600;
+}
+.state-trend-tile .tile-header .group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.state-trend-tile .tile-header a { margin-left: auto; font-size: .72rem; }
+.state-trend-tile .tile-img { width: 100%; aspect-ratio: 5/3; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--gray-50); }
+.state-trend-tile .tile-img img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.state-trend-tile .tile-stats {
+  display: flex; gap: 10px; padding: 8px 12px; font-size: .72rem; color: var(--text-secondary);
+  border-top: 1px solid var(--border-color);
+}
+.state-trend-tile .tile-stats .tile-stat-value { font-weight: 700; color: var(--text-primary); font-size: .82rem; }
+
 /* ===== PATHOGEN/STATE SECTION LAYOUT ===== */
 .pathogen-header, .state-header {
   display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
@@ -536,7 +580,7 @@ img { max-width: 100%; display: block; }
       <span class="nav-icon">&#9632;</span> Overview
     </a>
     <a href="#" data-section="data-quality">
-      <span class="nav-icon">&#9733;</span> Data Quality
+      <span class="nav-icon">&#9733;</span> Preprocess Summary
     </a>
     <a href="#" data-section="pipeline-info">
       <span class="nav-icon">&#9881;</span> Pipeline Info
@@ -569,7 +613,7 @@ img { max-width: 100%; display: block; }
 
   <div class="card">
     <div class="card-header">Trends at a Glance</div>
-    <div class="thumb-grid" id="overview-thumbs"></div>
+    <div class="thumb-row-container" id="overview-thumbs"></div>
   </div>
 
   <div class="card">
@@ -583,9 +627,9 @@ img { max-width: 100%; display: block; }
 
 <!-- Dynamically generated sections inserted here by JS -->
 
-<!-- ==================== DATA QUALITY ==================== -->
+<!-- ==================== PREPROCESS SUMMARY ==================== -->
 <div class="section" id="section-data-quality">
-  <h1 class="section-title">Data Quality</h1>
+  <h1 class="section-title">Preprocess Summary</h1>
   <p class="section-subtitle">Preprocessing audit trail and metadata summaries</p>
 
   <div class="summary-cards">
@@ -632,6 +676,13 @@ img { max-width: 100%; display: block; }
   </div>
 
   <div class="pipeline-links" id="pipeline-links"></div>
+
+  <div class="card" style="margin-top:24px;" id="rerun-card">
+    <div class="card-header">Re-run Command <span class="badge badge-info">Nextflow</span>
+      <button class="btn-export" style="margin-left:auto;" id="copy-rerun-btn">Copy</button>
+    </div>
+    <pre style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:4px;padding:14px;font-size:.8rem;overflow-x:auto;white-space:pre-wrap;"><code id="rerun-command"></code></pre>
+  </div>
 
   <div class="card" style="margin-top:24px; display:none;" id="trace-card">
     <div class="card-header">Execution Trace <span class="badge badge-info">execution_trace.txt</span></div>
@@ -1152,10 +1203,9 @@ analysisKeys.forEach(function(key) {
     }).join('');
   }
 
-  // Overview thumbnails: per pathogen show overall trend, all-site trend, then per-state alphabetically
+  // Overview thumbnails: one horizontal scroll row per analysis
   var grid = document.getElementById('overview-thumbs');
   var stateOrder = ['CA','CO','CT','GA','MD','MN','NM','NY','OR','TN'];
-  var lastPathogen = '';
 
   function makeThumbCard(imgSrc, label, sublabel, clickAction) {
     var div = document.createElement('div');
@@ -1174,52 +1224,61 @@ analysisKeys.forEach(function(key) {
 
   analysisKeys.forEach(function(key) {
     var a = analyses[key];
-    if (a.pathogen !== lastPathogen) {
-      lastPathogen = a.pathogen;
-      var header = document.createElement('div');
-      header.className = 'thumb-group-header';
-      header.innerHTML = '<span class="group-dot" style="background:' + getColor(a) + '"></span> ' + titleCase(a.pathogen);
-      grid.appendChild(header);
-    }
+    var color = getColor(a);
+
+    // Build a horizontal row: label on left, thumbnails scrolling right
+    var row = document.createElement('div');
+    row.className = 'thumb-row';
+
+    var label = document.createElement('div');
+    label.className = 'thumb-row-label';
+    label.innerHTML = '<span class="group-dot" style="background:' + color + '"></span>' + esc(getAnalysisLabel(a));
+    label.style.cursor = 'pointer';
+    label.addEventListener('click', function() { navigate('analysis-' + key); });
+    row.appendChild(label);
+
+    var scroll = document.createElement('div');
+    scroll.className = 'thumb-row-scroll';
 
     if (a.status === 'failed') {
-      var div = document.createElement('div');
-      div.className = 'thumb-card';
-      div.innerHTML = '<div class="thumb-img" style="background:var(--red-bg);display:flex;align-items:center;justify-content:center;color:var(--red);font-weight:600;">Model Failed</div>' +
+      var failDiv = document.createElement('div');
+      failDiv.className = 'thumb-card';
+      failDiv.innerHTML = '<div class="thumb-img" style="background:var(--red-bg);display:flex;align-items:center;justify-content:center;color:var(--red);font-weight:600;">Model Failed</div>' +
         '<div class="thumb-label">' + esc(getAnalysisLabel(a)) + '<small>Error encountered during modeling</small></div>';
-      div.addEventListener('click', function() { navigate('analysis-' + key); });
-      grid.appendChild(div);
-      return;
+      failDiv.addEventListener('click', function() { navigate('analysis-' + key); });
+      scroll.appendChild(failDiv);
+    } else {
+      // Overall trend thumbnail
+      scroll.appendChild(makeThumbCard(a.overall_trend_b64, getAnalysisLabel(a), 'Overall catchment trend', function() { navigate('analysis-' + key); }));
+
+      // All-site (faceted) trend thumbnail
+      if (a.site_trends_b64) {
+        scroll.appendChild(makeThumbCard(a.site_trends_b64, getAnalysisLabel(a), 'All-site faceted trend'));
+      }
+
+      // Per-state trend thumbnails in alphabetical state order
+      var statePlots = {};
+      var allStates = D.states || {};
+      Object.keys(allStates).forEach(function(st) {
+        var stp = (allStates[st].state_trend_plots || {})[key];
+        if (stp) statePlots[st] = stp;
+      });
+      stateOrder.forEach(function(st) {
+        if (statePlots[st]) {
+          var sName = allStates[st] ? allStates[st].name : st;
+          scroll.appendChild(makeThumbCard(statePlots[st], getAnalysisLabel(a) + ' \u2014 ' + st, sName + ' state trend'));
+        }
+      });
+      Object.keys(statePlots).sort().forEach(function(st) {
+        if (stateOrder.indexOf(st) < 0) {
+          var sName = allStates[st] ? allStates[st].name : st;
+          scroll.appendChild(makeThumbCard(statePlots[st], getAnalysisLabel(a) + ' \u2014 ' + st, sName + ' state trend'));
+        }
+      });
     }
 
-    // 1) Overall trend thumbnail
-    grid.appendChild(makeThumbCard(a.overall_trend_b64, getAnalysisLabel(a), 'Overall catchment trend', function() { navigate('analysis-' + key); }));
-
-    // 2) All-site (faceted) trend thumbnail
-    if (a.site_trends_b64) {
-      grid.appendChild(makeThumbCard(a.site_trends_b64, getAnalysisLabel(a), 'All-site faceted trend'));
-    }
-
-    // 3) Per-state trend thumbnails in alphabetical state order
-    var statePlots = {};
-    var allStates = D.states || {};
-    Object.keys(allStates).forEach(function(st) {
-      var stp = (allStates[st].state_trend_plots || {})[key];
-      if (stp) statePlots[st] = stp;
-    });
-    stateOrder.forEach(function(st) {
-      if (statePlots[st]) {
-        var sName = allStates[st] ? allStates[st].name : st;
-        grid.appendChild(makeThumbCard(statePlots[st], getAnalysisLabel(a) + ' \u2014 ' + st, sName + ' state trend'));
-      }
-    });
-    // Include any states not in the hardcoded order
-    Object.keys(statePlots).sort().forEach(function(st) {
-      if (stateOrder.indexOf(st) < 0) {
-        var sName = allStates[st] ? allStates[st].name : st;
-        grid.appendChild(makeThumbCard(statePlots[st], getAnalysisLabel(a) + ' \u2014 ' + st, sName + ' state trend'));
-      }
-    });
+    row.appendChild(scroll);
+    grid.appendChild(row);
   });
 
   // State profile cards
@@ -1331,6 +1390,11 @@ analysisKeys.forEach(function(key) {
           '<div class="plot-container"><img src="' + a.site_trends_b64 + '" alt="' + esc(label) + ' site trends" onclick="openLightbox(this.src)"></div>' :
           '<div class="plot-container" style="color:var(--gray-500);padding:40px;">No site trends plot available</div>') +
       '</div>' +
+      '<div class="card">' +
+        '<div class="card-header">Multi-State Overlay <span class="badge badge-info">Median IR per 100,000</span></div>' +
+        '<div id="state-overlay-toggles-' + key + '" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>' +
+        '<div style="overflow-x:auto;"><canvas id="state-overlay-canvas-' + key + '" style="width:100%;max-height:400px;"></canvas></div>' +
+      '</div>' +
     '</div>' +
 
     // IR CATCHMENT TAB
@@ -1387,6 +1451,215 @@ analysisKeys.forEach(function(key) {
       if (target) target.classList.add('active');
     });
   });
+
+  // Multi-State Overlay chart: one line per state, plotted over years
+  (function buildStateOverlay() {
+    var canvas = document.getElementById('state-overlay-canvas-' + key);
+    var togglesEl = document.getElementById('state-overlay-toggles-' + key);
+    if (!canvas || !togglesEl || !hasSite) {
+      if (canvas) canvas.parentElement.parentElement.style.display = 'none';
+      return;
+    }
+
+    // Distinct colors for state lines
+    var stateColorPalette = [
+      '#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
+      '#42d4f4','#f032e6','#bfef45','#fabed4','#469990',
+      '#dcbeff','#9A6324','#800000','#aaffc3','#808000',
+      '#000075','#a9a9a9','#e6beff','#ffe119','#ffd8b1'
+    ];
+
+    // Group irsite rows by state, sorted by year
+    var byState = {};
+    a.irsite.forEach(function(r) {
+      if (!r.state) return;
+      if (!byState[r.state]) byState[r.state] = [];
+      byState[r.state].push(r);
+    });
+    var stateList = Object.keys(byState).sort();
+    if (stateList.length === 0) {
+      canvas.parentElement.parentElement.style.display = 'none';
+      return;
+    }
+
+    var seriesList = stateList.map(function(st, idx) {
+      var rows = byState[st].slice().sort(function(a,b) { return a.year - b.year; });
+      return {
+        key: st,
+        label: st,
+        color: stateColorPalette[idx % stateColorPalette.length],
+        data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
+        visible: true,
+        hdiVisible: false
+      };
+    });
+
+    // Build toggle checkboxes per state (line + HDI)
+    seriesList.forEach(function(s, idx) {
+      var wrap = document.createElement('span');
+      wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+      var lbl = document.createElement('label');
+      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid ' + s.color + ';color:' + s.color + ';user-select:none;';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.style.accentColor = s.color;
+      cb.addEventListener('change', function() {
+        seriesList[idx].visible = cb.checked;
+        drawStateOverlay();
+      });
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(s.label));
+      var hdiLbl = document.createElement('label');
+      hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid ' + s.color + ';border-left:none;color:' + s.color + ';user-select:none;opacity:.75;';
+      var hdiCb = document.createElement('input');
+      hdiCb.type = 'checkbox';
+      hdiCb.checked = false;
+      hdiCb.style.accentColor = s.color;
+      hdiCb.addEventListener('change', function() {
+        seriesList[idx].hdiVisible = hdiCb.checked;
+        drawStateOverlay();
+      });
+      hdiLbl.appendChild(hdiCb);
+      hdiLbl.appendChild(document.createTextNode('HDI'));
+      wrap.appendChild(lbl);
+      wrap.appendChild(hdiLbl);
+      togglesEl.appendChild(wrap);
+    });
+
+    function drawStateOverlay() {
+      var ctx = canvas.getContext('2d');
+      var dpr = window.devicePixelRatio || 1;
+      var rect = canvas.parentElement.getBoundingClientRect();
+      var W = rect.width || 700;
+      var H = 360;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      var pad = { top: 20, right: 20, bottom: 40, left: 55 };
+      var plotW = W - pad.left - pad.right;
+      var plotH = H - pad.top - pad.bottom;
+
+      // Axis range: x starts at earliest year in data for this pathogen
+      var minYear = Infinity, maxYear = -Infinity, maxIR = 0;
+      var anyVisible = false;
+      seriesList.forEach(function(s) {
+        if (!s.visible) return;
+        anyVisible = true;
+        s.data.forEach(function(d) {
+          if (d.year < minYear) minYear = d.year;
+          if (d.year > maxYear) maxYear = d.year;
+          if (d.ir > maxIR) maxIR = d.ir;
+          if (s.hdiVisible && d.upper_hdi != null && d.upper_hdi > maxIR) maxIR = d.upper_hdi;
+        });
+      });
+
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      ctx.fillStyle = isDark ? '#1a2233' : '#f8f9fa';
+      ctx.fillRect(0, 0, W, H);
+
+      if (!anyVisible) {
+        ctx.fillStyle = isDark ? '#6b7a8d' : '#adb5bd';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Toggle states above to display trends', W / 2, H / 2);
+        return;
+      }
+
+      if (maxIR === 0) maxIR = 1;
+      maxIR *= 1.1;
+      var yearSpan = maxYear - minYear || 1;
+
+      function xPos(year) { return pad.left + ((year - minYear) / yearSpan) * plotW; }
+      function yPos(ir) { return pad.top + plotH - (ir / maxIR) * plotH; }
+
+      // Grid lines and labels
+      ctx.strokeStyle = isDark ? '#263044' : '#dee2e6';
+      ctx.lineWidth = 0.5;
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = isDark ? '#97a4b5' : '#868e96';
+      ctx.textAlign = 'right';
+      var nYTicks = 5;
+      for (var i = 0; i <= nYTicks; i++) {
+        var irVal = (maxIR / nYTicks) * i;
+        var yy = yPos(irVal);
+        ctx.beginPath(); ctx.moveTo(pad.left, yy); ctx.lineTo(W - pad.right, yy); ctx.stroke();
+        ctx.fillText(irVal.toFixed(1), pad.left - 6, yy + 4);
+      }
+      ctx.textAlign = 'center';
+      for (var yr = minYear; yr <= maxYear; yr++) {
+        var xx = xPos(yr);
+        ctx.beginPath(); ctx.moveTo(xx, pad.top); ctx.lineTo(xx, pad.top + plotH); ctx.stroke();
+        if ((maxYear - minYear) <= 30 || yr % 2 === 0) {
+          ctx.fillText(yr, xx, H - pad.bottom + 16);
+        }
+      }
+
+      // HDI fills
+      seriesList.forEach(function(s) {
+        if (!s.visible || !s.hdiVisible) return;
+        var pts = s.data.filter(function(d) { return d.lower_hdi != null && d.upper_hdi != null; });
+        if (pts.length === 0) return;
+        var c = s.color;
+        if (c.charAt(0) === '#') {
+          var hex = c.replace('#', '');
+          if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+          ctx.fillStyle = 'rgba(' + parseInt(hex.substring(0,2),16) + ',' + parseInt(hex.substring(2,4),16) + ',' + parseInt(hex.substring(4,6),16) + ',0.15)';
+        } else {
+          ctx.fillStyle = c.replace(/rgb\(/, 'rgba(').replace(/\)/, ',0.15)');
+        }
+        ctx.beginPath();
+        pts.forEach(function(d, i) {
+          var x = xPos(d.year), y = yPos(d.upper_hdi);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        for (var j = pts.length - 1; j >= 0; j--) {
+          ctx.lineTo(xPos(pts[j].year), yPos(pts[j].lower_hdi));
+        }
+        ctx.closePath();
+        ctx.fill();
+      });
+
+      // Lines
+      seriesList.forEach(function(s) {
+        if (!s.visible) return;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        s.data.forEach(function(d, i) {
+          var x = xPos(d.year), y = yPos(d.ir);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.fillStyle = s.color;
+        s.data.forEach(function(d) {
+          ctx.beginPath();
+          ctx.arc(xPos(d.year), yPos(d.ir), 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+
+      // Y-axis label
+      ctx.save();
+      ctx.translate(14, pad.top + plotH / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillStyle = isDark ? '#97a4b5' : '#495057';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Median IR per 100k', 0, 0);
+      ctx.restore();
+    }
+
+    drawStateOverlay();
+    var resizeTimer;
+    window.addEventListener('resize', function() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(drawStateOverlay, 150);
+    });
+  })();
 
   // Populate IR Catchment table
   if (hasCatch) {
@@ -1576,7 +1849,7 @@ function getSignificanceClass(row) {
           '</div>' : '') +
         '<div class="card">' +
           '<div class="card-header">Pathogen Trend Cards</div>' +
-          '<div class="state-pathogen-grid" id="state-pathogen-grid-' + st + '"></div>' +
+          '<div class="state-trend-tile-grid" id="state-pathogen-grid-' + st + '"></div>' +
         '</div>' +
       '</div>' +
 
@@ -1662,8 +1935,9 @@ function getSignificanceClass(row) {
       buildSortableTable(summaryTable, summaryData, sumCols);
     }
 
-    // Pathogen sparkline cards
+    // Pathogen trend tiles using R-generated PNGs with sparkline fallback
     var sparkGrid = section.querySelector('#state-pathogen-grid-' + st);
+    var summaryTrendPlots = s.state_trend_plots || {};
     analysisKeysForState.forEach(function(ak) {
       var aa = analyses[ak];
       if (!aa) return;
@@ -1674,9 +1948,7 @@ function getSignificanceClass(row) {
       var latestRow = sortedRows[sortedRows.length - 1];
       var firstRow = sortedRows[0];
       var color = getColor(aa);
-
-      var card = document.createElement('div');
-      card.className = 'state-pathogen-card';
+      var perStatePng = summaryTrendPlots[ak];
 
       var change = '\u2014';
       if (latestRow && firstRow && latestRow.median_ir != null && firstRow.median_ir != null) {
@@ -1684,21 +1956,28 @@ function getSignificanceClass(row) {
         change = (diff > 0 ? '+' : '') + diff;
       }
 
-      card.innerHTML =
-        '<div class="spc-header">' +
-          '<span class="spc-dot" style="background:' + color + '"></span>' +
-          '<span class="spc-title">' + esc(getAnalysisLabel(aa)) + '</span>' +
-          '<a class="spc-link state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')">Details \u2192</a>' +
+      var imgHtml;
+      if (perStatePng) {
+        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src)"></div>';
+      } else {
+        imgHtml = '<div class="tile-img" style="padding:10px;align-items:center;">' + makeSparklineSVG(sortedRows, color, 280, 120) + '</div>';
+      }
+
+      var tile = document.createElement('div');
+      tile.className = 'state-trend-tile';
+      tile.innerHTML =
+        '<div class="tile-header">' +
+          '<span class="group-dot" style="background:' + color + '"></span>' +
+          '<span style="color:' + color + '">' + esc(getAnalysisLabel(aa)) + '</span>' +
+          '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')">Details \u2192</a>' +
         '</div>' +
-        '<div class="spc-body">' +
-          '<div class="spc-sparkline">' + makeSparklineSVG(sortedRows, color, 300, 50) + '</div>' +
-          '<div class="spc-stats">' +
-            '<div><div class="spc-stat-value">' + (latestRow ? round2(latestRow.median_ir) : '\u2014') + '</div>IR (' + (latestRow ? latestRow.year : '') + ')</div>' +
-            '<div><div class="spc-stat-value">' + (firstRow ? round2(firstRow.median_ir) : '\u2014') + '</div>IR (' + (firstRow ? firstRow.year : '') + ')</div>' +
-            '<div><div class="spc-stat-value">' + change + '</div>Change</div>' +
-          '</div>' +
+        imgHtml +
+        '<div class="tile-stats">' +
+          '<div><span class="tile-stat-value">' + (latestRow ? round2(latestRow.median_ir) : '\u2014') + '</span> IR (' + (latestRow ? latestRow.year : '') + ')</div>' +
+          '<div><span class="tile-stat-value">' + (firstRow ? round2(firstRow.median_ir) : '\u2014') + '</span> IR (' + (firstRow ? firstRow.year : '') + ')</div>' +
+          '<div><span class="tile-stat-value">' + change + '</span> Change</div>' +
         '</div>';
-      sparkGrid.appendChild(card);
+      sparkGrid.appendChild(tile);
     });
 
     // Multi-pathogen overlay chart for state Summary tab
@@ -1718,8 +1997,9 @@ function getSignificanceClass(row) {
           key: ak,
           label: getAnalysisLabel(aa),
           color: getColor(aa),
-          data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0 }; }),
-          visible: true
+          data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
+          visible: true,
+          hdiVisible: false
         });
       });
 
@@ -1728,10 +2008,13 @@ function getSignificanceClass(row) {
         return;
       }
 
-      // Build toggle checkboxes
+      // Build toggle checkboxes (line + HDI per pathogen)
       seriesList.forEach(function(s, idx) {
+        var wrap = document.createElement('span');
+        wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+        // Line toggle
         var lbl = document.createElement('label');
-        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px;border:1px solid ' + s.color + ';color:' + s.color + ';user-select:none;';
+        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid ' + s.color + ';color:' + s.color + ';user-select:none;';
         var cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = true;
@@ -1742,7 +2025,22 @@ function getSignificanceClass(row) {
         });
         lbl.appendChild(cb);
         lbl.appendChild(document.createTextNode(s.label));
-        togglesEl.appendChild(lbl);
+        // HDI toggle
+        var hdiLbl = document.createElement('label');
+        hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid ' + s.color + ';border-left:none;color:' + s.color + ';user-select:none;opacity:.75;';
+        var hdiCb = document.createElement('input');
+        hdiCb.type = 'checkbox';
+        hdiCb.checked = false;
+        hdiCb.style.accentColor = s.color;
+        hdiCb.addEventListener('change', function() {
+          seriesList[idx].hdiVisible = hdiCb.checked;
+          drawOverlay();
+        });
+        hdiLbl.appendChild(hdiCb);
+        hdiLbl.appendChild(document.createTextNode('HDI'));
+        wrap.appendChild(lbl);
+        wrap.appendChild(hdiLbl);
+        togglesEl.appendChild(wrap);
       });
 
       function drawOverlay() {
@@ -1761,16 +2059,19 @@ function getSignificanceClass(row) {
         var plotW = W - pad.left - pad.right;
         var plotH = H - pad.top - pad.bottom;
 
-        // Compute axis ranges from visible series only
-        var minYear = Infinity, maxYear = -Infinity, maxIR = 0;
+        // Shared x-axis always starts at 1996; y-axis fits visible data + HDI
+        var minYear = 1996, maxYear = -Infinity, maxIR = 0;
         var anyVisible = false;
         seriesList.forEach(function(s) {
           if (!s.visible) return;
           anyVisible = true;
           s.data.forEach(function(d) {
-            if (d.year < minYear) minYear = d.year;
             if (d.year > maxYear) maxYear = d.year;
             if (d.ir > maxIR) maxIR = d.ir;
+            if (s.hdiVisible) {
+              var upper = d.upper_hdi;
+              if (upper != null && upper > maxIR) maxIR = upper;
+            }
           });
         });
 
@@ -1818,6 +2119,34 @@ function getSignificanceClass(row) {
           }
         }
 
+        // Draw HDI fills behind lines
+        seriesList.forEach(function(s) {
+          if (!s.visible || !s.hdiVisible) return;
+          var pts = s.data.filter(function(d) { return d.lower_hdi != null && d.upper_hdi != null; });
+          if (pts.length === 0) return;
+          // Convert pathogen color to rgba at 20% opacity for HDI fill
+          var c = s.color;
+          if (c.charAt(0) === '#') {
+            var hex = c.replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            ctx.fillStyle = 'rgba(' + parseInt(hex.substring(0,2),16) + ',' + parseInt(hex.substring(2,4),16) + ',' + parseInt(hex.substring(4,6),16) + ',0.2)';
+          } else {
+            ctx.fillStyle = c.replace(/rgb\(/, 'rgba(').replace(/\)/, ',0.2)');
+          }
+          ctx.beginPath();
+          // Upper boundary left-to-right
+          pts.forEach(function(d, i) {
+            var x = xPos(d.year), y = yPos(d.upper_hdi);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          // Lower boundary right-to-left
+          for (var j = pts.length - 1; j >= 0; j--) {
+            ctx.lineTo(xPos(pts[j].year), yPos(pts[j].lower_hdi));
+          }
+          ctx.closePath();
+          ctx.fill();
+        });
+
         // Draw lines for each visible series
         seriesList.forEach(function(s) {
           if (!s.visible) return;
@@ -1859,9 +2188,13 @@ function getSignificanceClass(row) {
       });
     })();
 
-    // All Trends tab: prefer per-state R-generated PNGs, fall back to JS sparkline card
+    // All Trends tab: compact tile grid with R PNGs or sparkline fallback
     var trendsContainer = section.querySelector('#state-trends-container-' + st);
     var stateTrendPlots = s.state_trend_plots || {};
+
+    var tileGrid = document.createElement('div');
+    tileGrid.className = 'state-trend-tile-grid';
+
     analysisKeysForState.forEach(function(ak) {
       var aa = analyses[ak];
       if (!aa) return;
@@ -1869,7 +2202,6 @@ function getSignificanceClass(row) {
       var perStatePng = stateTrendPlots[ak];
       var color = getColor(aa);
 
-      // Compute IR change stats: latest year first, then earliest
       var latestRow = rows.length > 0 ? rows[rows.length - 1] : null;
       var firstRow = rows.length > 0 ? rows[0] : null;
       var netChange = '\u2014';
@@ -1878,40 +2210,35 @@ function getSignificanceClass(row) {
         netChange = (diff > 0 ? '+' : '') + diff;
       }
 
-      var statsHtml = '<div style="display:flex;gap:20px;padding:12px 16px;font-size:.82rem;color:var(--text-secondary);border-top:1px solid var(--border-color);">' +
-        '<div><span style="font-weight:700;color:var(--text-primary);font-size:.95rem;">' + (latestRow ? round2(latestRow.median_ir) : '\u2014') + '</span> IR (' + (latestRow ? latestRow.year : '') + ')</div>' +
-        '<div><span style="font-weight:700;color:var(--text-primary);font-size:.95rem;">' + (firstRow ? round2(firstRow.median_ir) : '\u2014') + '</span> IR (' + (firstRow ? firstRow.year : '') + ')</div>' +
-        '<div><span style="font-weight:700;color:var(--text-primary);font-size:.95rem;">' + netChange + '</span> Net Change</div>' +
-      '</div>';
+      var tile = document.createElement('div');
+      tile.className = 'state-trend-tile';
 
-      var trendCard = document.createElement('div');
-      trendCard.className = 'card';
-
+      var imgHtml;
       if (perStatePng) {
-        // Use R-generated per-state PNG
-        trendCard.innerHTML =
-          '<div class="card-header" style="color:' + color + '">' + esc(getAnalysisLabel(aa)) + ' \u2014 ' + esc(s.name) +
-            '<span class="badge badge-info" style="margin-left:8px;">Per-state trend</span>' +
-            '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')" style="margin-left:auto;font-size:.78rem;">View full analysis \u2192</a>' +
-          '</div>' +
-          '<div class="plot-container"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend for ' + esc(s.name) + '" onclick="openLightbox(this.src)"></div>' +
-          statsHtml;
+        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src)"></div>';
       } else if (rows.length > 0) {
-        // Fallback: JS sparkline
-        trendCard.innerHTML =
-          '<div class="card-header" style="color:' + color + '">' + esc(getAnalysisLabel(aa)) + ' \u2014 ' + esc(s.name) +
-            '<span class="badge badge-info" style="margin-left:8px;">JS trend</span>' +
-            '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')" style="margin-left:auto;font-size:.78rem;">View full analysis \u2192</a>' +
-          '</div>' +
-          '<div style="padding:16px;">' + makeSparklineSVG(rows, color, 600, 120) + '</div>' +
-          statsHtml;
+        imgHtml = '<div class="tile-img" style="padding:10px;align-items:center;">' + makeSparklineSVG(rows, color, 280, 120) + '</div>';
       } else {
         return;
       }
-      trendsContainer.appendChild(trendCard);
+
+      tile.innerHTML =
+        '<div class="tile-header">' +
+          '<span class="group-dot" style="background:' + color + '"></span>' +
+          '<span style="color:' + color + '">' + esc(getAnalysisLabel(aa)) + '</span>' +
+          '<a class="state-link" href="#" onclick="event.preventDefault();navigateToPathogenState(\'' + ak + '\')">Details \u2192</a>' +
+        '</div>' +
+        imgHtml +
+        '<div class="tile-stats">' +
+          '<div><span class="tile-stat-value">' + (latestRow ? round2(latestRow.median_ir) : '\u2014') + '</span> IR (' + (latestRow ? latestRow.year : '') + ')</div>' +
+          '<div><span class="tile-stat-value">' + (firstRow ? round2(firstRow.median_ir) : '\u2014') + '</span> IR (' + (firstRow ? firstRow.year : '') + ')</div>' +
+          '<div><span class="tile-stat-value">' + netChange + '</span> Change</div>' +
+        '</div>';
+      tileGrid.appendChild(tile);
     });
 
-    if (trendsContainer.children.length === 0) {
+    trendsContainer.appendChild(tileGrid);
+    if (tileGrid.children.length === 0) {
       trendsContainer.innerHTML = '<div class="card"><div class="card-header">Trend Plots</div><p style="color:var(--gray-500);padding:20px;">No trend plots available for this state.</p></div>';
     }
 
@@ -2129,6 +2456,35 @@ function getSignificanceClass(row) {
       return { field: c, title: c };
     });
     buildSortableTable(traceTable, pi.trace_data, traceColDefs);
+  }
+
+  // Re-run command card: build reproducible Nextflow command from metadata
+  var rerunEl = document.getElementById('rerun-command');
+  var copyBtn = document.getElementById('copy-rerun-btn');
+  if (rerunEl) {
+    var p = m;
+    var cmd = 'nextflow run main.nf -profile singularity -entry SPLINE \\\n' +
+      '  --mmwrFile "' + esc(p.mmwrFile || 'see nextflow.config') + '" \\\n' +
+      '  --censusFileB "' + esc(p.censusFileB || 'see nextflow.config') + '" \\\n' +
+      '  --censusFileP "' + esc(p.censusFileP || 'see nextflow.config') + '" \\\n' +
+      '  --pathogen "' + esc(p.pathogen || 'AUTO_DISCOVER') + '" \\\n' +
+      '  --chains ' + (p.chains || 6) + ' \\\n' +
+      '  --iterations ' + (p.iterations || 10001) + ' \\\n' +
+      '  --adapt_delta ' + (p.adapt_delta || 0.99) + ' \\\n' +
+      '  --max_treedepth ' + (p.max_treedepth || 15) + ' \\\n' +
+      '  --seed ' + (p.seed || 123) + ' \\\n' +
+      '  --stan_backend "' + esc(p.stan_backend || 'rstan') + '" \\\n' +
+      '  --outdir "' + esc(p.output_dir || 'output') + '" \\\n' +
+      '  --projID "' + esc(p.projID || '') + '"';
+    rerunEl.textContent = cmd;
+  }
+  if (copyBtn && rerunEl) {
+    copyBtn.addEventListener('click', function() {
+      navigator.clipboard.writeText(rerunEl.textContent).then(function() {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(function() { copyBtn.textContent = 'Copy'; }, 2000);
+      });
+    });
   }
 })();
 
