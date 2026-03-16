@@ -104,12 +104,12 @@ workflow SPLINE {
                     years: row.years as Integer,
                     complexity: row.complexity as Long,
                     size_category: row.size_category,
-                    zero_frac: (row.zero_frac ?: '0') as Double,
-                    sparse_cells: (row.sparse_cells ?: '0') as Double,
-                    overdispersion: (row.overdispersion ?: '0') as Double,
-                    state_cv: (row.state_cv ?: '0') as Double,
-                    difficulty: (row.difficulty ?: '0') as Double,
-                    difficulty_category: row.difficulty_category ?: 'moderate'
+                    zero_frac: (row.zero_frac in [null, '', 'NA'] ? 0 : row.zero_frac as Double),
+                    sparse_cells: (row.sparse_cells in [null, '', 'NA'] ? 0 : row.sparse_cells as Double),
+                    overdispersion: (row.overdispersion in [null, '', 'NA'] ? 0 : row.overdispersion as Double),
+                    state_cv: (row.state_cv in [null, '', 'NA'] ? 0 : row.state_cv as Double),
+                    difficulty: (row.difficulty in [null, '', 'NA'] ? 0 : row.difficulty as Double),
+                    difficulty_category: (row.difficulty_category in [null, '', 'NA'] ? 'moderate' : row.difficulty_category)
                 ]
             }
 

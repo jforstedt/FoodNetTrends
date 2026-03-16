@@ -83,6 +83,8 @@ process RESOURCE_PROFILER {
             .groups = 'drop'
         ) %>%
         mutate(
+            overdispersion = ifelse(is.na(overdispersion), 0, overdispersion),
+            state_cv = ifelse(is.na(state_cv), 0, state_cv),
             difficulty = 2.0 * zero_frac +
                          1.5 * sparse_cells +
                          1.0 * pmin(overdispersion / 100, 2) +
@@ -147,10 +149,10 @@ process RESOURCE_PROFILER {
             summarise(
                 zero_frac = sum(count == 0) / n(),
                 sparse_cells = sum(count < 5) / n(),
-                overdispersion = ifelse(mean(count) > 0, var(count) / mean(count), 0),
+                overdispersion = ifelse(mean(count) > 0 & n() > 1, var(count, na.rm = TRUE) / mean(count), 0),
                 state_cv = ifelse(
-                    mean(count) > 0,
-                    sd(tapply(count, state, mean)) / mean(count),
+                    mean(count) > 0 & n_distinct(state) > 1,
+                    sd(tapply(count, state, mean), na.rm = TRUE) / mean(count),
                     0
                 ),
                 .groups = 'drop'
