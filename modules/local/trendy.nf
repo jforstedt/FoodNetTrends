@@ -84,9 +84,10 @@ process TRENDY {
         exit 1
     fi
 
-    # CmdStan path (container uses --writable-tmpfs for write access)
+    # Copy CmdStan to writable work dir (container filesystem is read-only)
     if [ "${params.stan_backend}" = "cmdstanr" ] && [ -d /opt/cmdstan ]; then
-        export CMDSTAN=\$(ls -d /opt/cmdstan/cmdstan-* | head -1)
+        cp -r /opt/cmdstan/cmdstan-* .cmdstan_local
+        export CMDSTAN=\$(pwd)/.cmdstan_local
     fi
 
     # Use extra CPUs beyond chain count for BLAS threading
