@@ -68,6 +68,7 @@ handle_pathogen_grouping() {
             echo "2) O157 - Serogroup O157 only" >&2
             echo "3) Non-O157 - All non-O157 serogroups" >&2
             echo "4) Both separately - O157 and non-O157 as independent analyses" >&2
+            echo "5) All three - Combined + O157 + non-O157" >&2
             echo "" >&2
 
             while true; do
@@ -79,8 +80,9 @@ handle_pathogen_grouping() {
                     2) grouping="STEC~O157"; break ;;
                     3) grouping="STEC~nonO157"; break ;;
                     4) grouping="STEC~O157|STEC~nonO157"; break ;;
+                    5) grouping="STEC~combined|STEC~O157|STEC~nonO157"; break ;;
                     *)
-                        echo -e "${RED}Invalid choice: '$stec_choice'. Please enter 1-4.${NC}" >&2
+                        echo -e "${RED}Invalid choice: '$stec_choice'. Please enter 1-5.${NC}" >&2
                         ;;
                 esac
             done
@@ -89,22 +91,28 @@ handle_pathogen_grouping() {
         SALMONELLA)
             echo "" >&2
             echo -e "${BLUE}Salmonella Grouping Options:${NC}" >&2
-            echo "1) Combined - All serotypes together" >&2
-            echo "2) Custom selection - Choose specific serotypes" >&2
-            echo "" >&2
+            if [[ -n "${_FNT_SAL_CHOICE:-}" ]]; then
+                # Choice was already made before auto-preprocessing
+                sal_choice="$_FNT_SAL_CHOICE"
+            else
+                echo "1) Combined - All serotypes together" >&2
+                echo "2) Custom selection - Choose specific serotypes" >&2
+                echo "3) Combined + custom - Run combined AND specific serotypes" >&2
+                echo "" >&2
 
-            while true; do
-                read -p "Select Salmonella grouping option [1]: " sal_choice
-                sal_choice=${sal_choice:-1}
+                while true; do
+                    read -p "Select Salmonella grouping option [1]: " sal_choice
+                    sal_choice=${sal_choice:-1}
 
-                if [[ "$sal_choice" =~ ^[12]$ ]]; then
-                    break
-                else
-                    echo -e "${RED}Invalid choice: '$sal_choice'. Please enter 1 or 2.${NC}" >&2
-                fi
-            done
+                    if [[ "$sal_choice" =~ ^[123]$ ]]; then
+                        break
+                    else
+                        echo -e "${RED}Invalid choice: '$sal_choice'. Please enter 1, 2, or 3.${NC}" >&2
+                    fi
+                done
+            fi
 
-            if [[ "$sal_choice" == "2" ]]; then
+            if [[ "$sal_choice" == "2" ]] || [[ "$sal_choice" == "3" ]]; then
                 # Extract and rank serotypes
                 echo "" >&2
                 echo "Analyzing serotypes in data..." >&2
@@ -210,6 +218,8 @@ handle_pathogen_grouping() {
                         if [[ -z "$selected_serotypes" ]]; then
                             echo -e "${YELLOW}No valid serotypes selected. Using combined analysis.${NC}" >&2
                             grouping="SALMONELLA~combined"
+                        elif [[ "$sal_choice" == "3" ]]; then
+                            grouping="SALMONELLA~combined|$selected_serotypes"
                         else
                             grouping="$selected_serotypes"
                         fi
@@ -996,11 +1006,12 @@ if [[ "$flag" != "resume" ]] && [[ "$flag" != "preprocess" ]] && [[ "$pathogens"
                     echo -e "${BLUE}Salmonella Grouping Options:${NC}" >&2
                     echo "1) Combined - All serotypes together" >&2
                     echo "2) Custom selection - Choose specific serotypes (requires preprocessing)" >&2
+                    echo "3) Combined + custom - Run combined AND specific serotypes (requires preprocessing)" >&2
                     echo "" >&2
                     read -p "Select Salmonella grouping option [1]: " sal_quick_choice
                     sal_quick_choice=${sal_quick_choice:-1}
 
-                    if [[ "$sal_quick_choice" == "2" ]]; then
+                    if [[ "$sal_quick_choice" == "2" ]] || [[ "$sal_quick_choice" == "3" ]]; then
                         echo "" >&2
                         echo -e "${YELLOW}Custom serotype selection requires preprocessed data.${NC}" >&2
                         read -p "Run preprocessing now? (y/n) [y]: " run_preprocess
@@ -1019,7 +1030,10 @@ if [[ "$flag" != "resume" ]] && [[ "$flag" != "preprocess" ]] && [[ "$pathogens"
                                 data_file="$preprocess_clean"
                                 use_preprocessed=true
                                 preprocessed_file="$preprocess_clean"
+                                # User already chose custom (2) or combined+custom (3) — go straight to serotype picker
+                                export _FNT_SAL_CHOICE="$sal_quick_choice"
                                 grouping=$(handle_pathogen_grouping "$pathogen" "$data_file")
+                                unset _FNT_SAL_CHOICE
                             else
                                 echo -e "${RED}Preprocessing failed. Using combined analysis.${NC}" >&2
                                 grouping="SALMONELLA~combined"
