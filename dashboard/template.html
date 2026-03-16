@@ -1927,34 +1927,35 @@ analysisKeys.forEach(function(key) {
       var wrap = document.createElement('span');
       wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
       var isOverall = s.key === '_overall';
-      var bC = isOverall ? '#222' : s.color;
+      var isDkNow = document.documentElement.getAttribute('data-theme') === 'dark';
+      var bC = isOverall ? (isDkNow ? '#fff' : '#222') : s.color;
+      var borderC = isDkNow ? 'rgba(255,255,255,0.4)' : bC;
       var lbl = document.createElement('label');
-      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+bC+';'+(isOverall?'':'color:'+bC+';')+'user-select:none;';
+      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isOverall?'':'color:'+bC+';')+'user-select:none;';
       if (isOverall) lbl.className = 'overlay-overall-label';
       var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=s.visible; cb.style.accentColor=bC;
       cb.addEventListener('change', function(){ seriesList[idx].visible=cb.checked; drawStateOverlay(); });
       allCbs.push(cb);
       lbl.appendChild(cb); lbl.appendChild(document.createTextNode(s.label));
       var hLbl = document.createElement('label');
-      hLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+bC+';border-left:none;'+(isOverall?'':'color:'+bC+';')+'user-select:none;opacity:.75;';
+      hLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+borderC+';border-left:none;'+(isOverall?'':'color:'+bC+';')+'user-select:none;opacity:.75;';
       if (isOverall) hLbl.className = 'overlay-overall-label';
       var hCb = document.createElement('input'); hCb.type='checkbox'; hCb.checked=false; hCb.style.accentColor=bC;
       hCb.addEventListener('change', function(){ seriesList[idx].hdiVisible=hCb.checked; drawStateOverlay(); });
       allHdiCbs.push(hCb);
       hLbl.appendChild(hCb); hLbl.appendChild(document.createTextNode('HDI'));
       wrap.appendChild(lbl); wrap.appendChild(hLbl);
-      if (!isOverall) {
-        var cp = document.createElement('input'); cp.type = 'color'; cp.value = s.color;
-        cp.style.cssText = 'width:20px;height:20px;border:none;cursor:pointer;padding:0;margin-left:2px;vertical-align:middle;';
-        cp.addEventListener('input', (function(i, lblEl, hLblEl, cbEl, hCbEl) { return function() {
-          seriesList[i].color = cp.value;
-          lblEl.style.borderColor = cp.value; lblEl.style.color = cp.value;
-          hLblEl.style.borderColor = cp.value; hLblEl.style.color = cp.value;
-          cbEl.style.accentColor = cp.value; hCbEl.style.accentColor = cp.value;
-          drawStateOverlay();
-        }; })(idx, lbl, hLbl, cb, hCb));
-        wrap.appendChild(cp);
-      }
+      var cp = document.createElement('input'); cp.type = 'color'; cp.value = s.color.charAt(0) === '#' ? s.color : '#222222';
+      cp.style.cssText = 'width:20px;height:20px;border:1px solid '+(isDkNow?'rgba(255,255,255,0.3)':'#ccc')+';border-radius:3px;cursor:pointer;padding:0;margin-left:2px;vertical-align:middle;background:transparent;';
+      cp.addEventListener('input', (function(i, lblEl, hLblEl, cbEl, hCbEl, isOv) { return function() {
+        seriesList[i].color = cp.value;
+        if (isOv) seriesList[i].isOverall = false; // user overrode the auto-color
+        lblEl.style.borderColor = cp.value; if (!isOv) lblEl.style.color = cp.value;
+        hLblEl.style.borderColor = cp.value; if (!isOv) hLblEl.style.color = cp.value;
+        cbEl.style.accentColor = cp.value; hCbEl.style.accentColor = cp.value;
+        drawStateOverlay();
+      }; })(idx, lbl, hLbl, cb, hCb, isOverall));
+      wrap.appendChild(cp);
       togglesEl.appendChild(wrap);
     });
 
