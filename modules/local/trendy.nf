@@ -1,6 +1,5 @@
 process TRENDY {
     tag "${pathogen}${subgroup != 'combined' ? ' (' + subgroup + ')' : ''}"
-    label 'process_large'
     shell "/bin/bash"
     container 'foodnet.sif'
 
