@@ -500,6 +500,7 @@ img { max-width: 100%; display: block; }
 .heatmap-table th { background: var(--navy); color: #fff; padding: 6px 10px; text-align: center; font-weight: 600; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
 .heatmap-table td { padding: 6px 10px; text-align: center; border: 1px solid var(--border-color); white-space: nowrap; }
 .heatmap-table td.hm-label { text-align: left; font-weight: 600; background: var(--bg-table-alt); position: sticky; left: 0; z-index: 1; }
+.heatmap-table th.hm-corner { position: sticky; left: 0; z-index: 3; }
 
 /* Dark mode toggle button */
 .theme-toggle {
@@ -728,6 +729,7 @@ img { max-width: 100%; display: block; }
 <!-- ===== LIGHTBOX ===== -->
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+  <div class="lightbox-title" id="lightbox-title" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);color:var(--text-muted);font-size:.8rem;font-family:monospace;background:var(--bg-card);padding:2px 12px;border-radius:4px;z-index:10;white-space:nowrap;max-width:80%;overflow:hidden;text-overflow:ellipsis;"></div>
   <div class="lightbox-inner" id="lightbox-inner"></div>
   <div class="lightbox-toolbar">
     <button onclick="lightboxZoom(-1)">&#8722; Zoom Out</button>
@@ -932,9 +934,11 @@ function applyLightboxTransform() {
   lightboxImg.style.transform = 'translate(' + lightboxPanX + 'px,' + lightboxPanY + 'px) scale(' + lightboxScale + ')';
 }
 
-function openLightbox(src) {
+function openLightbox(src, filePath) {
   lightboxPanX = 0;
   lightboxPanY = 0;
+  var titleEl = document.getElementById('lightbox-title');
+  titleEl.textContent = filePath || '';
   var inner = document.getElementById('lightbox-inner');
   inner.innerHTML = '';
   if (src) {
@@ -1094,6 +1098,12 @@ function makeSparklineSVG(dataPoints, color, w, h) {
     '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
     '<circle cx="' + lastPt[0] + '" cy="' + lastPt[1] + '" r="3" fill="' + color + '"/>' +
     '</svg>';
+}
+
+// Helper: build relative file path for lightbox title
+function splinePath(filename) {
+  var pid = (D.metadata || {}).projID || '';
+  return 'output/' + pid + '/spline_results/' + filename;
 }
 
 // ========================================================================
@@ -1417,13 +1427,13 @@ analysisKeys.forEach(function(key) {
       '<div class="card">' +
         '<div class="card-header">Overall Catchment Trend <span class="badge badge-info">' + esc(key) + '_overall_trend.png</span></div>' +
         (a.overall_trend_b64 ?
-          '<div class="plot-container"><img src="' + a.overall_trend_b64 + '" alt="' + esc(label) + ' overall trend" onclick="openLightbox(this.src)"></div>' :
+          '<div class="plot-container"><img src="' + a.overall_trend_b64 + '" alt="' + esc(label) + ' overall trend" onclick="openLightbox(this.src,\'' + splinePath(key + '_overall_trend.png') + '\')"></div>' :
           '<div class="plot-container" style="color:var(--gray-500);padding:40px;">No overall trend plot available</div>') +
       '</div>' +
       '<div class="card">' +
         '<div class="card-header">State-Level Trends <span class="badge badge-info">' + esc(key) + '_site_trends.png</span></div>' +
         (a.site_trends_b64 ?
-          '<div class="plot-container"><img src="' + a.site_trends_b64 + '" alt="' + esc(label) + ' site trends" onclick="openLightbox(this.src)"></div>' :
+          '<div class="plot-container"><img src="' + a.site_trends_b64 + '" alt="' + esc(label) + ' site trends" onclick="openLightbox(this.src,\'' + splinePath(key + '_site_trends.png') + '\')"></div>' :
           '<div class="plot-container" style="color:var(--gray-500);padding:40px;">No site trends plot available</div>') +
       '</div>' +
       '<div class="card">' +
@@ -1697,7 +1707,7 @@ analysisKeys.forEach(function(key) {
         '<div class="tile-header"><span class="group-dot" style="background:var(--teal)"></span>' +
         '<span>' + esc(st) + ' \u2014 ' + esc(sName) + '</span>' +
         '<a class="state-link" href="#" onclick="event.preventDefault();navigateToState(\'' + st + '\')">Profile \u2192</a></div>' +
-        '<div class="tile-img"><img src="' + avail[st] + '" alt="' + esc(label) + ' ' + esc(st) + ' trend" onclick="openLightbox(this.src)"></div>';
+        '<div class="tile-img"><img src="' + avail[st] + '" alt="' + esc(label) + ' ' + esc(st) + ' trend" onclick="openLightbox(this.src,\'' + splinePath(key + '_' + st + '_trend.png') + '\')"></div>';
       tilesEl.appendChild(tile);
     });
   })();
@@ -2000,7 +2010,7 @@ function getSignificanceClass(row) {
 
       var imgHtml;
       if (perStatePng) {
-        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src)"></div>';
+        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src,\'' + splinePath(ak + '_' + stCode + '_trend.png') + '\')"></div>';
       } else {
         imgHtml = '<div class="tile-img" style="padding:10px;align-items:center;">' + makeSparklineSVG(sortedRows, color, 280, 120) + '</div>';
       }
@@ -2220,7 +2230,7 @@ function getSignificanceClass(row) {
 
       var imgHtml;
       if (perStatePng) {
-        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src)"></div>';
+        imgHtml = '<div class="tile-img"><img src="' + perStatePng + '" alt="' + esc(getAnalysisLabel(aa)) + ' trend" onclick="openLightbox(this.src,\'' + splinePath(ak + '_' + stCode + '_trend.png') + '\')"></div>';
       } else if (rows.length > 0) {
         imgHtml = '<div class="tile-img" style="padding:10px;align-items:center;">' + makeSparklineSVG(rows, color, 280, 120) + '</div>';
       } else {
@@ -2387,7 +2397,7 @@ function getSignificanceClass(row) {
     });
     var maxVal = Math.max.apply(null, allVals) || 1;
 
-    var html = '<table class="heatmap-table"><thead><tr><th>Pathogen</th>';
+    var html = '<table class="heatmap-table"><thead><tr><th class="hm-corner">Pathogen</th>';
     yearCols.forEach(function(y) { html += '<th>' + esc(y) + '</th>'; });
     html += '</tr></thead><tbody>';
     ct.crosstab.forEach(function(row) {
