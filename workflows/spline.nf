@@ -566,25 +566,4 @@ workflow PREPROCESS_ONLY {
     // Run resource profiler on preprocessed data
     RESOURCE_PROFILER(PREPROCESS.out.cleanFile)
 
-    // Log results
-    log.info """
-    ==============================================
-    Preprocessing Complete!
-    ==============================================
-    
-    Output files generated:
-    - Cleaned data: ${params.outdir}/${params.projID}/preprocessed/clean_mmwr.csv
-    - Resource profile: ${params.outdir}/${params.projID}/preprocessed/resource_profile.csv
-    - Subgroup profile: ${params.outdir}/${params.projID}/preprocessed/resource_profile_subgroups.csv
-    - State metadata: ${params.outdir}/${params.projID}/preprocessed/metadata_states.csv
-    - CIDT metadata: ${params.outdir}/${params.projID}/preprocessed/metadata_cidt.csv
-    - Travel metadata: ${params.outdir}/${params.projID}/preprocessed/metadata_travel.csv
-    - Preprocessing report: ${params.outdir}/${params.projID}/preprocessed/clean_mmwr_preprocessing_report.csv
-    
-    You can now use these files for:
-    1. Running the full analysis with preprocessed data
-    2. Viewing available pathogens and serotypes
-    3. Understanding data composition (states, years, diagnostic methods)
-    ==============================================
-    """
 }
