@@ -29,10 +29,11 @@ process TRENDY {
 
     // errorStrategy and maxRetries defined in nextflow.config withName:TRENDY
 
-    // Chain-based memory: each chain needs ~10 GB + 8 GB overhead
+    // Backend-aware memory: rstan holds samples in memory, cmdstanr writes to disk
     memory = {
         def chains = params.chains ?: 2
-        def req = ((chains * 10 + 8) as int).GB * task.attempt
+        def perChain = params.stan_backend == 'cmdstanr' ? 2 : 5
+        def req = ((chains * perChain + 4) as int).GB * task.attempt
         def max = params.max_memory as nextflow.util.MemoryUnit
         return req > max ? max : req
     }
