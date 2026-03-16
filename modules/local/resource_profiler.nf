@@ -11,6 +11,7 @@ process RESOURCE_PROFILER {
 
     output:
     path "resource_profile.csv", emit: profile
+    path "resource_profile_subgroups.csv", emit: subgroup_profile
     path "metadata_states.csv", emit: states_metadata
     path "metadata_cidt.csv", emit: cidt_metadata
     path "metadata_travel.csv", emit: travel_metadata
@@ -101,7 +102,116 @@ process RESOURCE_PROFILER {
     if (nrow(pathogen_metrics) == 0) {
         stop("No valid pathogens found in the data. Check if the pathogen column contains proper pathogen names.")
     }
-    
+
+    # ---- Subgroup-level profiling ----
+    # Compute difficulty metrics at the serotype and STEC class level so that
+    # downstream resource allocation can use real data instead of estimates.
+
+    has_serotype <- "serotypesummary" %in% names(data)
+    has_stec_class <- "stec_class" %in% names(data)
+
+    compute_subgroup_metrics <- function(df, group_col) {
+        # Compute the same metrics used at pathogen level, grouped by
+        # pathogen + the specified subgroup column.
+        base <- df %>%
+            filter(!is.na(.data[[group_col]]) &
+                   .data[[group_col]] != "" &
+                   .data[[group_col]] != "Missing") %>%
+            group_by(pathogen, subgroup = .data[[group_col]]) %>%
+            summarise(
+                rows = n(),
+                sites = n_distinct(state),
+                years = n_distinct(year),
+                .groups = 'drop'
+            ) %>%
+            mutate(
+                complexity = rows * sites * years,
+                size_category = case_when(
+                    rows > 50000 ~ "extra_large",
+                    rows > 20000 ~ "large",
+                    rows > 10000 ~ "medium",
+                    rows > 5000  ~ "small",
+                    TRUE ~ "tiny"
+                )
+            )
+
+        sy <- df %>%
+            filter(!is.na(.data[[group_col]]) &
+                   .data[[group_col]] != "" &
+                   .data[[group_col]] != "Missing") %>%
+            group_by(pathogen, subgroup = .data[[group_col]], state, year) %>%
+            summarise(count = n(), .groups = 'drop')
+
+        diff <- sy %>%
+            group_by(pathogen, subgroup) %>%
+            summarise(
+                zero_frac = sum(count == 0) / n(),
+                sparse_cells = sum(count < 5) / n(),
+                overdispersion = ifelse(mean(count) > 0, var(count) / mean(count), 0),
+                state_cv = ifelse(
+                    mean(count) > 0,
+                    sd(tapply(count, state, mean)) / mean(count),
+                    0
+                ),
+                .groups = 'drop'
+            ) %>%
+            mutate(
+                difficulty = 2.0 * zero_frac +
+                             1.5 * sparse_cells +
+                             1.0 * pmin(overdispersion / 100, 2) +
+                             0.5 * pmin(state_cv, 2),
+                difficulty_category = case_when(
+                    difficulty >= 4.5 ~ "very_hard",
+                    difficulty >= 3.0 ~ "hard",
+                    difficulty >= 1.5 ~ "moderate",
+                    TRUE ~ "easy"
+                )
+            )
+
+        base %>% left_join(diff, by = c("pathogen", "subgroup"))
+    }
+
+    subgroup_parts <- list()
+
+    if (has_serotype) {
+        sero <- compute_subgroup_metrics(data, "serotypesummary")
+        if (nrow(sero) > 0) {
+            subgroup_parts <- c(subgroup_parts, list(sero))
+        }
+    }
+
+    if (has_stec_class) {
+        stec <- data %>% filter(pathogen == "STEC")
+        if (nrow(stec) > 0) {
+            stec_sub <- compute_subgroup_metrics(stec, "stec_class")
+            if (nrow(stec_sub) > 0) {
+                subgroup_parts <- c(subgroup_parts, list(stec_sub))
+            }
+        }
+    }
+
+    if (length(subgroup_parts) > 0) {
+        subgroup_metrics <- bind_rows(subgroup_parts) %>%
+            distinct(pathogen, subgroup, .keep_all = TRUE)
+    } else {
+        # Empty frame with correct schema
+        subgroup_metrics <- tibble(
+            pathogen = character(),
+            subgroup = character(),
+            rows = integer(),
+            sites = integer(),
+            years = integer(),
+            complexity = double(),
+            size_category = character(),
+            zero_frac = double(),
+            sparse_cells = double(),
+            overdispersion = double(),
+            state_cv = double(),
+            difficulty = double(),
+            difficulty_category = character()
+        )
+    }
+
     # Extract state metadata
     state_metrics <- data %>%
         filter(!is.na(state)) %>%
@@ -141,6 +251,7 @@ process RESOURCE_PROFILER {
     
     # Write all CSV files
     write_csv(pathogen_metrics, "resource_profile.csv")
+    write_csv(subgroup_metrics, "resource_profile_subgroups.csv")
     write_csv(state_metrics, "metadata_states.csv")
     write_csv(cidt_metrics, "metadata_cidt.csv")
     write_csv(travel_metrics, "metadata_travel.csv")
@@ -159,7 +270,22 @@ process RESOURCE_PROFILER {
                     pathogen_metrics\$difficulty[i],
                     pathogen_metrics\$difficulty_category[i]))
     }
-    
+
+    if (nrow(subgroup_metrics) > 0) {
+        cat("\\n\\nSubgroup Profile Summary:\\n")
+        cat("========================\\n")
+        for (i in 1:nrow(subgroup_metrics)) {
+            cat(sprintf("%-15s | %-20s: %6d rows, %2d sites, %2d years (difficulty: %.2f [%s])\\n",
+                        subgroup_metrics\$pathogen[i],
+                        subgroup_metrics\$subgroup[i],
+                        subgroup_metrics\$rows[i],
+                        subgroup_metrics\$sites[i],
+                        subgroup_metrics\$years[i],
+                        subgroup_metrics\$difficulty[i],
+                        subgroup_metrics\$difficulty_category[i]))
+        }
+    }
+
     # Print state summary
     cat("\\n\\nState Summary:\\n")
     cat("==============\\n")

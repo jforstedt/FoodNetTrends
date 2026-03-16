@@ -112,21 +112,47 @@ workflow SPLINE {
                     difficulty_category: row.difficulty_category ?: 'moderate'
                 ]
             }
-            
+
             if (metricsMap.isEmpty()) {
                 error "Resource profile is empty - no pathogen data found"
             }
-            
-            log.info "Loaded metrics for pathogens: ${metricsMap.keySet().join(', ')}"
+
+            // Load subgroup-level metrics if available
+            def subgroupProfilePath = cleanFile.parent.resolve("resource_profile_subgroups.csv")
+            def subgroupProfile = file(subgroupProfilePath)
+            def subgroupMap = [:]
+            if (subgroupProfile.exists()) {
+                subgroupProfile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                    def key = "${row.pathogen}_${row.subgroup}"
+                    subgroupMap[key] = [
+                        rows: row.rows as Integer,
+                        sites: row.sites as Integer,
+                        years: row.years as Integer,
+                        complexity: row.complexity as Long,
+                        size_category: row.size_category,
+                        zero_frac: (row.zero_frac ?: '0') as Double,
+                        sparse_cells: (row.sparse_cells ?: '0') as Double,
+                        overdispersion: (row.overdispersion ?: '0') as Double,
+                        state_cv: (row.state_cv ?: '0') as Double,
+                        difficulty: (row.difficulty ?: '0') as Double,
+                        difficulty_category: row.difficulty_category ?: 'moderate'
+                    ]
+                }
+                log.info "Loaded subgroup metrics for ${subgroupMap.size()} subgroups"
+            }
+            metricsMap['__subgroups__'] = subgroupMap
+
+            log.info "Loaded metrics for pathogens: ${metricsMap.keySet().findAll { it != '__subgroups__' }.join(', ')}"
             metricsChannel = Channel.value(metricsMap)
         } else {
             log.info "Generating resource profile for preprocessed data"
             // Run resource profiler
             RESOURCE_PROFILER(cleanFile)
-            
-            // Read the CSV output
+
+            // Read the CSV output and combine with subgroup profile
             metricsChannel = RESOURCE_PROFILER.out.profile
-                .map { csvFile ->
+                .combine(RESOURCE_PROFILER.out.subgroup_profile)
+                .map { csvFile, subgroupFile ->
                     // Read the CSV file content and parse it
                     def metrics = [:]
                     csvFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
@@ -149,7 +175,31 @@ workflow SPLINE {
                     if (metrics.isEmpty()) {
                         error "Resource profile is empty - no pathogen data found"
                     }
-                    log.info "Parsed metrics for ${metrics.size()} pathogens: ${metrics.keySet().join(', ')}"
+
+                    // Parse subgroup profile
+                    def subgroupMap = [:]
+                    subgroupFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                        def key = "${row.pathogen}_${row.subgroup}"
+                        subgroupMap[key] = [
+                            rows: row.rows as Integer,
+                            sites: row.sites as Integer,
+                            years: row.years as Integer,
+                            complexity: row.complexity as Long,
+                            size_category: row.size_category,
+                            zero_frac: (row.zero_frac ?: '0') as Double,
+                            sparse_cells: (row.sparse_cells ?: '0') as Double,
+                            overdispersion: (row.overdispersion ?: '0') as Double,
+                            state_cv: (row.state_cv ?: '0') as Double,
+                            difficulty: (row.difficulty ?: '0') as Double,
+                            difficulty_category: row.difficulty_category ?: 'moderate'
+                        ]
+                    }
+                    if (subgroupMap.size() > 0) {
+                        log.info "Parsed subgroup metrics for ${subgroupMap.size()} subgroups"
+                    }
+                    metrics['__subgroups__'] = subgroupMap
+
+                    log.info "Parsed metrics for ${metrics.size() - 1} pathogens: ${metrics.keySet().findAll { it != '__subgroups__' }.join(', ')}"
                     return metrics
                 }
         }
@@ -162,7 +212,7 @@ workflow SPLINE {
                 log.info "Creating pathogen groupings from discovered pathogens"
                 pathogenGrouping = metricsChannel
                     .flatMap { metrics ->
-                        def pathogenList = metrics.keySet().toList()
+                        def pathogenList = metrics.keySet().findAll { it != '__subgroups__' }.toList()
                         if (pathogenList.isEmpty()) {
                             error "No pathogens found in metrics. Check if preprocessing completed successfully."
                         }
@@ -174,7 +224,7 @@ workflow SPLINE {
                 error "Pathogen grouping is not defined. This should not happen for preprocessed data."
             }
         }
-        
+
         pathogenGroupingWithMetrics = pathogenGrouping
             .combine(metricsChannel)
             .map { grouping, metrics ->
@@ -182,11 +232,14 @@ workflow SPLINE {
                 def parts = grouping.split('~')
                 def pathogen = parts[0]
                 def subgroup = parts.length > 1 ? parts[1] : 'combined'
-                
+
                 // Debug: log the metrics map
                 log.debug "Metrics map keys: ${metrics.keySet()}"
                 log.debug "Looking for pathogen: '${pathogen}'"
-                
+
+                // Extract subgroup lookup map
+                def subgroupMap = metrics['__subgroups__'] ?: [:]
+
                 // Ensure we get a proper map, not just a value
                 def rawMetrics = metrics[pathogen]
                 def pathogenMetrics
@@ -207,27 +260,35 @@ workflow SPLINE {
                 if (pathogenMetrics.rows == 0) {
                     log.warn "No data found for pathogen: ${pathogen}. Using default metrics."
                 }
-                // Adjust metrics for serotype subgroups
-                // If analyzing a specific serotype (not 'combined'), estimate smaller resource needs
-                if (subgroup != 'combined' && pathogen == 'SALMONELLA') {
-                    // Rough estimate: individual serotypes are typically 5-20% of total Salmonella
-                    // Use 15% as a reasonable estimate
-                    def adjustedRows = Math.max(1000, (pathogenMetrics.rows * 0.15) as Integer)
-                    def adjustedComplexity = Math.max(10000, (pathogenMetrics.complexity * 0.15) as Long)
-                    pathogenMetrics = [
-                        rows: adjustedRows,
-                        sites: pathogenMetrics.sites,
-                        years: pathogenMetrics.years,
-                        complexity: adjustedComplexity,
-                        size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small",
-                        zero_frac: pathogenMetrics.zero_frac,
-                        sparse_cells: pathogenMetrics.sparse_cells,
-                        overdispersion: pathogenMetrics.overdispersion,
-                        state_cv: pathogenMetrics.state_cv,
-                        difficulty: pathogenMetrics.difficulty,
-                        difficulty_category: pathogenMetrics.difficulty_category
-                    ]
-                    log.info "Adjusted metrics for ${pathogen}:${subgroup} - rows: ${adjustedRows} (from ${rawMetrics.rows})"
+
+                // Adjust metrics for subgroups using real profiled data when available
+                if (subgroup != 'combined') {
+                    def subgroupKey = "${pathogen}_${subgroup}"
+                    def subMetrics = subgroupMap[subgroupKey]
+
+                    if (subMetrics) {
+                        // Use real subgroup metrics from the profiler
+                        pathogenMetrics = subMetrics
+                        log.info "Using profiled subgroup metrics for ${pathogen}:${subgroup} - rows: ${subMetrics.rows}, difficulty: ${subMetrics.difficulty} [${subMetrics.difficulty_category}]"
+                    } else {
+                        // Fallback: estimate from parent pathogen metrics
+                        def adjustedRows = Math.max(1000, (pathogenMetrics.rows * 0.15) as Integer)
+                        def adjustedComplexity = Math.max(10000, (pathogenMetrics.complexity * 0.15) as Long)
+                        pathogenMetrics = [
+                            rows: adjustedRows,
+                            sites: pathogenMetrics.sites,
+                            years: pathogenMetrics.years,
+                            complexity: adjustedComplexity,
+                            size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small",
+                            zero_frac: pathogenMetrics.zero_frac,
+                            sparse_cells: pathogenMetrics.sparse_cells,
+                            overdispersion: pathogenMetrics.overdispersion,
+                            state_cv: pathogenMetrics.state_cv,
+                            difficulty: pathogenMetrics.difficulty,
+                            difficulty_category: pathogenMetrics.difficulty_category
+                        ]
+                        log.info "No subgroup profile for ${pathogen}:${subgroup}, estimated rows: ${adjustedRows} (15% of ${rawMetrics?.rows ?: 0})"
+                    }
                 }
 
                 // Debug: log what we're passing
@@ -273,9 +334,10 @@ workflow SPLINE {
         // Generate resource profile for new data
         RESOURCE_PROFILER(processedFile)
         
-        // Read the CSV output - need to read file content first
+        // Read the CSV output and combine with subgroup profile
         metricsChannel = RESOURCE_PROFILER.out.profile
-            .map { csvFile ->
+            .combine(RESOURCE_PROFILER.out.subgroup_profile)
+            .map { csvFile, subgroupFile ->
                 // Read the CSV file content and parse it
                 def metrics = [:]
                 csvFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
@@ -295,7 +357,31 @@ workflow SPLINE {
                         difficulty_category: row.difficulty_category ?: 'moderate'
                     ]
                 }
-                log.info "Parsed metrics for ${metrics.size()} pathogens: ${metrics.keySet().join(', ')}"
+
+                // Parse subgroup profile
+                def subgroupMap = [:]
+                subgroupFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                    def key = "${row.pathogen}_${row.subgroup}"
+                    subgroupMap[key] = [
+                        rows: row.rows as Integer,
+                        sites: row.sites as Integer,
+                        years: row.years as Integer,
+                        complexity: row.complexity as Long,
+                        size_category: row.size_category,
+                        zero_frac: (row.zero_frac ?: '0') as Double,
+                        sparse_cells: (row.sparse_cells ?: '0') as Double,
+                        overdispersion: (row.overdispersion ?: '0') as Double,
+                        state_cv: (row.state_cv ?: '0') as Double,
+                        difficulty: (row.difficulty ?: '0') as Double,
+                        difficulty_category: row.difficulty_category ?: 'moderate'
+                    ]
+                }
+                if (subgroupMap.size() > 0) {
+                    log.info "Parsed subgroup metrics for ${subgroupMap.size()} subgroups"
+                }
+                metrics['__subgroups__'] = subgroupMap
+
+                log.info "Parsed metrics for ${metrics.size() - 1} pathogens: ${metrics.keySet().findAll { it != '__subgroups__' }.join(', ')}"
                 return metrics
             }
 
@@ -304,7 +390,7 @@ workflow SPLINE {
             // Extract pathogen list from metrics and create groupings
             pathogenGrouping = metricsChannel
                 .flatMap { metrics ->
-                    def pathogenList = metrics.keySet().toList()
+                    def pathogenList = metrics.keySet().findAll { it != '__subgroups__' }.toList()
                     if (pathogenList.isEmpty()) {
                         error "No pathogens found in preprocessed data. Check if preprocessing completed successfully."
                     }
@@ -312,13 +398,13 @@ workflow SPLINE {
                     return pathogenList
                 }
                 .map { p -> "${p}~combined" }
-            
+
             // Create pathogens channel for consistency
             pathogens = pathogenGrouping.map { grouping ->
                 grouping.split('~')[0]
             }
         }
-        
+
         if (!pathogenGrouping) {
             // This handles the edge case where pathogenGrouping wasn't set earlier
             log.warn "Pathogen grouping was not properly initialized. Using defaults."
@@ -333,7 +419,7 @@ workflow SPLINE {
         if (!pathogenGrouping) {
             error "Pathogen grouping is not defined after preprocessing. This indicates a logic error."
         }
-        
+
         pathogenGroupingWithMetrics = pathogenGrouping
             .combine(metricsChannel)
             .map { grouping, metrics ->
@@ -341,11 +427,14 @@ workflow SPLINE {
                 def parts = grouping.split('~')
                 def pathogen = parts[0]
                 def subgroup = parts.length > 1 ? parts[1] : 'combined'
-                
+
                 // Debug: log the metrics map
                 log.debug "Metrics map keys: ${metrics.keySet()}"
                 log.debug "Looking for pathogen: '${pathogen}'"
-                
+
+                // Extract subgroup lookup map
+                def subgroupMap = metrics['__subgroups__'] ?: [:]
+
                 // Ensure we get a proper map, not just a value
                 def rawMetrics = metrics[pathogen]
                 def pathogenMetrics
@@ -366,27 +455,35 @@ workflow SPLINE {
                 if (pathogenMetrics.rows == 0) {
                     log.warn "No data found for pathogen: ${pathogen}. Using default metrics."
                 }
-                // Adjust metrics for serotype subgroups
-                // If analyzing a specific serotype (not 'combined'), estimate smaller resource needs
-                if (subgroup != 'combined' && pathogen == 'SALMONELLA') {
-                    // Rough estimate: individual serotypes are typically 5-20% of total Salmonella
-                    // Use 15% as a reasonable estimate
-                    def adjustedRows = Math.max(1000, (pathogenMetrics.rows * 0.15) as Integer)
-                    def adjustedComplexity = Math.max(10000, (pathogenMetrics.complexity * 0.15) as Long)
-                    pathogenMetrics = [
-                        rows: adjustedRows,
-                        sites: pathogenMetrics.sites,
-                        years: pathogenMetrics.years,
-                        complexity: adjustedComplexity,
-                        size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small",
-                        zero_frac: pathogenMetrics.zero_frac,
-                        sparse_cells: pathogenMetrics.sparse_cells,
-                        overdispersion: pathogenMetrics.overdispersion,
-                        state_cv: pathogenMetrics.state_cv,
-                        difficulty: pathogenMetrics.difficulty,
-                        difficulty_category: pathogenMetrics.difficulty_category
-                    ]
-                    log.info "Adjusted metrics for ${pathogen}:${subgroup} - rows: ${adjustedRows} (from ${rawMetrics.rows})"
+
+                // Adjust metrics for subgroups using real profiled data when available
+                if (subgroup != 'combined') {
+                    def subgroupKey = "${pathogen}_${subgroup}"
+                    def subMetrics = subgroupMap[subgroupKey]
+
+                    if (subMetrics) {
+                        // Use real subgroup metrics from the profiler
+                        pathogenMetrics = subMetrics
+                        log.info "Using profiled subgroup metrics for ${pathogen}:${subgroup} - rows: ${subMetrics.rows}, difficulty: ${subMetrics.difficulty} [${subMetrics.difficulty_category}]"
+                    } else {
+                        // Fallback: estimate from parent pathogen metrics
+                        def adjustedRows = Math.max(1000, (pathogenMetrics.rows * 0.15) as Integer)
+                        def adjustedComplexity = Math.max(10000, (pathogenMetrics.complexity * 0.15) as Long)
+                        pathogenMetrics = [
+                            rows: adjustedRows,
+                            sites: pathogenMetrics.sites,
+                            years: pathogenMetrics.years,
+                            complexity: adjustedComplexity,
+                            size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small",
+                            zero_frac: pathogenMetrics.zero_frac,
+                            sparse_cells: pathogenMetrics.sparse_cells,
+                            overdispersion: pathogenMetrics.overdispersion,
+                            state_cv: pathogenMetrics.state_cv,
+                            difficulty: pathogenMetrics.difficulty,
+                            difficulty_category: pathogenMetrics.difficulty_category
+                        ]
+                        log.info "No subgroup profile for ${pathogen}:${subgroup}, estimated rows: ${adjustedRows} (15% of ${rawMetrics?.rows ?: 0})"
+                    }
                 }
 
                 // Debug: log what we're passing
@@ -478,6 +575,7 @@ workflow PREPROCESS_ONLY {
     Output files generated:
     - Cleaned data: ${params.outdir}/${params.projID}/preprocessed/clean_mmwr.csv
     - Resource profile: ${params.outdir}/${params.projID}/preprocessed/resource_profile.csv
+    - Subgroup profile: ${params.outdir}/${params.projID}/preprocessed/resource_profile_subgroups.csv
     - State metadata: ${params.outdir}/${params.projID}/preprocessed/metadata_states.csv
     - CIDT metadata: ${params.outdir}/${params.projID}/preprocessed/metadata_cidt.csv
     - Travel metadata: ${params.outdir}/${params.projID}/preprocessed/metadata_travel.csv
