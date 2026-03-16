@@ -38,13 +38,18 @@ process TRENDY {
         return req > max ? max : req
     }
 
-    // Chains + BLAS threads scaled by posterior difficulty
+    // Backend-aware CPUs: rstan benefits from BLAS threading, cmdstanr less so
     cpus = {
         def chains = params.chains ?: 2
-        def cat = dataMetrics?.difficulty_category ?: 'moderate'
-        def blas = cat == 'very_hard' ? 8 :
+        def blas
+        if (params.stan_backend == 'cmdstanr') {
+            blas = 2
+        } else {
+            def cat = dataMetrics?.difficulty_category ?: 'moderate'
+            blas = cat == 'very_hard' ? 8 :
                    cat == 'hard' ? 6 :
                    cat == 'moderate' ? 4 : 2
+        }
         return Math.min(chains + blas, params.max_cpus as int)
     }
 
