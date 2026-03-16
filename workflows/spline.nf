@@ -96,7 +96,7 @@ workflow SPLINE {
             log.info "Using existing resource profile: ${resourceProfilePath}"
             // Read the CSV directly and create metrics map
             def metricsMap = [:]
-            resourceProfile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+            resourceProfile.splitCsv(header: true, sep: ',', strip: true, quote: '"').each { row ->
                 log.debug "CSV row: ${row}"
                 metricsMap[row.pathogen] = [
                     rows: row.rows as Integer,
@@ -122,7 +122,7 @@ workflow SPLINE {
             def subgroupProfile = file(subgroupProfilePath)
             def subgroupMap = [:]
             if (subgroupProfile.exists()) {
-                subgroupProfile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                subgroupProfile.splitCsv(header: true, sep: ',', strip: true, quote: '"').each { row ->
                     def key = "${row.pathogen}_${row.subgroup}"
                     subgroupMap[key] = [
                         rows: row.rows as Integer,
@@ -155,7 +155,7 @@ workflow SPLINE {
                 .map { csvFile, subgroupFile ->
                     // Read the CSV file content and parse it
                     def metrics = [:]
-                    csvFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                    csvFile.splitCsv(header: true, sep: ',', strip: true, quote: '"').each { row ->
                         log.debug "CSV row: ${row}"
                         // Convert row values to appropriate types
                         metrics[row.pathogen] = [
@@ -178,7 +178,7 @@ workflow SPLINE {
 
                     // Parse subgroup profile
                     def subgroupMap = [:]
-                    subgroupFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                    subgroupFile.splitCsv(header: true, sep: ',', strip: true, quote: '"').each { row ->
                         def key = "${row.pathogen}_${row.subgroup}"
                         subgroupMap[key] = [
                             rows: row.rows as Integer,
@@ -340,7 +340,7 @@ workflow SPLINE {
             .map { csvFile, subgroupFile ->
                 // Read the CSV file content and parse it
                 def metrics = [:]
-                csvFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                csvFile.splitCsv(header: true, sep: ',', strip: true, quote: '"').each { row ->
                     log.debug "CSV row: ${row}"
                     // Convert row values to appropriate types
                     metrics[row.pathogen] = [
@@ -360,7 +360,7 @@ workflow SPLINE {
 
                 // Parse subgroup profile
                 def subgroupMap = [:]
-                subgroupFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
+                subgroupFile.splitCsv(header: true, sep: ',', strip: true, quote: '"').each { row ->
                     def key = "${row.pathogen}_${row.subgroup}"
                     subgroupMap[key] = [
                         rows: row.rows as Integer,
