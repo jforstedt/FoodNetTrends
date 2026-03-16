@@ -911,7 +911,8 @@ function exportOverlayAsSVG(seriesList, options) {
     lxTest += itemW;
   });
   var legendH = legendRows * 18 + 16;
-  var descH = 40;
+  var anyHdiForDesc = visibleSeries.some(function(s) { return s.hdiVisible; });
+  var descH = anyHdiForDesc ? 40 : 24;
   var totalH = H + legendH + descH;
 
   var svg = document.createElementNS(ns, 'svg');
@@ -1062,12 +1063,16 @@ function exportOverlayAsSVG(seriesList, options) {
   d1.setAttribute('fill', '#c0392b');
   d1.textContent = '--- 2004: Year all 10 FoodNet catchment sites were active';
   svg.appendChild(d1);
-  var d2 = document.createElementNS(ns, 'text');
-  d2.setAttribute('x', pad.left); d2.setAttribute('y', descY + 16);
-  d2.setAttribute('font-size', '11'); d2.setAttribute('font-family', 'sans-serif');
-  d2.setAttribute('fill', '#868e96');
-  d2.textContent = 'HDI: 95% credible interval for modeled incidence estimates';
-  svg.appendChild(d2);
+  // Only show HDI description if at least one visible series has HDI enabled
+  var anyHdiVisible = visibleSeries.some(function(s) { return s.hdiVisible; });
+  if (anyHdiVisible) {
+    var d2 = document.createElementNS(ns, 'text');
+    d2.setAttribute('x', pad.left); d2.setAttribute('y', descY + 16);
+    d2.setAttribute('font-size', '11'); d2.setAttribute('font-family', 'sans-serif');
+    d2.setAttribute('fill', '#868e96');
+    d2.textContent = 'HDI: 95% credible interval for modeled incidence estimates';
+    svg.appendChild(d2);
+  }
 
   // Serialize and download
   var svgStr = new XMLSerializer().serializeToString(svg);
@@ -1792,6 +1797,37 @@ analysisKeys.forEach(function(key) {
         exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-State Overlay \u2014 ' + label });
       });
       controlsEl.appendChild(svgBtn);
+
+      // Axis range and chart dimension controls
+      var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
+      var axisFields = [
+        {lbl:'Y min',attr:'ymin'},{lbl:'Y max',attr:'ymax'},
+        {lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'},
+        {lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}
+      ];
+      axisFields.forEach(function(f) {
+        var sp = document.createElement('span');
+        sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);margin-left:4px;';
+        sp.textContent = f.lbl + ' ';
+        var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
+        inp.placeholder = 'auto';
+        inp.addEventListener('input', function() {
+          if (inp.value === '') delete canvas.dataset[f.attr];
+          else canvas.dataset[f.attr] = inp.value;
+          drawStateOverlay();
+        });
+        sp.appendChild(inp);
+        controlsEl.appendChild(sp);
+      });
+      var rstBtn = document.createElement('button'); rstBtn.textContent = 'Reset'; rstBtn.style.cssText = _bs;
+      rstBtn.addEventListener('click', function() {
+        controlsEl.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
+        delete canvas.dataset.ymin; delete canvas.dataset.ymax;
+        delete canvas.dataset.xfrom; delete canvas.dataset.xto;
+        delete canvas.dataset.customW; delete canvas.dataset.customH;
+        drawStateOverlay();
+      });
+      controlsEl.appendChild(rstBtn);
     }
 
     seriesList.forEach(function(s, idx) {
@@ -1836,8 +1872,11 @@ analysisKeys.forEach(function(key) {
       var ctx = canvas.getContext('2d');
       var dpr = window.devicePixelRatio || 1;
       var rect = canvas.parentElement.getBoundingClientRect();
-      var W = rect.width || 700;
-      var H = 360;
+      if (rect.width < 10) return; // Hidden tab -- skip, will redraw on tab activation
+      var customW = canvas.dataset.customW ? parseInt(canvas.dataset.customW) : 0;
+      var customH = canvas.dataset.customH ? parseInt(canvas.dataset.customH) : 0;
+      var W = customW || rect.width;
+      var H = customH || 360;
       canvas.width = W * dpr; canvas.height = H * dpr;
       canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1846,7 +1885,7 @@ analysisKeys.forEach(function(key) {
       var plotW = W - pad.left - pad.right;
       var plotH = H - pad.top - pad.bottom;
 
-      var minYear = 1996, maxYear = -Infinity, maxIR = 0, anyVisible = false;
+      var minYear = 1996, maxYear = -Infinity, minIR = 0, maxIR = 0, anyVisible = false;
       seriesList.forEach(function(s) {
         if (!s.visible) return; anyVisible = true;
         s.data.forEach(function(d) {
@@ -1855,6 +1894,14 @@ analysisKeys.forEach(function(key) {
           if (s.hdiVisible && d.upper_hdi != null && d.upper_hdi > maxIR) maxIR = d.upper_hdi;
         });
       });
+
+      // Apply user-specified axis overrides
+      var cYMin = canvas.dataset.ymin ? parseFloat(canvas.dataset.ymin) : null;
+      var cYMax = canvas.dataset.ymax ? parseFloat(canvas.dataset.ymax) : null;
+      var cXFrom = canvas.dataset.xfrom ? parseInt(canvas.dataset.xfrom) : null;
+      var cXTo = canvas.dataset.xto ? parseInt(canvas.dataset.xto) : null;
+      if (cXFrom != null) minYear = cXFrom;
+      if (cXTo != null) maxYear = cXTo;
 
       ctx.fillStyle = isDark ? '#1a2233' : '#f8f9fa';
       ctx.fillRect(0, 0, W, H);
@@ -1867,15 +1914,18 @@ analysisKeys.forEach(function(key) {
       }
 
       if (maxIR === 0) maxIR = 1; maxIR *= 1.1;
+      if (cYMin != null) minIR = cYMin;
+      if (cYMax != null) maxIR = cYMax;
+      var irRange = maxIR - minIR || 1;
       var yearSpan = maxYear - minYear || 1;
       function xPos(year) { return pad.left + ((year - minYear) / yearSpan) * plotW; }
-      function yPos(ir) { return pad.top + plotH - (ir / maxIR) * plotH; }
+      function yPos(ir) { return pad.top + plotH - ((ir - minIR) / irRange) * plotH; }
 
       // Grid
       ctx.strokeStyle = isDark ? '#263044' : '#dee2e6'; ctx.lineWidth = 0.5;
       ctx.font = '11px sans-serif'; ctx.fillStyle = isDark ? '#97a4b5' : '#868e96'; ctx.textAlign = 'right';
       for (var i = 0; i <= 5; i++) {
-        var irVal = (maxIR / 5) * i, yy = yPos(irVal);
+        var irVal = minIR + (irRange / 5) * i, yy = yPos(irVal);
         ctx.beginPath(); ctx.moveTo(pad.left, yy); ctx.lineTo(W - pad.right, yy); ctx.stroke();
         ctx.fillText(irVal.toFixed(1), pad.left - 6, yy + 4);
       }
@@ -2342,6 +2392,37 @@ function getSignificanceClass(row) {
           exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-Pathogen Overlay \u2014 ' + (sInfo.name || st) });
         });
         controlsEl.appendChild(svgBtn);
+
+        // Axis range and chart dimension controls
+        var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
+        var axisFields = [
+          {lbl:'Y min',attr:'ymin'},{lbl:'Y max',attr:'ymax'},
+          {lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'},
+          {lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}
+        ];
+        axisFields.forEach(function(f) {
+          var sp = document.createElement('span');
+          sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);margin-left:4px;';
+          sp.textContent = f.lbl + ' ';
+          var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
+          inp.placeholder = 'auto';
+          inp.addEventListener('input', function() {
+            if (inp.value === '') delete canvas.dataset[f.attr];
+            else canvas.dataset[f.attr] = inp.value;
+            drawOverlay();
+          });
+          sp.appendChild(inp);
+          controlsEl.appendChild(sp);
+        });
+        var rstBtn = document.createElement('button'); rstBtn.textContent = 'Reset'; rstBtn.style.cssText = _bs;
+        rstBtn.addEventListener('click', function() {
+          controlsEl.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
+          delete canvas.dataset.ymin; delete canvas.dataset.ymax;
+          delete canvas.dataset.xfrom; delete canvas.dataset.xto;
+          delete canvas.dataset.customW; delete canvas.dataset.customH;
+          drawOverlay();
+        });
+        controlsEl.appendChild(rstBtn);
       }
 
       seriesList.forEach(function(s, idx) {
@@ -2377,8 +2458,11 @@ function getSignificanceClass(row) {
         var ctx = canvas.getContext('2d');
         var dpr = window.devicePixelRatio || 1;
         var rect = canvas.parentElement.getBoundingClientRect();
-        var W = rect.width || 700;
-        var H = 360;
+        if (rect.width < 10) return; // Hidden tab -- skip, will redraw on tab activation
+        var customW = canvas.dataset.customW ? parseInt(canvas.dataset.customW) : 0;
+        var customH = canvas.dataset.customH ? parseInt(canvas.dataset.customH) : 0;
+        var W = customW || rect.width;
+        var H = customH || 360;
         canvas.width = W * dpr; canvas.height = H * dpr;
         canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2387,7 +2471,7 @@ function getSignificanceClass(row) {
         var plotW = W - pad.left - pad.right;
         var plotH = H - pad.top - pad.bottom;
 
-        var minYear = 1996, maxYear = -Infinity, maxIR = 0, anyVisible = false;
+        var minYear = 1996, maxYear = -Infinity, minIR = 0, maxIR = 0, anyVisible = false;
         seriesList.forEach(function(s) {
           if (!s.visible) return; anyVisible = true;
           s.data.forEach(function(d) {
@@ -2396,6 +2480,14 @@ function getSignificanceClass(row) {
             if (s.hdiVisible && d.upper_hdi != null && d.upper_hdi > maxIR) maxIR = d.upper_hdi;
           });
         });
+
+        // Apply user-specified axis overrides
+        var cYMin = canvas.dataset.ymin ? parseFloat(canvas.dataset.ymin) : null;
+        var cYMax = canvas.dataset.ymax ? parseFloat(canvas.dataset.ymax) : null;
+        var cXFrom = canvas.dataset.xfrom ? parseInt(canvas.dataset.xfrom) : null;
+        var cXTo = canvas.dataset.xto ? parseInt(canvas.dataset.xto) : null;
+        if (cXFrom != null) minYear = cXFrom;
+        if (cXTo != null) maxYear = cXTo;
 
         var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         ctx.fillStyle = isDark ? '#1a2233' : '#f8f9fa';
@@ -2409,15 +2501,18 @@ function getSignificanceClass(row) {
         }
 
         if (maxIR === 0) maxIR = 1; maxIR *= 1.1;
+        if (cYMin != null) minIR = cYMin;
+        if (cYMax != null) maxIR = cYMax;
+        var irRange = maxIR - minIR || 1;
         var yearSpan = maxYear - minYear || 1;
         function xPos(year) { return pad.left + ((year - minYear) / yearSpan) * plotW; }
-        function yPos(ir) { return pad.top + plotH - (ir / maxIR) * plotH; }
+        function yPos(ir) { return pad.top + plotH - ((ir - minIR) / irRange) * plotH; }
 
         // Grid
         ctx.strokeStyle = isDark ? '#263044' : '#dee2e6'; ctx.lineWidth = 0.5;
         ctx.font = '11px sans-serif'; ctx.fillStyle = isDark ? '#97a4b5' : '#868e96'; ctx.textAlign = 'right';
         for (var i = 0; i <= 5; i++) {
-          var irVal = (maxIR / 5) * i, yy = yPos(irVal);
+          var irVal = minIR + (irRange / 5) * i, yy = yPos(irVal);
           ctx.beginPath(); ctx.moveTo(pad.left, yy); ctx.lineTo(W - pad.right, yy); ctx.stroke();
           ctx.fillText(irVal.toFixed(1), pad.left - 6, yy + 4);
         }
@@ -2806,12 +2901,14 @@ if (typeof mediumZoom === 'function') {
 // ========================================================================
 (function() {
   var mo = new MutationObserver(function() {
-    // Delay redraw to let CSS custom properties propagate after theme change
-    setTimeout(function() {
+    // Redraw visible canvases after theme change. Each draw function
+    // guards against hidden parents (width < 10), so hidden tabs are
+    // skipped automatically and will redraw when activated.
+    requestAnimationFrame(function() {
       if (window._fntCanvasRedrawFns) {
         window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e) {} });
       }
-    }, 50);
+    });
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 })();
@@ -2828,21 +2925,18 @@ if (typeof mediumZoom === 'function') {
     }
   }
 
-  // Redraw on sub-tab activation with enough delay for reflow
+  // Redraw on sub-tab activation after the display style has been applied
   document.addEventListener('click', function(e) {
     var tab = e.target.closest('.sub-tab');
     if (!tab) return;
-    // Two-phase redraw: immediate attempt after short reflow, plus a deferred pass
-    setTimeout(redrawAllCanvases, 50);
-    setTimeout(redrawAllCanvases, 200);
+    requestAnimationFrame(function() { redrawAllCanvases(); });
   });
 
   // Redraw when a top-level section becomes visible (sidebar nav)
   document.addEventListener('click', function(e) {
     var link = e.target.closest('a[data-section]');
     if (!link) return;
-    setTimeout(redrawAllCanvases, 50);
-    setTimeout(redrawAllCanvases, 200);
+    requestAnimationFrame(function() { redrawAllCanvases(); });
   });
 
   // ResizeObserver: attach to each canvas parent after a delay so dynamically
@@ -2866,7 +2960,7 @@ if (typeof mediumZoom === 'function') {
   }
 
   // Initial draw after page load ensures visible canvases get correct width
-  setTimeout(redrawAllCanvases, 300);
+  requestAnimationFrame(function() { redrawAllCanvases(); });
 })();
 
 })();
