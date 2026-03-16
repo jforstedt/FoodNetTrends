@@ -188,46 +188,6 @@ PATH_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL) {
   return(selectDf)
 }
 
-# Prepare Cyclospora data with parasitic census denominators
-CYCLOSPORA_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL) {
-  cyclo <- mmwrdata %>%
-    filter(pathogen == "CYCLOSPORA") %>%
-    group_by(year, state) %>%
-    summarise(count = n(), .groups = "drop") %>%
-    complete(year, state, fill = list(count = 0)) %>%
-    left_join(census %>% filter(pathogentype == "Parasitic"), by = c("year", "state"))
-
-  cyclo <- cyclo %>% filter(!is.na(population))
-
-  if (is.null(catchment_config)) {
-    catchment_config <- read_catchment_config()
-  }
-
-  cyclo <- apply_catchment_filter(cyclo, catchment_config, "parasitic")
-
-  return(cyclo)
-}
-
-# Prepare Salmonella data with bacterial census denominators
-SALMONELLA_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL) {
-  sal <- mmwrdata %>%
-    filter(pathogen == "SALMONELLA") %>%
-    group_by(year, state) %>%
-    summarise(count = n(), .groups = "drop") %>%
-    complete(year, state, fill = list(count = 0)) %>%
-    left_join(census %>% filter(pathogentype == "Bacterial"), by = c("year", "state"))
-
-  sal <- sal %>% filter(!is.na(population))
-
-  if (is.null(catchment_config)) {
-    catchment_config <- read_catchment_config()
-  }
-
-  sal <- apply_catchment_filter(sal, catchment_config, "bacterial")
-
-  return(sal)
-}
-
 # Fit negative binomial GAM with state-specific splines via brms
 #
 # Memory: ~24GB for 2 chains, ~56GB for 6 chains (publication quality)
@@ -609,40 +569,3 @@ IR_COMP_CATCH <- function(catch, start_year, end_year, output_file = NULL) {
 }
 
 
-# Plot relative risk trend against baseline period
-PLOT_PCTCHange_TREND <- function(hp30, pathogen, outDir) {
-  p <- ggplot(hp30, aes(x = year, y = relative_risk_est)) +
-    geom_line(linewidth = 1.5) +
-    geom_ribbon(aes(ymin = relative_risk_lower_hdi, ymax = relative_risk_upper_hdi), alpha = 0.3) +
-    geom_vline(aes(xintercept = 2004), linetype="dashed", color="red")+
-    labs(
-      title = paste("Overall Trend for", pathogen),
-      subtitle = "Median incidence with 95% HDI intervals",
-      y = "Incidence per 100,000 population",
-      x = "Year"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold"),
-      plot.subtitle = element_text(hjust = 0.5)
-    )
-
-  plot_file <- file.path(outDir, paste0(pathogen, "_overall_trend.png"))
-  ggsave(plot_file, p, width = 10, height = 6, dpi = 300)
-
-  return(p)
-}
-
-# Combine per-pathogen output CSVs matching a pattern into one data frame
-combine_files<-function(file_path, pattern){
-  dir_path <- dirname(file_path)
-  setwd(dir_path)
-  df = list.files(all.files = T,  pattern = pattern, full.names = F, recursive = TRUE)
-  df %>%
-    set_names(.) %>%
-    map_df(~mutate_all(read.csv(.x), as.character), .id = 'grp') %>%
-    mutate(grp = str_remove(basename(grp), ".xlsx")) %>%
-    separate(grp, c('pathogen', 'drop'), sep = '_', extra = 'merge')%>%
-    select(-c(drop)) -> datas
-  return(datas)
-}
