@@ -17,6 +17,8 @@ parser$add_argument("--outputFile", type = "character", help = "Path to save the
 parser$add_argument("--serotype-config", type = "character", help = "Path to CSV file with serotype recoding rules (optional)", required = FALSE, default = NULL)
 parser$add_argument("--matching-sensitivity", type = "character", help = "Pathogen matching sensitivity: STRICT, MEDIUM, RELAXED (default: MEDIUM)",
                     required = FALSE, default = "MEDIUM", choices = c("STRICT", "MEDIUM", "RELAXED"))
+parser$add_argument("--data_rules", type = "character", help = "Path to CSV file with data cleaning rules (optional). If not provided, uses bundled default.",
+                    required = FALSE, default = NULL)
 args <- parser$parse_args()
 
 # Return default serotype recoding rules or read from CSV
@@ -73,6 +75,127 @@ apply_serotype_config <- function(data, config) {
     }
   }
 
+  return(data)
+}
+
+# --- Data Rules ---
+# Read data cleaning rules from CSV or return built-in defaults
+read_data_rules <- function(rules_path = NULL) {
+  if (!is.null(rules_path)) {
+    cat("Loading data rules from:", rules_path, "\n")
+    rules <- read.csv(rules_path, stringsAsFactors = FALSE, strip.white = TRUE)
+    validate_data_rules(rules)
+    return(rules)
+  }
+
+  # Try bundled default (analysis_configs/data_rules.csv relative to script dir)
+  script_dir <- tryCatch({
+    # Works when run via Rscript
+    normalizePath(dirname(sub("--file=", "", commandArgs(trailingOnly = FALSE)[
+      grep("--file=", commandArgs(trailingOnly = FALSE))
+    ])))
+  }, error = function(e) NULL)
+
+  if (!is.null(script_dir)) {
+    bundled <- file.path(dirname(script_dir), "analysis_configs", "data_rules.csv")
+    if (file.exists(bundled)) {
+      cat("Loading bundled data rules from:", bundled, "\n")
+      rules <- read.csv(bundled, stringsAsFactors = FALSE, strip.white = TRUE)
+      validate_data_rules(rules)
+      return(rules)
+    }
+  }
+
+  cat("No data rules file found. Using hardcoded defaults.\n")
+  return(NULL)
+}
+
+validate_data_rules <- function(rules) {
+  required_cols <- c("rule_type", "match_column", "match_value")
+  missing_cols <- setdiff(required_cols, names(rules))
+  if (length(missing_cols) > 0) {
+    stop("Missing required columns in data_rules: ", paste(missing_cols, collapse = ", "))
+  }
+  valid_types <- c("county_fix", "county_remove", "site_exclude", "pathogen_filter")
+  invalid_types <- setdiff(unique(rules$rule_type), valid_types)
+  if (length(invalid_types) > 0) {
+    stop("Invalid rule_type values in data_rules: ", paste(invalid_types, collapse = ", "))
+  }
+}
+
+# Apply all data cleaning rules from the rules data frame
+apply_data_rules <- function(data, rules) {
+  for (i in seq_len(nrow(rules))) {
+    rule <- rules[i, ]
+    rt <- rule$rule_type
+    col <- rule$match_column
+    val <- rule$match_value
+    repl <- if ("replacement" %in% names(rule)) rule$replacement else NA
+    cond <- if ("condition" %in% names(rule)) rule$condition else NA
+    note <- if ("notes" %in% names(rule)) rule$notes else ""
+
+    if (!(col %in% names(data))) {
+      cat("  Skipping rule '", rt, "' - column '", col, "' not found in data\n", sep = "")
+      next
+    }
+
+    if (rt == "county_fix") {
+      n_matched <- sum(data[[col]] == val, na.rm = TRUE)
+      if (n_matched > 0) {
+        data[[col]][data[[col]] == val] <- repl
+        cat("  county_fix: ", val, " -> ", repl, " (", n_matched, " rows)\n", sep = "")
+      }
+
+    } else if (rt == "county_remove") {
+      n_before <- nrow(data)
+      data <- data[data[[col]] != val | is.na(data[[col]]), ]
+      n_removed <- n_before - nrow(data)
+      if (n_removed > 0) {
+        cat("  county_remove: removed ", n_removed, " rows where ", col, " == '", val, "'\n", sep = "")
+      }
+
+    } else if (rt == "site_exclude") {
+      # Parse condition like "year < 2023"
+      if (!is.na(cond) && nzchar(cond)) {
+        n_before <- nrow(data)
+        mask <- tryCatch({
+          eval(parse(text = paste0("data$", col, " == '", val, "' & data$", cond)))
+        }, error = function(e) {
+          cat("  Warning: could not parse condition '", cond, "': ", e$message, "\n", sep = "")
+          rep(FALSE, nrow(data))
+        })
+        data <- data[!mask, ]
+        n_removed <- n_before - nrow(data)
+        cat("  site_exclude: removed ", n_removed, " rows where ", col, " == '", val, "' & ", cond, "\n", sep = "")
+      } else {
+        n_before <- nrow(data)
+        data <- data[data[[col]] != val | is.na(data[[col]]), ]
+        n_removed <- n_before - nrow(data)
+        cat("  site_exclude: removed ", n_removed, " rows where ", col, " == '", val, "'\n", sep = "")
+      }
+
+    } else if (rt == "pathogen_filter") {
+      # Parse condition like "cste == 'YES'" -- keep only rows matching condition for the given pathogen
+      if (!is.na(cond) && nzchar(cond)) {
+        # Extract the condition column and expected value from e.g. "cste == 'YES'"
+        cond_parts <- regmatches(cond, regexec("^(\\w+)\\s*==\\s*'([^']+)'$", cond))[[1]]
+        if (length(cond_parts) == 3) {
+          cond_col <- cond_parts[2]
+          cond_val <- cond_parts[3]
+          if (cond_col %in% names(data)) {
+            n_before <- nrow(data)
+            data <- data[!(data[[col]] == val & data[[cond_col]] != cond_val), ]
+            n_removed <- n_before - nrow(data)
+            cat("  pathogen_filter: removed ", n_removed, " ", val, " rows where ", cond_col, " != '", cond_val, "'\n", sep = "")
+          } else {
+            cat("  Warning: condition column '", cond_col, "' not found. Including all ", val, " cases.\n", sep = "")
+          }
+        } else {
+          cat("  Warning: could not parse pathogen_filter condition '", cond, "'\n", sep = "")
+        }
+      }
+    }
+  }
   return(data)
 }
 
@@ -266,9 +389,28 @@ mmwrdata <- haven::read_sas(args$mmwrFile) %>%
 
 mmwrdata <- mmwrdata %>% rename_all(tolower)
 
-# Exclude COEX pre-2023; Colorado expanded to full state in 2023
-mmwrdata <- mmwrdata %>%
-  filter(!(siteid == "COEX" & year < 2023))
+# --- Data Cleaning Rules ---
+data_rules <- read_data_rules(args$data_rules)
+if (!is.null(data_rules)) {
+  # Apply site_exclude and county rules BEFORE pathogen standardization
+  pre_rules <- data_rules[data_rules$rule_type %in% c("site_exclude", "county_fix", "county_remove"), ]
+  if (nrow(pre_rules) > 0) {
+    cat("Applying", nrow(pre_rules), "pre-standardization data rules:\n")
+    mmwrdata <- apply_data_rules(mmwrdata, pre_rules)
+  }
+} else {
+  # Fallback: hardcoded defaults for backward compatibility when no config is found
+  cat("Applying hardcoded data rules (no config file).\n")
+  mmwrdata <- mmwrdata %>%
+    filter(!(siteid == "COEX" & year < 2023))
+  mmwrdata <- mmwrdata %>%
+    mutate(
+      county = if_else(county %in% c("ST. MARYS'S", "ST. MARYS"), "ST. MARY'S", county),
+      county = if_else(county == "PRINCE GEORGES", "PRINCE GEORGE'S", county),
+      county = if_else(county == "QUEEN ANNES", "QUEEN ANNE'S", county),
+      county = if_else(county == "DE BACA", "DEBACA", county)
+    )
+}
 
 # --- Pathogen Standardization ---
 standardization_result <- standardize_pathogens(mmwrdata, sensitivity = args$matching_sensitivity)
@@ -290,15 +432,6 @@ mmwrdata <- apply_serotype_config(mmwrdata, serotype_config)
 
 mmwrdata$serotypesummary <- mmwrdata$sero2
 
-# --- County Name Standardization ---
-mmwrdata <- mmwrdata %>%
-  mutate(
-    county = if_else(county %in% c("ST. MARYS'S", "ST. MARYS"), "ST. MARY'S", county),
-    county = if_else(county == "PRINCE GEORGES", "PRINCE GEORGE'S", county),
-    county = if_else(county == "QUEEN ANNES", "QUEEN ANNE'S", county),
-    county = if_else(county == "DE BACA", "DEBACA", county)
-  )
-
 # --- STEC Processing ---
 if("STEC" %in% unique(mmwrdata$pathogen)) {
   if("stec_class" %in% names(mmwrdata)) {
@@ -308,14 +441,23 @@ if("STEC" %in% unique(mmwrdata$pathogen)) {
   }
 }
 
-# Listeria: keep only CSTE-reportable (invasive) cases
-if("LISTERIA" %in% unique(mmwrdata$pathogen)) {
-  if("cste" %in% names(mmwrdata)) {
-    mmwrdata <- mmwrdata %>%
-      filter(!(pathogen == "LISTERIA" & cste != "YES"))
-    cat("Filtered Listeria cases to CSTE-reportable only.\n")
-  } else {
-    cat("Warning: LISTERIA found but cste column not present. Including all LISTERIA cases.\n")
+# --- Post-standardization Data Rules (pathogen_filter) ---
+if (!is.null(data_rules)) {
+  post_rules <- data_rules[data_rules$rule_type == "pathogen_filter", ]
+  if (nrow(post_rules) > 0) {
+    cat("Applying", nrow(post_rules), "post-standardization data rules:\n")
+    mmwrdata <- apply_data_rules(mmwrdata, post_rules)
+  }
+} else {
+  # Fallback: hardcoded Listeria filter for backward compatibility
+  if("LISTERIA" %in% unique(mmwrdata$pathogen)) {
+    if("cste" %in% names(mmwrdata)) {
+      mmwrdata <- mmwrdata %>%
+        filter(!(pathogen == "LISTERIA" & cste != "YES"))
+      cat("Filtered Listeria cases to CSTE-reportable only.\n")
+    } else {
+      cat("Warning: LISTERIA found but cste column not present. Including all LISTERIA cases.\n")
+    }
   }
 }
 

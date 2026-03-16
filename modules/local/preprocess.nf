@@ -10,6 +10,7 @@ process PREPROCESS {
     path mmwrFile
     val projID
     path serotypeConfig
+    path dataRules
 
     output:
     path "clean_mmwr.csv", emit: cleanFile
@@ -19,7 +20,8 @@ process PREPROCESS {
     // Use absolute path to the script or a relative path from the current directory
     def scriptPath = "${workflow.projectDir}/bin/preprocess.R"
     def serotypeConfigArg = serotypeConfig.name != 'NO_FILE' ? "--serotype-config ${serotypeConfig}" : ""
-    
+    def dataRulesArg = dataRules.name != 'NO_FILE' ? "--data_rules ${dataRules}" : ""
+
     // Validate matching sensitivity
     def validSensitivities = ['STRICT', 'MEDIUM', 'RELAXED']
     if (!validSensitivities.contains(params.matching_sensitivity)) {
@@ -31,6 +33,7 @@ process PREPROCESS {
       --mmwrFile ${mmwrFile} \\
       --outputFile clean_mmwr.csv \\
       --matching-sensitivity ${params.matching_sensitivity} \\
-      ${serotypeConfigArg}
+      ${serotypeConfigArg} \\
+      ${dataRulesArg}
     """
 }

@@ -46,6 +46,7 @@ workflow FOODNETTRENDS {
     // Configuration files (optional)
     serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_FILE')
     catchmentConfig = params.catchment_config ? file(params.catchment_config) : file('NO_FILE')
+    dataRules = params.data_rules ? file(params.data_rules) : file('NO_FILE')
 
     // Check if files exist
     if (!mmwrFile.exists()) {
@@ -325,7 +326,8 @@ workflow FOODNETTRENDS {
         PREPROCESS(
             mmwrFile,
             params.projID,
-            serotypeConfig
+            serotypeConfig,
+            dataRules
         )
 
         // Create a proper channel from the preprocessed file
@@ -540,9 +542,10 @@ workflow PREPROCESS_ONLY {
     if (!mmwrFile.exists()) {
         error "MMWR file not found: ${params.mmwrFile}"
     }
-    
+
     // Configuration files (optional)
     serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_FILE')
+    dataRules = params.data_rules ? file(params.data_rules) : file('NO_FILE')
 
     // Log preprocessing start
     log.info """
@@ -552,6 +555,7 @@ workflow PREPROCESS_ONLY {
     Project ID    : ${params.projID}
     MMWR File     : ${params.mmwrFile}
     Matching      : ${params.matching_sensitivity ?: 'MEDIUM'}
+    Data Rules    : ${params.data_rules ?: 'bundled default'}
     Output Dir    : ${params.outdir}/${params.projID}
     ==============================================
     """
@@ -560,7 +564,8 @@ workflow PREPROCESS_ONLY {
     PREPROCESS(
         mmwrFile,
         params.projID,
-        serotypeConfig
+        serotypeConfig,
+        dataRules
     )
 
     // Run resource profiler on preprocessed data

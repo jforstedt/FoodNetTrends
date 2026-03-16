@@ -1,0 +1,10 @@
+rule_type,match_column,match_value,replacement,condition,notes
+county_fix,county,ST. MARYS'S,ST. MARY'S,,Apostrophe correction (variant with trailing 'S)
+county_fix,county,ST. MARYS,ST. MARY'S,,Apostrophe correction
+county_fix,county,PRINCE GEORGES,PRINCE GEORGE'S,,Apostrophe correction
+county_fix,county,QUEEN ANNES,QUEEN ANNE'S,,Apostrophe correction
+county_fix,county,DE BACA,DEBACA,,Merge two-word county name
+county_remove,county,OUT OF STATE,,,Remove out-of-state records
+county_remove,county,UNKNOWN,,,Remove unknown counties
+site_exclude,siteid,COEX,,year < 2023,Exclude COEX pre-2023 (CO expansion)
+pathogen_filter,pathogen,LISTERIA,,cste == 'YES',Invasive Listeria only (CSTE definition)

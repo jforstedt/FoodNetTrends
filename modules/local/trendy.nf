@@ -31,10 +31,30 @@ process TRENDY {
     errorStrategy { task.exitStatus in [143,137,104,134,140] ? 'retry' : 'finish' }
     maxRetries 3
 
+    // Chain-based memory: each chain needs ~10 GB + 8 GB overhead.
+    memory = {
+        def chains = params.chains ?: 2
+        return check_max(((chains * 10 + 8) as int).GB * task.attempt, 'memory')
+    }
+
+    // One CPU per chain, plus BLAS bonus for large datasets
+    cpus = {
+        def chains = params.chains ?: 2
+        def rows = dataMetrics?.rows ?: 10000
+        def bonus = rows > 50000 ? 2 : 0
+        return check_max(chains + bonus, 'cpus')
+    }
+
+    // Difficulty-based time allocation from resource profiler metrics
+    time = {
+        def cat = dataMetrics?.difficulty_category ?: 'moderate'
+        def base = cat == 'very_hard' ? 72.h :
+                   cat == 'hard' ? 48.h :
+                   cat == 'moderate' ? 24.h : 12.h
+        return check_max(base * task.attempt, 'time')
+    }
+
     script:
-    // Set data metrics in task.ext for resource allocation
-    task.ext.dataMetrics = dataMetrics
-    
     // Log resource allocation for this pathogen
     log.info "Pathogen: ${pathogen}, Rows: ${dataMetrics?.rows ?: 'unknown'}, " +
              "Difficulty: ${dataMetrics?.difficulty_category ?: 'unknown'}, " +
