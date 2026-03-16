@@ -44,9 +44,9 @@ workflow FOODNETTRENDS {
     censusFileP = file(params.censusFileP)
     
     // Configuration files (optional)
-    serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_FILE')
-    catchmentConfig = params.catchment_config ? file(params.catchment_config) : file('NO_FILE')
-    dataRules = params.data_rules ? file(params.data_rules) : file('NO_FILE')
+    serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_SEROTYPE_CONFIG')
+    catchmentConfig = params.catchment_config ? file(params.catchment_config) : file('NO_CATCHMENT_CONFIG')
+    dataRules = params.data_rules ? file(params.data_rules) : file('NO_DATA_RULES')
 
     // Check if files exist
     if (!mmwrFile.exists()) {
@@ -544,8 +544,8 @@ workflow PREPROCESS_ONLY {
     }
 
     // Configuration files (optional)
-    serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_FILE')
-    dataRules = params.data_rules ? file(params.data_rules) : file('NO_FILE')
+    serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_SEROTYPE_CONFIG')
+    dataRules = params.data_rules ? file(params.data_rules) : file('NO_DATA_RULES')
 
     // Log preprocessing start
     log.info """

@@ -63,7 +63,7 @@ process TRENDY {
     // Properly handle the cleanFile parameter
     def cleanFileParam = ""
     if (preprocessed) {
-        if (cleanFile && cleanFile.name != 'NO_FILE') {
+        if (cleanFile && !cleanFile.name.startsWith('NO_')) {
             cleanFileParam = "--cleanFile ${cleanFile}"
         } else {
             error "Preprocessing enabled but no clean file provided for pathogen: ${pathogen}"
@@ -71,7 +71,7 @@ process TRENDY {
     }
     
     // Handle catchment config parameter
-    def catchmentConfigArg = catchmentConfig.name != 'NO_FILE' ? "--catchment-config ${catchmentConfig}" : ""
+    def catchmentConfigArg = catchmentConfig.name.startsWith('NO_') ? "" : "--catchment-config ${catchmentConfig}"
     
     // Handle states parameter (empty string means all states)
     def statesArg = states ? "--states ${states}" : ""

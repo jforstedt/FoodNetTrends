@@ -19,8 +19,8 @@ process PREPROCESS {
     script:
     // Use absolute path to the script or a relative path from the current directory
     def scriptPath = "${workflow.projectDir}/bin/preprocess.R"
-    def serotypeConfigArg = serotypeConfig.name != 'NO_FILE' ? "--serotype-config ${serotypeConfig}" : ""
-    def dataRulesArg = dataRules.name != 'NO_FILE' ? "--data_rules ${dataRules}" : ""
+    def serotypeConfigArg = serotypeConfig.name.startsWith('NO_') ? "" : "--serotype-config ${serotypeConfig}"
+    def dataRulesArg = dataRules.name.startsWith('NO_') ? "" : "--data_rules ${dataRules}"
 
     // Validate matching sensitivity
     def validSensitivities = ['STRICT', 'MEDIUM', 'RELAXED']
