@@ -992,9 +992,32 @@ if [[ "$flag" != "resume" ]] && [[ "$flag" != "preprocess" ]] && [[ "$pathogens"
                     grouping=$(handle_pathogen_grouping "$pathogen" "")
                 else
                     echo "" >&2
-                    echo -e "${YELLOW}Note: Salmonella serotype selection requires preprocessed data.${NC}" >&2
-                    echo -e "${YELLOW}Using combined analysis for all Salmonella serotypes.${NC}" >&2
-                    grouping="SALMONELLA~combined"
+                    echo -e "${YELLOW}Salmonella serotype selection requires preprocessed data.${NC}" >&2
+                    read -p "Run preprocessing now? (y/n) [y]: " run_preprocess
+                    run_preprocess=${run_preprocess:-y}
+                    if [[ "$run_preprocess" == "y" ]]; then
+                        preprocess_projID=$(date +%Y%m%d_%H%M%S)
+                        echo -e "${BLUE}Submitting preprocessing to cluster...${NC}" >&2
+                        nextflow run main.nf -profile singularity -entry PREPROCESS_ONLY \
+                            --mmwrFile "${MMWR_FILE}" \
+                            --outdir "$outDir" \
+                            --projID "$preprocess_projID" \
+                            --matching_sensitivity "$matching_sensitivity"
+                        preprocess_clean="$outDir/${preprocess_projID}/preprocessed/clean_mmwr.csv"
+                        if [[ -f "$preprocess_clean" ]]; then
+                            echo -e "${GREEN}Preprocessing complete.${NC}" >&2
+                            data_file="$preprocess_clean"
+                            use_preprocessed=true
+                            preprocessed_file="$preprocess_clean"
+                            grouping=$(handle_pathogen_grouping "$pathogen" "$data_file")
+                        else
+                            echo -e "${RED}Preprocessing failed. Using combined analysis.${NC}" >&2
+                            grouping="SALMONELLA~combined"
+                        fi
+                    else
+                        echo -e "${YELLOW}Using combined analysis for all Salmonella serotypes.${NC}" >&2
+                        grouping="SALMONELLA~combined"
+                    fi
                 fi
             fi
 
