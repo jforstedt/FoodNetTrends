@@ -575,6 +575,7 @@ img { max-width: 100%; display: block; }
 /* ===== OVERLAY OVERALL LABEL ===== */
 .overlay-overall-label { color: var(--text-primary); font-weight: 700; }
 .overlay-overall-label input { accent-color: var(--text-primary); }
+[data-theme="dark"] .overlay-toggle input[type="checkbox"] { outline: 1px solid rgba(255,255,255,0.3); outline-offset: 1px; }
 
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
@@ -1561,7 +1562,7 @@ analysisKeys.forEach(function(key) {
     if (hasCatch) {
       var cRows = a.ircatch.slice().sort(function(a,b) { return a.year - b.year; });
       seriesList.unshift({
-        key: '_overall', label: 'Overall', color: '#222222',
+        key: '_overall', label: 'Overall', color: document.documentElement.getAttribute('data-theme') === 'dark' ? '#ffffff' : '#222222', isOverall: true,
         data: cRows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
         visible: true, hdiVisible: false
       });
@@ -1606,6 +1607,9 @@ analysisKeys.forEach(function(key) {
     });
 
     function drawStateOverlay() {
+      // Update Overall series color for current theme
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      seriesList.forEach(function(s) { if (s.isOverall) s.color = isDark ? '#ffffff' : '#222222'; });
       var ctx = canvas.getContext('2d');
       var dpr = window.devicePixelRatio || 1;
       var rect = canvas.parentElement.getBoundingClientRect();
@@ -1629,7 +1633,6 @@ analysisKeys.forEach(function(key) {
         });
       });
 
-      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       ctx.fillStyle = isDark ? '#1a2233' : '#f8f9fa';
       ctx.fillRect(0, 0, W, H);
 
