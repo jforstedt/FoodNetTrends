@@ -59,7 +59,44 @@ process RESOURCE_PROFILER {
                 TRUE ~ "tiny"
             )
         )
-    
+
+    # Aggregate to state x year level for posterior difficulty metrics.
+    # These capture properties that drive MCMC convergence difficulty:
+    # sparsity, overdispersion, and cross-state variation.
+    state_year_counts <- data %>%
+        filter(!is.na(pathogen)) %>%
+        group_by(pathogen, state, year) %>%
+        summarise(count = n(), .groups = 'drop')
+
+    difficulty_metrics <- state_year_counts %>%
+        group_by(pathogen) %>%
+        summarise(
+            zero_frac = sum(count == 0) / n(),
+            sparse_cells = sum(count < 5) / n(),
+            overdispersion = ifelse(mean(count) > 0, var(count) / mean(count), 0),
+            state_cv = ifelse(
+                mean(count) > 0,
+                sd(tapply(count, state, mean)) / mean(count),
+                0
+            ),
+            .groups = 'drop'
+        ) %>%
+        mutate(
+            difficulty = 2.0 * zero_frac +
+                         1.5 * sparse_cells +
+                         1.0 * pmin(overdispersion / 100, 2) +
+                         0.5 * pmin(state_cv, 2),
+            difficulty_category = case_when(
+                difficulty >= 4.5 ~ "very_hard",
+                difficulty >= 3.0 ~ "hard",
+                difficulty >= 1.5 ~ "moderate",
+                TRUE ~ "easy"
+            )
+        )
+
+    pathogen_metrics <- pathogen_metrics %>%
+        left_join(difficulty_metrics, by = "pathogen")
+
     # Check if we have any valid pathogens
     if (nrow(pathogen_metrics) == 0) {
         stop("No valid pathogens found in the data. Check if the pathogen column contains proper pathogen names.")
@@ -112,13 +149,15 @@ process RESOURCE_PROFILER {
     cat("\\nResource Profile Summary:\\n")
     cat("========================\\n")
     for (i in 1:nrow(pathogen_metrics)) {
-        cat(sprintf("%-15s: %6d rows, %2d sites, %2d years (complexity: %d, category: %s)\\n", 
-                    pathogen_metrics\$pathogen[i], 
-                    pathogen_metrics\$rows[i], 
-                    pathogen_metrics\$sites[i], 
-                    pathogen_metrics\$years[i], 
-                    pathogen_metrics\$complexity[i], 
-                    pathogen_metrics\$size_category[i]))
+        cat(sprintf("%-15s: %6d rows, %2d sites, %2d years (complexity: %d, size: %s, difficulty: %.2f [%s])\\n",
+                    pathogen_metrics\$pathogen[i],
+                    pathogen_metrics\$rows[i],
+                    pathogen_metrics\$sites[i],
+                    pathogen_metrics\$years[i],
+                    pathogen_metrics\$complexity[i],
+                    pathogen_metrics\$size_category[i],
+                    pathogen_metrics\$difficulty[i],
+                    pathogen_metrics\$difficulty_category[i]))
     }
     
     # Print state summary

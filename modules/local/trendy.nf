@@ -37,8 +37,8 @@ process TRENDY {
     
     // Log resource allocation for this pathogen
     log.info "Pathogen: ${pathogen}, Rows: ${dataMetrics?.rows ?: 'unknown'}, " +
-             "Complexity: ${dataMetrics?.complexity ?: 'unknown'}, " +
-             "Allocated CPUs: ${task.cpus}, Memory: ${task.memory}"
+             "Difficulty: ${dataMetrics?.difficulty_category ?: 'unknown'}, " +
+             "Allocated CPUs: ${task.cpus}, Memory: ${task.memory}, Time: ${task.time}"
     
     // Properly handle the cleanFile parameter
     def cleanFileParam = ""
@@ -70,6 +70,9 @@ process TRENDY {
         cp -r /opt/cmdstan/cmdstan-* .cmdstan_local
         export CMDSTAN=\$(pwd)/.cmdstan_local
     fi
+
+    # Use extra CPUs beyond chain count for BLAS threading
+    export OPENBLAS_NUM_THREADS=\$((${task.cpus} / ${params.chains}))
 
     Rscript ${whichScript} \\
       --mmwrFile ${mmwrFile} \\

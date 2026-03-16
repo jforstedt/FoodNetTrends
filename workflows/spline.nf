@@ -103,7 +103,13 @@ workflow SPLINE {
                     sites: row.sites as Integer,
                     years: row.years as Integer,
                     complexity: row.complexity as Long,
-                    size_category: row.size_category
+                    size_category: row.size_category,
+                    zero_frac: (row.zero_frac ?: '0') as Double,
+                    sparse_cells: (row.sparse_cells ?: '0') as Double,
+                    overdispersion: (row.overdispersion ?: '0') as Double,
+                    state_cv: (row.state_cv ?: '0') as Double,
+                    difficulty: (row.difficulty ?: '0') as Double,
+                    difficulty_category: row.difficulty_category ?: 'moderate'
                 ]
             }
             
@@ -120,7 +126,7 @@ workflow SPLINE {
             
             // Read the CSV output
             metricsChannel = RESOURCE_PROFILER.out.profile
-                .map { csvFile -> 
+                .map { csvFile ->
                     // Read the CSV file content and parse it
                     def metrics = [:]
                     csvFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
@@ -128,10 +134,16 @@ workflow SPLINE {
                         // Convert row values to appropriate types
                         metrics[row.pathogen] = [
                             rows: row.rows as Integer,
-                            sites: row.sites as Integer, 
+                            sites: row.sites as Integer,
                             years: row.years as Integer,
                             complexity: row.complexity as Long,
-                            size_category: row.size_category
+                            size_category: row.size_category,
+                            zero_frac: (row.zero_frac ?: '0') as Double,
+                            sparse_cells: (row.sparse_cells ?: '0') as Double,
+                            overdispersion: (row.overdispersion ?: '0') as Double,
+                            state_cv: (row.state_cv ?: '0') as Double,
+                            difficulty: (row.difficulty ?: '0') as Double,
+                            difficulty_category: row.difficulty_category ?: 'moderate'
                         ]
                     }
                     if (metrics.isEmpty()) {
@@ -141,7 +153,7 @@ workflow SPLINE {
                     return metrics
                 }
         }
-        
+
         // Parse pathogen groupings and combine with metrics
         // Handle case where pathogenGrouping might be null (AUTO_DISCOVER)
         if (!pathogenGrouping) {
@@ -207,11 +219,17 @@ workflow SPLINE {
                         sites: pathogenMetrics.sites,
                         years: pathogenMetrics.years,
                         complexity: adjustedComplexity,
-                        size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small"
+                        size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small",
+                        zero_frac: pathogenMetrics.zero_frac,
+                        sparse_cells: pathogenMetrics.sparse_cells,
+                        overdispersion: pathogenMetrics.overdispersion,
+                        state_cv: pathogenMetrics.state_cv,
+                        difficulty: pathogenMetrics.difficulty,
+                        difficulty_category: pathogenMetrics.difficulty_category
                     ]
                     log.info "Adjusted metrics for ${pathogen}:${subgroup} - rows: ${adjustedRows} (from ${rawMetrics.rows})"
                 }
-                
+
                 // Debug: log what we're passing
                 log.debug "Creating tuple for ${pathogen}: grouping=${grouping}, subgroup=${subgroup}, metrics=${pathogenMetrics}"
                 tuple(grouping, pathogen, subgroup, pathogenMetrics)
@@ -257,7 +275,7 @@ workflow SPLINE {
         
         // Read the CSV output - need to read file content first
         metricsChannel = RESOURCE_PROFILER.out.profile
-            .map { csvFile -> 
+            .map { csvFile ->
                 // Read the CSV file content and parse it
                 def metrics = [:]
                 csvFile.splitCsv(header: true, sep: ',', strip: true).each { row ->
@@ -265,16 +283,22 @@ workflow SPLINE {
                     // Convert row values to appropriate types
                     metrics[row.pathogen] = [
                         rows: row.rows as Integer,
-                        sites: row.sites as Integer, 
+                        sites: row.sites as Integer,
                         years: row.years as Integer,
                         complexity: row.complexity as Long,
-                        size_category: row.size_category
+                        size_category: row.size_category,
+                        zero_frac: (row.zero_frac ?: '0') as Double,
+                        sparse_cells: (row.sparse_cells ?: '0') as Double,
+                        overdispersion: (row.overdispersion ?: '0') as Double,
+                        state_cv: (row.state_cv ?: '0') as Double,
+                        difficulty: (row.difficulty ?: '0') as Double,
+                        difficulty_category: row.difficulty_category ?: 'moderate'
                     ]
                 }
                 log.info "Parsed metrics for ${metrics.size()} pathogens: ${metrics.keySet().join(', ')}"
                 return metrics
             }
-        
+
         // If AUTO_DISCOVER, extract pathogens from the metrics
         if (params.pathogen == 'AUTO_DISCOVER') {
             // Extract pathogen list from metrics and create groupings
@@ -354,11 +378,17 @@ workflow SPLINE {
                         sites: pathogenMetrics.sites,
                         years: pathogenMetrics.years,
                         complexity: adjustedComplexity,
-                        size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small"
+                        size_category: adjustedRows > 20000 ? "large" : adjustedRows > 10000 ? "medium" : "small",
+                        zero_frac: pathogenMetrics.zero_frac,
+                        sparse_cells: pathogenMetrics.sparse_cells,
+                        overdispersion: pathogenMetrics.overdispersion,
+                        state_cv: pathogenMetrics.state_cv,
+                        difficulty: pathogenMetrics.difficulty,
+                        difficulty_category: pathogenMetrics.difficulty_category
                     ]
                     log.info "Adjusted metrics for ${pathogen}:${subgroup} - rows: ${adjustedRows} (from ${rawMetrics.rows})"
                 }
-                
+
                 // Debug: log what we're passing
                 log.debug "Creating tuple for ${pathogen}: grouping=${grouping}, subgroup=${subgroup}, metrics=${pathogenMetrics}"
                 tuple(grouping, pathogen, subgroup, pathogenMetrics)
