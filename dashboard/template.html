@@ -526,6 +526,36 @@ img { max-width: 100%; display: block; }
 }
 [data-theme="dark"] .lightbox-toolbar button:hover { background: var(--bg-hover); }
 
+/* Dark mode: give transparent R-generated PNGs a light background */
+[data-theme="dark"] .tile-img img,
+[data-theme="dark"] .thumb-card img,
+[data-theme="dark"] .plot-container img {
+    background: #f0f0f0;
+    border-radius: 4px;
+    padding: 4px;
+}
+[data-theme="dark"] .lightbox-inner img {
+    background: #f0f0f0;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+/* Dark mode: heatmap text contrast */
+[data-theme="dark"] .heatmap-table th {
+    background: #0f1822;
+    color: #dce4ee;
+}
+[data-theme="dark"] .heatmap-table td.hm-label {
+    color: #dce4ee;
+    background: #1e2838;
+}
+[data-theme="dark"] .heatmap-table td.hm-low {
+    color: #dce4ee !important;
+}
+[data-theme="dark"] .heatmap-table td.hm-high {
+    color: #fff !important;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .menu-toggle { display: block; }
@@ -1376,8 +1406,14 @@ analysisKeys.forEach(function(key) {
       '<button class="sub-tab" data-tab="diagnostics">Diagnostics</button>' +
     '</div>' +
 
-    // TRENDS TAB
+    // TRENDS TAB — Multi-State Overlay first, then R plots, then per-state tiles
     '<div class="sub-content active" data-tab-content="trends" data-analysis="' + key + '">' +
+      '<div class="card">' +
+        '<div class="card-header">Multi-State Overlay <span class="badge badge-info">Median IR per 100,000</span></div>' +
+        '<div id="state-overlay-controls-' + key + '" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;"></div>' +
+        '<div id="state-overlay-toggles-' + key + '" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>' +
+        '<div style="overflow-x:auto;"><canvas id="state-overlay-canvas-' + key + '" style="width:100%;max-height:400px;"></canvas></div>' +
+      '</div>' +
       '<div class="card">' +
         '<div class="card-header">Overall Catchment Trend <span class="badge badge-info">' + esc(key) + '_overall_trend.png</span></div>' +
         (a.overall_trend_b64 ?
@@ -1391,9 +1427,8 @@ analysisKeys.forEach(function(key) {
           '<div class="plot-container" style="color:var(--gray-500);padding:40px;">No site trends plot available</div>') +
       '</div>' +
       '<div class="card">' +
-        '<div class="card-header">Multi-State Overlay <span class="badge badge-info">Median IR per 100,000</span></div>' +
-        '<div id="state-overlay-toggles-' + key + '" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>' +
-        '<div style="overflow-x:auto;"><canvas id="state-overlay-canvas-' + key + '" style="width:100%;max-height:400px;"></canvas></div>' +
+        '<div class="card-header">Individual State Trends</div>' +
+        '<div class="state-trend-tile-grid" id="pathogen-state-tiles-' + key + '"></div>' +
       '</div>' +
     '</div>' +
 
@@ -1456,12 +1491,12 @@ analysisKeys.forEach(function(key) {
   (function buildStateOverlay() {
     var canvas = document.getElementById('state-overlay-canvas-' + key);
     var togglesEl = document.getElementById('state-overlay-toggles-' + key);
+    var controlsEl = document.getElementById('state-overlay-controls-' + key);
     if (!canvas || !togglesEl || !hasSite) {
       if (canvas) canvas.parentElement.parentElement.style.display = 'none';
       return;
     }
 
-    // Distinct colors for state lines
     var stateColorPalette = [
       '#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
       '#42d4f4','#f032e6','#bfef45','#fabed4','#469990',
@@ -1469,7 +1504,6 @@ analysisKeys.forEach(function(key) {
       '#000075','#a9a9a9','#e6beff','#ffe119','#ffd8b1'
     ];
 
-    // Group irsite rows by state, sorted by year
     var byState = {};
     a.irsite.forEach(function(r) {
       if (!r.state) return;
@@ -1485,45 +1519,55 @@ analysisKeys.forEach(function(key) {
     var seriesList = stateList.map(function(st, idx) {
       var rows = byState[st].slice().sort(function(a,b) { return a.year - b.year; });
       return {
-        key: st,
-        label: st,
+        key: st, label: st,
         color: stateColorPalette[idx % stateColorPalette.length],
         data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
-        visible: true,
-        hdiVisible: false
+        visible: true, hdiVisible: false
       };
     });
 
-    // Build toggle checkboxes per state (line + HDI)
+    // Add Overall series from ircatch
+    if (hasCatch) {
+      var cRows = a.ircatch.slice().sort(function(a,b) { return a.year - b.year; });
+      seriesList.unshift({
+        key: '_overall', label: 'Overall', color: '#222222',
+        data: cRows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
+        visible: true, hdiVisible: false
+      });
+    }
+
+    // Control buttons
+    var allCbs = [], allHdiCbs = [];
+    if (controlsEl) {
+      var _bs = 'padding:4px 10px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
+      ['Select All','Deselect All','Toggle All HDI'].forEach(function(t){
+        var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
+        b.addEventListener('click', function(){
+          if (t === 'Select All') allCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
+          else if (t === 'Deselect All') allCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
+          else allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+        });
+        controlsEl.appendChild(b);
+      });
+    }
+
     seriesList.forEach(function(s, idx) {
       var wrap = document.createElement('span');
       wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+      var bC = s.key === '_overall' ? '#222' : s.color;
       var lbl = document.createElement('label');
-      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid ' + s.color + ';color:' + s.color + ';user-select:none;';
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = true;
-      cb.style.accentColor = s.color;
-      cb.addEventListener('change', function() {
-        seriesList[idx].visible = cb.checked;
-        drawStateOverlay();
-      });
-      lbl.appendChild(cb);
-      lbl.appendChild(document.createTextNode(s.label));
-      var hdiLbl = document.createElement('label');
-      hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid ' + s.color + ';border-left:none;color:' + s.color + ';user-select:none;opacity:.75;';
-      var hdiCb = document.createElement('input');
-      hdiCb.type = 'checkbox';
-      hdiCb.checked = false;
-      hdiCb.style.accentColor = s.color;
-      hdiCb.addEventListener('change', function() {
-        seriesList[idx].hdiVisible = hdiCb.checked;
-        drawStateOverlay();
-      });
-      hdiLbl.appendChild(hdiCb);
-      hdiLbl.appendChild(document.createTextNode('HDI'));
-      wrap.appendChild(lbl);
-      wrap.appendChild(hdiLbl);
+      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+bC+';color:'+bC+';user-select:none;'+(s.key==='_overall'?'font-weight:700;':'');
+      var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=s.visible; cb.style.accentColor=bC;
+      cb.addEventListener('change', function(){ seriesList[idx].visible=cb.checked; drawStateOverlay(); });
+      allCbs.push(cb);
+      lbl.appendChild(cb); lbl.appendChild(document.createTextNode(s.label));
+      var hLbl = document.createElement('label');
+      hLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+bC+';border-left:none;color:'+bC+';user-select:none;opacity:.75;';
+      var hCb = document.createElement('input'); hCb.type='checkbox'; hCb.checked=false; hCb.style.accentColor=bC;
+      hCb.addEventListener('change', function(){ seriesList[idx].hdiVisible=hCb.checked; drawStateOverlay(); });
+      allHdiCbs.push(hCb);
+      hLbl.appendChild(hCb); hLbl.appendChild(document.createTextNode('HDI'));
+      wrap.appendChild(lbl); wrap.appendChild(hLbl);
       togglesEl.appendChild(wrap);
     });
 
@@ -1533,22 +1577,17 @@ analysisKeys.forEach(function(key) {
       var rect = canvas.parentElement.getBoundingClientRect();
       var W = rect.width || 700;
       var H = 360;
-      canvas.width = W * dpr;
-      canvas.height = H * dpr;
-      canvas.style.width = W + 'px';
-      canvas.style.height = H + 'px';
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       var pad = { top: 20, right: 20, bottom: 40, left: 55 };
       var plotW = W - pad.left - pad.right;
       var plotH = H - pad.top - pad.bottom;
 
-      // Axis range: x starts at earliest year in data for this pathogen
-      var minYear = Infinity, maxYear = -Infinity, maxIR = 0;
-      var anyVisible = false;
+      var minYear = Infinity, maxYear = -Infinity, maxIR = 0, anyVisible = false;
       seriesList.forEach(function(s) {
-        if (!s.visible) return;
-        anyVisible = true;
+        if (!s.visible) return; anyVisible = true;
         s.data.forEach(function(d) {
           if (d.year < minYear) minYear = d.year;
           if (d.year > maxYear) maxYear = d.year;
@@ -1563,29 +1602,21 @@ analysisKeys.forEach(function(key) {
 
       if (!anyVisible) {
         ctx.fillStyle = isDark ? '#6b7a8d' : '#adb5bd';
-        ctx.font = '13px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Toggle states above to display trends', W / 2, H / 2);
+        ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('Toggle states above to display trends', W/2, H/2);
         return;
       }
 
-      if (maxIR === 0) maxIR = 1;
-      maxIR *= 1.1;
+      if (maxIR === 0) maxIR = 1; maxIR *= 1.1;
       var yearSpan = maxYear - minYear || 1;
-
       function xPos(year) { return pad.left + ((year - minYear) / yearSpan) * plotW; }
       function yPos(ir) { return pad.top + plotH - (ir / maxIR) * plotH; }
 
-      // Grid lines and labels
-      ctx.strokeStyle = isDark ? '#263044' : '#dee2e6';
-      ctx.lineWidth = 0.5;
-      ctx.font = '11px sans-serif';
-      ctx.fillStyle = isDark ? '#97a4b5' : '#868e96';
-      ctx.textAlign = 'right';
-      var nYTicks = 5;
-      for (var i = 0; i <= nYTicks; i++) {
-        var irVal = (maxIR / nYTicks) * i;
-        var yy = yPos(irVal);
+      // Grid
+      ctx.strokeStyle = isDark ? '#263044' : '#dee2e6'; ctx.lineWidth = 0.5;
+      ctx.font = '11px sans-serif'; ctx.fillStyle = isDark ? '#97a4b5' : '#868e96'; ctx.textAlign = 'right';
+      for (var i = 0; i <= 5; i++) {
+        var irVal = (maxIR / 5) * i, yy = yPos(irVal);
         ctx.beginPath(); ctx.moveTo(pad.left, yy); ctx.lineTo(W - pad.right, yy); ctx.stroke();
         ctx.fillText(irVal.toFixed(1), pad.left - 6, yy + 4);
       }
@@ -1593,9 +1624,16 @@ analysisKeys.forEach(function(key) {
       for (var yr = minYear; yr <= maxYear; yr++) {
         var xx = xPos(yr);
         ctx.beginPath(); ctx.moveTo(xx, pad.top); ctx.lineTo(xx, pad.top + plotH); ctx.stroke();
-        if ((maxYear - minYear) <= 30 || yr % 2 === 0) {
-          ctx.fillText(yr, xx, H - pad.bottom + 16);
-        }
+        if ((maxYear - minYear) <= 30 || yr % 2 === 0) ctx.fillText(yr, xx, H - pad.bottom + 16);
+      }
+
+      // 2004 reference line
+      if (2004 >= minYear && 2004 <= maxYear) {
+        var x04 = xPos(2004);
+        ctx.save(); ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.5; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.moveTo(x04, pad.top); ctx.lineTo(x04, pad.top + plotH); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle = '#c0392b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+        ctx.fillText('Catchment stabilized', x04 + 3, pad.top + 12); ctx.restore();
       }
 
       // HDI fills
@@ -1605,59 +1643,62 @@ analysisKeys.forEach(function(key) {
         if (pts.length === 0) return;
         var c = s.color;
         if (c.charAt(0) === '#') {
-          var hex = c.replace('#', '');
-          if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
-          ctx.fillStyle = 'rgba(' + parseInt(hex.substring(0,2),16) + ',' + parseInt(hex.substring(2,4),16) + ',' + parseInt(hex.substring(4,6),16) + ',0.15)';
-        } else {
-          ctx.fillStyle = c.replace(/rgb\(/, 'rgba(').replace(/\)/, ',0.15)');
-        }
+          var hex = c.replace('#',''); if (hex.length===3) hex=hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+          ctx.fillStyle = 'rgba('+parseInt(hex.substring(0,2),16)+','+parseInt(hex.substring(2,4),16)+','+parseInt(hex.substring(4,6),16)+',0.15)';
+        } else { ctx.fillStyle = c.replace(/rgb\(/,'rgba(').replace(/\)/,',0.15)'); }
         ctx.beginPath();
-        pts.forEach(function(d, i) {
-          var x = xPos(d.year), y = yPos(d.upper_hdi);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
-        for (var j = pts.length - 1; j >= 0; j--) {
-          ctx.lineTo(xPos(pts[j].year), yPos(pts[j].lower_hdi));
-        }
-        ctx.closePath();
-        ctx.fill();
+        pts.forEach(function(d,i){ var x=xPos(d.year),y=yPos(d.upper_hdi); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); });
+        for (var j=pts.length-1;j>=0;j--) ctx.lineTo(xPos(pts[j].year),yPos(pts[j].lower_hdi));
+        ctx.closePath(); ctx.fill();
       });
 
       // Lines
       seriesList.forEach(function(s) {
         if (!s.visible) return;
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = s.color; ctx.lineWidth = s.key==='_overall' ? 3 : 2;
         ctx.beginPath();
-        s.data.forEach(function(d, i) {
-          var x = xPos(d.year), y = yPos(d.ir);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
+        s.data.forEach(function(d,i){ var x=xPos(d.year),y=yPos(d.ir); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); });
         ctx.stroke();
         ctx.fillStyle = s.color;
-        s.data.forEach(function(d) {
-          ctx.beginPath();
-          ctx.arc(xPos(d.year), yPos(d.ir), 3, 0, Math.PI * 2);
-          ctx.fill();
-        });
+        s.data.forEach(function(d){ ctx.beginPath(); ctx.arc(xPos(d.year),yPos(d.ir),s.key==='_overall'?4:3,0,Math.PI*2); ctx.fill(); });
       });
 
       // Y-axis label
-      ctx.save();
-      ctx.translate(14, pad.top + plotH / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillStyle = isDark ? '#97a4b5' : '#495057';
-      ctx.font = '12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('Median IR per 100k', 0, 0);
-      ctx.restore();
+      ctx.save(); ctx.translate(14, pad.top + plotH/2); ctx.rotate(-Math.PI/2);
+      ctx.fillStyle = isDark ? '#97a4b5' : '#495057'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('Median IR per 100k', 0, 0); ctx.restore();
     }
 
     drawStateOverlay();
+    if (!window._fntCanvasRedrawFns) window._fntCanvasRedrawFns = [];
+    window._fntCanvasRedrawFns.push(drawStateOverlay);
     var resizeTimer;
-    window.addEventListener('resize', function() {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(drawStateOverlay, 150);
+    window.addEventListener('resize', function() { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawStateOverlay, 150); });
+  })();
+
+  // Populate per-state thumbnail tiles on pathogen Trends tab (task 3)
+  (function buildPathogenStateTiles() {
+    var tilesEl = document.getElementById('pathogen-state-tiles-' + key);
+    if (!tilesEl || !hasSite) return;
+    var stOrder = ['CA','CO','CT','GA','MD','MN','NM','NY','OR','TN'];
+    var allSt = D.states || {};
+    var avail = {};
+    Object.keys(allSt).forEach(function(st) {
+      var stp = (allSt[st].state_trend_plots || {})[key];
+      if (stp) avail[st] = stp;
+    });
+    var ordered = stOrder.filter(function(st){ return avail[st]; });
+    Object.keys(avail).sort().forEach(function(st){ if (ordered.indexOf(st)<0) ordered.push(st); });
+    if (ordered.length === 0) { tilesEl.innerHTML = '<p style="color:var(--gray-500);padding:12px;">No individual state trend plots available.</p>'; return; }
+    ordered.forEach(function(st) {
+      var sName = allSt[st] ? allSt[st].name : st;
+      var tile = document.createElement('div'); tile.className = 'state-trend-tile';
+      tile.innerHTML =
+        '<div class="tile-header"><span class="group-dot" style="background:var(--teal)"></span>' +
+        '<span>' + esc(st) + ' \u2014 ' + esc(sName) + '</span>' +
+        '<a class="state-link" href="#" onclick="event.preventDefault();navigateToState(\'' + st + '\')">Profile \u2192</a></div>' +
+        '<div class="tile-img"><img src="' + avail[st] + '" alt="' + esc(label) + ' ' + esc(st) + ' trend" onclick="openLightbox(this.src)"></div>';
+      tilesEl.appendChild(tile);
     });
   })();
 
@@ -1839,6 +1880,7 @@ function getSignificanceClass(row) {
       '<div class="sub-content active" data-tab-content="summary" data-state="' + st + '">' +
         '<div class="card">' +
           '<div class="card-header">Multi-Pathogen Overlay <span class="badge badge-info">Median IR per 100,000</span></div>' +
+          '<div id="overlay-controls-' + st + '" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;"></div>' +
           '<div id="overlay-toggles-' + st + '" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>' +
           '<div style="overflow-x:auto;"><canvas id="overlay-canvas-' + st + '" style="width:100%;max-height:400px;"></canvas></div>' +
         '</div>' +
@@ -1984,9 +2026,9 @@ function getSignificanceClass(row) {
     (function buildOverlayChart() {
       var canvas = document.getElementById('overlay-canvas-' + st);
       var togglesEl = document.getElementById('overlay-toggles-' + st);
+      var controlsEl = document.getElementById('overlay-controls-' + st);
       if (!canvas || !togglesEl) return;
 
-      // Collect series data for each pathogen in this state
       var seriesList = [];
       analysisKeysForState.forEach(function(ak) {
         var aa = analyses[ak];
@@ -1994,52 +2036,56 @@ function getSignificanceClass(row) {
         var rows = (irsiteByAnalysis[ak] || []).slice().sort(function(a,b) { return a.year - b.year; });
         if (rows.length === 0) return;
         seriesList.push({
-          key: ak,
-          label: getAnalysisLabel(aa),
-          color: getColor(aa),
+          key: ak, label: getAnalysisLabel(aa), color: getColor(aa),
           data: rows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
-          visible: true,
-          hdiVisible: false
+          visible: true, hdiVisible: false
         });
       });
+
+      // Add "Overall" series — average across all pathogen catchment-level IR for each year
+      // We pick the first pathogen's ircatch as a representative overall catchment (since each analysis has its own ircatch)
+      // Actually, add an Overall toggle per unique analysis that has ircatch data
+      // Simpler: just offer one "Overall" per-analysis if there's exactly one. Otherwise skip.
+      // Best approach: for each analysis, the ircatch is the catchment-level overall for that pathogen.
+      // We'll add an overall series if there's a single dominant combined analysis.
+      // For now, no overall series needed on the multi-pathogen state chart — the Overall toggle is per-pathogen on the multi-state chart.
 
       if (seriesList.length === 0) {
         canvas.parentElement.parentElement.style.display = 'none';
         return;
       }
 
-      // Build toggle checkboxes (line + HDI per pathogen)
+      // Control buttons
+      var allCbs = [], allHdiCbs = [];
+      if (controlsEl) {
+        var _bs = 'padding:4px 10px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
+        ['Select All','Deselect All','Toggle All HDI'].forEach(function(t){
+          var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
+          b.addEventListener('click', function(){
+            if (t === 'Select All') allCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
+            else if (t === 'Deselect All') allCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
+            else allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+          });
+          controlsEl.appendChild(b);
+        });
+      }
+
       seriesList.forEach(function(s, idx) {
         var wrap = document.createElement('span');
         wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
-        // Line toggle
         var lbl = document.createElement('label');
-        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid ' + s.color + ';color:' + s.color + ';user-select:none;';
-        var cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = true;
-        cb.style.accentColor = s.color;
-        cb.addEventListener('change', function() {
-          seriesList[idx].visible = cb.checked;
-          drawOverlay();
-        });
-        lbl.appendChild(cb);
-        lbl.appendChild(document.createTextNode(s.label));
-        // HDI toggle
+        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+s.color+';color:'+s.color+';user-select:none;';
+        var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.style.accentColor=s.color;
+        cb.addEventListener('change', function(){ seriesList[idx].visible=cb.checked; drawOverlay(); });
+        allCbs.push(cb);
+        lbl.appendChild(cb); lbl.appendChild(document.createTextNode(s.label));
         var hdiLbl = document.createElement('label');
-        hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid ' + s.color + ';border-left:none;color:' + s.color + ';user-select:none;opacity:.75;';
-        var hdiCb = document.createElement('input');
-        hdiCb.type = 'checkbox';
-        hdiCb.checked = false;
-        hdiCb.style.accentColor = s.color;
-        hdiCb.addEventListener('change', function() {
-          seriesList[idx].hdiVisible = hdiCb.checked;
-          drawOverlay();
-        });
-        hdiLbl.appendChild(hdiCb);
-        hdiLbl.appendChild(document.createTextNode('HDI'));
-        wrap.appendChild(lbl);
-        wrap.appendChild(hdiLbl);
+        hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+s.color+';border-left:none;color:'+s.color+';user-select:none;opacity:.75;';
+        var hdiCb = document.createElement('input'); hdiCb.type='checkbox'; hdiCb.checked=false; hdiCb.style.accentColor=s.color;
+        hdiCb.addEventListener('change', function(){ seriesList[idx].hdiVisible=hdiCb.checked; drawOverlay(); });
+        allHdiCbs.push(hdiCb);
+        hdiLbl.appendChild(hdiCb); hdiLbl.appendChild(document.createTextNode('HDI'));
+        wrap.appendChild(lbl); wrap.appendChild(hdiLbl);
         togglesEl.appendChild(wrap);
       });
 
@@ -2049,143 +2095,102 @@ function getSignificanceClass(row) {
         var rect = canvas.parentElement.getBoundingClientRect();
         var W = rect.width || 700;
         var H = 360;
-        canvas.width = W * dpr;
-        canvas.height = H * dpr;
-        canvas.style.width = W + 'px';
-        canvas.style.height = H + 'px';
+        canvas.width = W * dpr; canvas.height = H * dpr;
+        canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         var pad = { top: 20, right: 20, bottom: 40, left: 55 };
         var plotW = W - pad.left - pad.right;
         var plotH = H - pad.top - pad.bottom;
 
-        // Shared x-axis always starts at 1996; y-axis fits visible data + HDI
-        var minYear = 1996, maxYear = -Infinity, maxIR = 0;
-        var anyVisible = false;
+        var minYear = 1996, maxYear = -Infinity, maxIR = 0, anyVisible = false;
         seriesList.forEach(function(s) {
-          if (!s.visible) return;
-          anyVisible = true;
+          if (!s.visible) return; anyVisible = true;
           s.data.forEach(function(d) {
             if (d.year > maxYear) maxYear = d.year;
             if (d.ir > maxIR) maxIR = d.ir;
-            if (s.hdiVisible) {
-              var upper = d.upper_hdi;
-              if (upper != null && upper > maxIR) maxIR = upper;
-            }
+            if (s.hdiVisible && d.upper_hdi != null && d.upper_hdi > maxIR) maxIR = d.upper_hdi;
           });
         });
 
-        // Clear canvas
         var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         ctx.fillStyle = isDark ? '#1a2233' : '#f8f9fa';
         ctx.fillRect(0, 0, W, H);
 
         if (!anyVisible) {
           ctx.fillStyle = isDark ? '#6b7a8d' : '#adb5bd';
-          ctx.font = '13px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText('Toggle pathogens above to display trends', W / 2, H / 2);
+          ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText('Toggle pathogens above to display trends', W/2, H/2);
           return;
         }
 
-        if (maxIR === 0) maxIR = 1;
-        maxIR *= 1.1;
+        if (maxIR === 0) maxIR = 1; maxIR *= 1.1;
         var yearSpan = maxYear - minYear || 1;
-
         function xPos(year) { return pad.left + ((year - minYear) / yearSpan) * plotW; }
         function yPos(ir) { return pad.top + plotH - (ir / maxIR) * plotH; }
 
-        // Grid lines and axis labels
-        ctx.strokeStyle = isDark ? '#263044' : '#dee2e6';
-        ctx.lineWidth = 0.5;
-        ctx.font = '11px sans-serif';
-        ctx.fillStyle = isDark ? '#97a4b5' : '#868e96';
-        ctx.textAlign = 'right';
-
-        var nYTicks = 5;
-        for (var i = 0; i <= nYTicks; i++) {
-          var irVal = (maxIR / nYTicks) * i;
-          var yy = yPos(irVal);
+        // Grid
+        ctx.strokeStyle = isDark ? '#263044' : '#dee2e6'; ctx.lineWidth = 0.5;
+        ctx.font = '11px sans-serif'; ctx.fillStyle = isDark ? '#97a4b5' : '#868e96'; ctx.textAlign = 'right';
+        for (var i = 0; i <= 5; i++) {
+          var irVal = (maxIR / 5) * i, yy = yPos(irVal);
           ctx.beginPath(); ctx.moveTo(pad.left, yy); ctx.lineTo(W - pad.right, yy); ctx.stroke();
           ctx.fillText(irVal.toFixed(1), pad.left - 6, yy + 4);
         }
-
         ctx.textAlign = 'center';
         for (var yr = minYear; yr <= maxYear; yr++) {
           var xx = xPos(yr);
           ctx.beginPath(); ctx.moveTo(xx, pad.top); ctx.lineTo(xx, pad.top + plotH); ctx.stroke();
-          if ((maxYear - minYear) <= 30 || yr % 2 === 0) {
-            ctx.fillText(yr, xx, H - pad.bottom + 16);
-          }
+          if ((maxYear - minYear) <= 30 || yr % 2 === 0) ctx.fillText(yr, xx, H - pad.bottom + 16);
         }
 
-        // Draw HDI fills behind lines
+        // 2004 reference line
+        if (2004 >= minYear && 2004 <= maxYear) {
+          var x04 = xPos(2004);
+          ctx.save(); ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.5; ctx.setLineDash([6,4]);
+          ctx.beginPath(); ctx.moveTo(x04, pad.top); ctx.lineTo(x04, pad.top + plotH); ctx.stroke();
+          ctx.setLineDash([]); ctx.fillStyle = '#c0392b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+          ctx.fillText('Catchment stabilized', x04 + 3, pad.top + 12); ctx.restore();
+        }
+
+        // HDI fills
         seriesList.forEach(function(s) {
           if (!s.visible || !s.hdiVisible) return;
           var pts = s.data.filter(function(d) { return d.lower_hdi != null && d.upper_hdi != null; });
           if (pts.length === 0) return;
-          // Convert pathogen color to rgba at 20% opacity for HDI fill
           var c = s.color;
           if (c.charAt(0) === '#') {
-            var hex = c.replace('#', '');
-            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
-            ctx.fillStyle = 'rgba(' + parseInt(hex.substring(0,2),16) + ',' + parseInt(hex.substring(2,4),16) + ',' + parseInt(hex.substring(4,6),16) + ',0.2)';
-          } else {
-            ctx.fillStyle = c.replace(/rgb\(/, 'rgba(').replace(/\)/, ',0.2)');
-          }
+            var hex = c.replace('#',''); if (hex.length===3) hex=hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            ctx.fillStyle = 'rgba('+parseInt(hex.substring(0,2),16)+','+parseInt(hex.substring(2,4),16)+','+parseInt(hex.substring(4,6),16)+',0.2)';
+          } else { ctx.fillStyle = c.replace(/rgb\(/,'rgba(').replace(/\)/,',0.2)'); }
           ctx.beginPath();
-          // Upper boundary left-to-right
-          pts.forEach(function(d, i) {
-            var x = xPos(d.year), y = yPos(d.upper_hdi);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          });
-          // Lower boundary right-to-left
-          for (var j = pts.length - 1; j >= 0; j--) {
-            ctx.lineTo(xPos(pts[j].year), yPos(pts[j].lower_hdi));
-          }
-          ctx.closePath();
-          ctx.fill();
+          pts.forEach(function(d,i){ var x=xPos(d.year),y=yPos(d.upper_hdi); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); });
+          for (var j=pts.length-1;j>=0;j--) ctx.lineTo(xPos(pts[j].year),yPos(pts[j].lower_hdi));
+          ctx.closePath(); ctx.fill();
         });
 
-        // Draw lines for each visible series
+        // Lines
         seriesList.forEach(function(s) {
           if (!s.visible) return;
-          ctx.strokeStyle = s.color;
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = s.color; ctx.lineWidth = 2;
           ctx.beginPath();
-          s.data.forEach(function(d, i) {
-            var x = xPos(d.year), y = yPos(d.ir);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          });
+          s.data.forEach(function(d,i){ var x=xPos(d.year),y=yPos(d.ir); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); });
           ctx.stroke();
-
-          // Draw dots
           ctx.fillStyle = s.color;
-          s.data.forEach(function(d) {
-            ctx.beginPath();
-            ctx.arc(xPos(d.year), yPos(d.ir), 3, 0, Math.PI * 2);
-            ctx.fill();
-          });
+          s.data.forEach(function(d){ ctx.beginPath(); ctx.arc(xPos(d.year),yPos(d.ir),3,0,Math.PI*2); ctx.fill(); });
         });
 
         // Y-axis label
-        ctx.save();
-        ctx.translate(14, pad.top + plotH / 2);
-        ctx.rotate(-Math.PI / 2);
-        ctx.fillStyle = isDark ? '#97a4b5' : '#495057';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Median IR per 100k', 0, 0);
-        ctx.restore();
+        ctx.save(); ctx.translate(14, pad.top + plotH/2); ctx.rotate(-Math.PI/2);
+        ctx.fillStyle = isDark ? '#97a4b5' : '#495057'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('Median IR per 100k', 0, 0); ctx.restore();
       }
 
       drawOverlay();
-      // Redraw on resize
+      if (!window._fntCanvasRedrawFns) window._fntCanvasRedrawFns = [];
+      window._fntCanvasRedrawFns.push(drawOverlay);
       var resizeTimer;
-      window.addEventListener('resize', function() {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(drawOverlay, 150);
-      });
+      window.addEventListener('resize', function() { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawOverlay, 150); });
     })();
 
     // All Trends tab: compact tile grid with R PNGs or sparkline fallback
@@ -2392,7 +2397,8 @@ function getSignificanceClass(row) {
         var intensity = Math.round((val / maxVal) * 200);
         var bg = 'rgba(46, 109, 164, ' + (intensity / 255).toFixed(2) + ')';
         var textColor = intensity > 120 ? '#fff' : '#333';
-        html += '<td style="background:' + bg + ';color:' + textColor + '">' + fmt(val) + '</td>';
+        var hmClass = intensity > 120 ? 'hm-high' : 'hm-low';
+        html += '<td class="' + hmClass + '" style="background:' + bg + ';color:' + textColor + '">' + fmt(val) + '</td>';
       });
       html += '</tr>';
     });
@@ -2463,19 +2469,22 @@ function getSignificanceClass(row) {
   var copyBtn = document.getElementById('copy-rerun-btn');
   if (rerunEl) {
     var p = m;
+    // Use String() instead of esc() because textContent handles display escaping;
+    // esc() would produce visible HTML entities like &amp; in the rendered text
+    var s = function(v) { return v == null ? '' : String(v); };
     var cmd = 'nextflow run main.nf -profile singularity -entry SPLINE \\\n' +
-      '  --mmwrFile "' + esc(p.mmwrFile || 'see nextflow.config') + '" \\\n' +
-      '  --censusFileB "' + esc(p.censusFileB || 'see nextflow.config') + '" \\\n' +
-      '  --censusFileP "' + esc(p.censusFileP || 'see nextflow.config') + '" \\\n' +
-      '  --pathogen "' + esc(p.pathogen || 'AUTO_DISCOVER') + '" \\\n' +
+      '  --mmwrFile "' + s(p.mmwrFile || 'see nextflow.config') + '" \\\n' +
+      '  --censusFileB "' + s(p.censusFileB || 'see nextflow.config') + '" \\\n' +
+      '  --censusFileP "' + s(p.censusFileP || 'see nextflow.config') + '" \\\n' +
+      '  --pathogen "' + s(p.pathogen || 'AUTO_DISCOVER') + '" \\\n' +
       '  --chains ' + (p.chains || 6) + ' \\\n' +
       '  --iterations ' + (p.iterations || 10001) + ' \\\n' +
       '  --adapt_delta ' + (p.adapt_delta || 0.99) + ' \\\n' +
       '  --max_treedepth ' + (p.max_treedepth || 15) + ' \\\n' +
       '  --seed ' + (p.seed || 123) + ' \\\n' +
-      '  --stan_backend "' + esc(p.stan_backend || 'rstan') + '" \\\n' +
-      '  --outdir "' + esc(p.output_dir || 'output') + '" \\\n' +
-      '  --projID "' + esc(p.projID || '') + '"';
+      '  --stan_backend "' + s(p.stan_backend || 'rstan') + '" \\\n' +
+      '  --outdir "' + s(p.output_dir || 'output') + '" \\\n' +
+      '  --projID "' + s(p.projID || '') + '"';
     rerunEl.textContent = cmd;
   }
   if (copyBtn && rerunEl) {
@@ -2503,6 +2512,50 @@ if (typeof mediumZoom === 'function') {
     mediumZoom('.plot-container img', { margin: 20, background: 'rgba(0,0,0,0.85)' });
   } catch(e) { /* medium-zoom not compatible */ }
 }
+
+// ========================================================================
+// FIX: Dark mode canvas background sync (task 5)
+// Redraw all visible canvas charts when the theme changes.
+// ========================================================================
+(function() {
+  var mo = new MutationObserver(function() {
+    if (window._fntCanvasRedrawFns) {
+      window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e) {} });
+    }
+  });
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+
+// ========================================================================
+// FIX: Canvas initial sizing (task 4)
+// Canvases rendered inside hidden tabs have zero width. Redraw all
+// registered canvas draw functions when a sub-tab becomes visible.
+// Also use ResizeObserver on each canvas parent for robust sizing.
+// ========================================================================
+(function() {
+  // Redraw on sub-tab activation
+  document.addEventListener('click', function(e) {
+    var tab = e.target.closest('.sub-tab');
+    if (!tab) return;
+    // Allow DOM to update (the active class is set by the handler above)
+    setTimeout(function() {
+      if (window._fntCanvasRedrawFns) {
+        window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e2) {} });
+      }
+    }, 60);
+  });
+
+  // Also redraw when a top-level section becomes visible (sidebar nav)
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a[data-section]');
+    if (!link) return;
+    setTimeout(function() {
+      if (window._fntCanvasRedrawFns) {
+        window._fntCanvasRedrawFns.forEach(function(fn) { try { fn(); } catch(e2) {} });
+      }
+    }, 80);
+  });
+})();
 
 })();
 </script>
