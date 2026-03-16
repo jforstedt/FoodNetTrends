@@ -50,6 +50,12 @@ read_catchment_config <- function(config_path = NULL) {
   return(config)
 }
 
+# Year all catchment sites were active (latest join year)
+get_catchment_stable_year <- function(catchment_config = NULL) {
+  if (is.null(catchment_config)) catchment_config <- read_catchment_config()
+  max(catchment_config$start_year, na.rm = TRUE)
+}
+
 # Validate catchment config structure and values
 validate_catchment_config <- function(config) {
   required_cols <- c("state", "start_year", "end_year")
@@ -430,7 +436,7 @@ LINPRED_TO_SITEIR <- function(site_data) {
 }
 
 # Faceted site-level incidence trend plot with 95% HDI ribbon
-PLOT_SITE_TRENDS <- function(site, pathogen, outDir, subgroup = "combined") {
+PLOT_SITE_TRENDS <- function(site, pathogen, outDir, subgroup = "combined", stable_year = NULL) {
   display_name <- if (subgroup != "combined") paste(pathogen, subgroup) else pathogen
 
   p <- ggplot(site, aes(x = year, y = median_ir)) +
@@ -444,7 +450,7 @@ PLOT_SITE_TRENDS <- function(site, pathogen, outDir, subgroup = "combined") {
       x = "Year"
     ) +
     theme_minimal() +
-    geom_vline(aes(xintercept = 2004), linetype="dashed", color="red")+
+    { if (!is.null(stable_year)) geom_vline(xintercept = stable_year, linetype="dashed", color="red") } +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold"),
       plot.subtitle = element_text(hjust = 0.5),
@@ -455,7 +461,7 @@ PLOT_SITE_TRENDS <- function(site, pathogen, outDir, subgroup = "combined") {
 }
 
 # Individual per-state incidence trend plot with 95% HDI ribbon
-PLOT_STATE_TREND <- function(site_data, state_code, pathogen, outDir, subgroup = "combined") {
+PLOT_STATE_TREND <- function(site_data, state_code, pathogen, outDir, subgroup = "combined", stable_year = NULL) {
   state_df <- site_data %>% filter(state == state_code)
   if (nrow(state_df) == 0) return(NULL)
 
@@ -468,7 +474,7 @@ PLOT_STATE_TREND <- function(site_data, state_code, pathogen, outDir, subgroup =
   p <- ggplot(state_df, aes(x = year, y = median_ir)) +
     geom_line(linewidth = 1.5) +
     geom_ribbon(aes(ymin = lower_hdi_ir, ymax = upper_hdi_ir), alpha = 0.3) +
-    geom_vline(aes(xintercept = 2004), linetype = "dashed", color = "red") +
+    { if (!is.null(stable_year)) geom_vline(xintercept = stable_year, linetype = "dashed", color = "red") } +
     labs(
       title = display_name,
       subtitle = "Median incidence with 95% HDI intervals",
@@ -485,13 +491,13 @@ PLOT_STATE_TREND <- function(site_data, state_code, pathogen, outDir, subgroup =
 }
 
 # Catchment-wide incidence trend plot with 95% HDI ribbon
-PLOT_OVERALL_TREND <- function(catchir_data, pathogen, outDir, subgroup = "combined") {
+PLOT_OVERALL_TREND <- function(catchir_data, pathogen, outDir, subgroup = "combined", stable_year = NULL) {
   display_name <- if (subgroup != "combined") paste(pathogen, subgroup) else pathogen
 
   p <- ggplot(catchir_data, aes(x = year, y = median_ir)) +
     geom_line(linewidth = 1.5) +
     geom_ribbon(aes(ymin = lower_hdi_ir, ymax = upper_hdi_ir), alpha = 0.3) +
-    geom_vline(aes(xintercept = 2004), linetype="dashed", color="red")+
+    { if (!is.null(stable_year)) geom_vline(xintercept = stable_year, linetype="dashed", color="red") } +
     labs(
       title = paste("Overall Trend for", display_name),
       subtitle = "Median incidence with 95% HDI intervals",

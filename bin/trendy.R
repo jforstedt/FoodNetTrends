@@ -543,15 +543,16 @@ for (pathogen_name in target_pathogens) {
                   paste0(outDir, "/", output_prefix, "_EstIRRCatch_2016_2018.csv"))
 
     if (requireNamespace("ggplot2", quietly = TRUE)) {
+      stable_yr <- get_catchment_stable_year(catchment_config)
       tryCatch({
         if (exists("PLOT_SITE_TRENDS", mode = "function")) {
-          site_plot <- PLOT_SITE_TRENDS(site, pathogen_name, outDir, opts$subgroup)
+          site_plot <- PLOT_SITE_TRENDS(site, pathogen_name, outDir, opts$subgroup, stable_year = stable_yr)
           ggsave(paste0(outDir, "/", output_prefix, "_site_trends.png"), site_plot,
                  width = 10, height = 8, dpi = 300)
         }
 
         if (exists("PLOT_OVERALL_TREND", mode = "function")) {
-          overall_plot <- PLOT_OVERALL_TREND(catchir.linpred, pathogen_name, outDir, opts$subgroup)
+          overall_plot <- PLOT_OVERALL_TREND(catchir.linpred, pathogen_name, outDir, opts$subgroup, stable_year = stable_yr)
           ggsave(paste0(outDir, "/", output_prefix, "_overall_trend.png"), overall_plot,
                  width = 10, height = 6, dpi = 300)
         }
@@ -559,7 +560,7 @@ for (pathogen_name in target_pathogens) {
         # Per-state individual trend charts
         if (exists("PLOT_STATE_TREND", mode = "function")) {
           for (st in unique(as.character(site$state))) {
-            state_plot <- PLOT_STATE_TREND(site, st, pathogen_name, outDir, opts$subgroup)
+            state_plot <- PLOT_STATE_TREND(site, st, pathogen_name, outDir, opts$subgroup, stable_year = stable_yr)
             if (!is.null(state_plot)) {
               ggsave(paste0(outDir, "/", output_prefix, "_", st, "_trend.png"),
                      state_plot, width = 8, height = 5, dpi = 300)
