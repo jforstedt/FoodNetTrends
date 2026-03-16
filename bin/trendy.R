@@ -315,10 +315,10 @@ tryCatch({
 ##############################################################
 
 catchment_config <- NULL
-if (!is.null(opts$`catchment-config`)) {
-  report_progress("CONFIG", message=paste("Loading catchment configuration from:", opts$`catchment-config`))
+if (!is.null(opts$catchment_config)) {
+  report_progress("CONFIG", message=paste("Loading catchment configuration from:", opts$catchment_config))
   tryCatch({
-    catchment_config <- read_catchment_config(opts$`catchment-config`)
+    catchment_config <- read_catchment_config(opts$catchment_config)
     report_progress("CONFIG", message=paste("Loaded catchment configuration with", nrow(catchment_config), "sites"))
   }, error = function(e) {
     stop("Error loading catchment configuration: ", e$message)
