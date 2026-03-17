@@ -262,8 +262,9 @@ img { max-width: 100%; display: block; }
 }
 .thumb-row:last-child { border-bottom: none; }
 .thumb-row-label {
-  min-width: 160px; flex-shrink: 0; font-size: .85rem; font-weight: 600;
+  min-width: 40px; flex-shrink: 0; font-size: .85rem; font-weight: 600;
   color: var(--text-primary); display: flex; align-items: center; gap: 8px;
+  writing-mode: vertical-rl; transform: rotate(180deg);
 }
 .thumb-row-label .group-dot {
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
@@ -715,7 +716,7 @@ img { max-width: 100%; display: block; }
 
   <div class="card" style="margin-top:24px;" id="rerun-card">
     <div class="card-header">Re-run Command <span class="badge badge-info">Nextflow</span>
-      <button class="btn-export" style="margin-left:auto;" id="copy-rerun-btn">Copy</button>
+      <button style="margin-left:auto;padding:4px 10px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;" id="copy-rerun-btn">Copy</button>
     </div>
     <pre style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:4px;padding:14px;font-size:.8rem;overflow-x:auto;white-space:pre-wrap;"><code id="rerun-command"></code></pre>
   </div>
@@ -2575,24 +2576,26 @@ function getSignificanceClass(row) {
         controlsEl.appendChild(rstBtn);
       }
 
+      var isDkMp = document.documentElement.getAttribute('data-theme') === 'dark';
       seriesList.forEach(function(s, idx) {
         var wrap = document.createElement('span');
         wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+        var borderC = isDkMp ? 'rgba(255,255,255,0.4)' : s.color;
         var lbl = document.createElement('label');
-        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+s.color+';color:'+s.color+';user-select:none;';
+        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';color:'+s.color+';user-select:none;';
         var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.style.accentColor=s.color;
         cb.addEventListener('change', function(){ seriesList[idx].visible=cb.checked; drawOverlay(); });
         allCbs.push(cb);
         lbl.appendChild(cb); lbl.appendChild(document.createTextNode(s.label));
         var hdiLbl = document.createElement('label');
-        hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+s.color+';border-left:none;color:'+s.color+';user-select:none;opacity:.75;';
+        hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+borderC+';border-left:none;color:'+s.color+';user-select:none;opacity:.75;';
         var hdiCb = document.createElement('input'); hdiCb.type='checkbox'; hdiCb.checked=false; hdiCb.style.accentColor=s.color;
         hdiCb.addEventListener('change', function(){ seriesList[idx].hdiVisible=hdiCb.checked; drawOverlay(); });
         allHdiCbs.push(hdiCb);
         hdiLbl.appendChild(hdiCb); hdiLbl.appendChild(document.createTextNode('HDI'));
         wrap.appendChild(lbl); wrap.appendChild(hdiLbl);
         var cp = document.createElement('input'); cp.type = 'color'; cp.value = s.color;
-        cp.style.cssText = 'width:20px;height:20px;border:none;cursor:pointer;padding:0;margin-left:2px;vertical-align:middle;';
+        cp.style.cssText = 'width:20px;height:20px;border:1px solid '+(isDkMp?'rgba(255,255,255,0.3)':'#ccc')+';border-radius:3px;cursor:pointer;padding:0;margin-left:2px;vertical-align:middle;background:transparent;';
         cp.addEventListener('input', (function(i, lblEl, hdiLblEl, cbEl, hdiCbEl) { return function() {
           seriesList[i].color = cp.value;
           lblEl.style.borderColor = cp.value; lblEl.style.color = cp.value;
@@ -3002,9 +3005,9 @@ registerSectionBuilder('pipeline-info', function buildPipelineInfo() {
     var traceCard = document.getElementById('trace-card');
     traceCard.style.display = 'block';
     var traceTable = document.getElementById('trace-table');
-    var traceCols = Object.keys(pi.trace_data[0]);
+    var traceCols = Object.keys(pi.trace_data[0]).filter(function(c) { return c !== 'hash'; });
     var traceColDefs = traceCols.map(function(c) {
-      return { field: c, title: c };
+      return { field: c, title: c, style: c === 'task_id' ? 'width:50px' : '' };
     });
     buildSortableTable(traceTable, pi.trace_data, traceColDefs);
   }
