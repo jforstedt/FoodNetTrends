@@ -186,6 +186,7 @@ resolve_preproc_file <- function(filename) {
 clean_mmwr_path        <- resolve_preproc_file("clean_mmwr.csv")
 preprocess_report_path <- resolve_preproc_file("clean_mmwr_preprocessing_report.csv")
 resource_profile_path  <- resolve_preproc_file("resource_profile.csv")
+resource_profile_subgroups_path <- resolve_preproc_file("resource_profile_subgroups.csv")
 metadata_states_path   <- resolve_preproc_file("metadata_states.csv")
 metadata_cidt_path     <- resolve_preproc_file("metadata_cidt.csv")
 metadata_travel_path   <- resolve_preproc_file("metadata_travel.csv")
@@ -250,6 +251,7 @@ msg("Identifying analysis units...")
 
 # Use resource_profile.csv pathogen list as ground truth if available
 resource_profile <- safe_read_csv(resource_profile_path, "resource_profile.csv")
+resource_profile_subgroups <- safe_read_csv(resource_profile_subgroups_path, "resource_profile_subgroups.csv")
 known_pathogens <- if (!is.null(resource_profile)) {
   unique(resource_profile$pathogen)
 } else {
@@ -613,6 +615,7 @@ dashboard_data <- list(
   preprocessing = list(
     report = df_to_list(preprocess_report),
     resource_profile = df_to_list(resource_profile),
+    resource_profile_subgroups = df_to_list(resource_profile_subgroups),
     metadata_states = df_to_list(metadata_states),
     metadata_cidt = df_to_list(metadata_cidt),
     metadata_travel = df_to_list(metadata_travel)

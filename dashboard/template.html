@@ -639,16 +639,6 @@ img { max-width: 100%; display: block; }
   <div class="stat-grid" id="overview-stats"></div>
 
   <div class="card">
-    <div class="card-header">Resource Profile <span class="badge badge-info">resource_profile.csv</span></div>
-    <div class="table-wrapper">
-      <table class="data-table" id="resource-table">
-        <thead><tr></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
     <div class="card-header">Trends at a Glance</div>
     <div class="thumb-row-container" id="overview-thumbs"></div>
   </div>
@@ -719,6 +709,16 @@ img { max-width: 100%; display: block; }
       <button style="margin-left:auto;padding:4px 10px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;" id="copy-rerun-btn">Copy</button>
     </div>
     <pre style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:4px;padding:14px;font-size:.8rem;overflow-x:auto;white-space:pre-wrap;"><code id="rerun-command"></code></pre>
+  </div>
+
+  <div class="card" style="margin-top:24px;" id="resource-profile-card">
+    <div class="card-header">Resource Profile <span class="badge badge-info">resource_profile.csv</span></div>
+    <div class="table-wrapper">
+      <table class="data-table" id="resource-table">
+        <thead><tr></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="card" style="margin-top:24px; display:none;" id="trace-card">
@@ -1539,16 +1539,51 @@ analysisKeys.forEach(function(key) {
     return '<div class="stat-card"><div class="stat-value" style="font-size:' + (String(s[0]).length > 8 ? '1.2rem' : '1.8rem') + '">' + s[0] + '</div><div class="stat-label">' + s[1] + '</div></div>';
   }).join('');
 
-  // Resource profile table
+  // Resource profile table — merge parent + subgroup rows, filter by actual analyses
   var rp = (D.preprocessing || {}).resource_profile;
+  var rpSub = (D.preprocessing || {}).resource_profile_subgroups;
   if (rp && rp.length) {
-    // Filter to only show pathogens/subgroups that were actually analyzed
+    // Build set of analysis keys and parent pathogens that were actually run
+    var analysisKeys = {};
     var analyzedPathogens = {};
     Object.keys(D.analyses || {}).forEach(function(k) {
+      analysisKeys[k] = true;
       var a = D.analyses[k];
       if (a.pathogen) analyzedPathogens[a.pathogen] = true;
     });
+
+    // Filter parent rows to only analyzed pathogens
     var filteredRp = rp.filter(function(row) { return analyzedPathogens[row.pathogen]; });
+
+    // Merge subgroup rows: insert each subgroup after its parent pathogen
+    if (rpSub && rpSub.length) {
+      // Filter subgroups to only those matching actual analysis keys
+      var filteredSub = rpSub.filter(function(row) {
+        // subgroup rows have pathogen like "SALMONELLA/Enteritidis" — derive the analysis key
+        var parts = (row.pathogen || '').split('/');
+        if (parts.length === 2) {
+          var parentPathogen = parts[0];
+          var subgroup = parts[1];
+          var key = parentPathogen + '_' + subgroup;
+          return analysisKeys[key];
+        }
+        return false;
+      });
+
+      // Build merged list: for each parent, insert its subgroups after it
+      var merged = [];
+      filteredRp.forEach(function(parentRow) {
+        merged.push(parentRow);
+        var parentName = parentRow.pathogen;
+        filteredSub.forEach(function(subRow) {
+          if ((subRow.pathogen || '').split('/')[0] === parentName) {
+            merged.push(subRow);
+          }
+        });
+      });
+      filteredRp = merged;
+    }
+
     if (filteredRp.length === 0) filteredRp = rp; // fallback to all if no match
 
     var rpTable = document.getElementById('resource-table');
@@ -1557,9 +1592,13 @@ analysisKeys.forEach(function(key) {
       return '<th>' + esc(c) + '</th>';
     }).join('');
     rpTable.querySelector('tbody').innerHTML = filteredRp.map(function(row) {
+      var isSubgroup = (row.pathogen || '').indexOf('/') >= 0;
       return '<tr>' + rpCols.map(function(c) {
         var val = row[c];
-        if (c === 'pathogen') return '<td style="font-weight:600">' + esc(val) + '</td>';
+        if (c === 'pathogen') {
+          var style = isSubgroup ? 'padding-left:24px;font-weight:400;color:var(--text-secondary);' : 'font-weight:600;';
+          return '<td style="' + style + '">' + esc(val) + '</td>';
+        }
         return '<td>' + esc(val != null ? val : '') + '</td>';
       }).join('') + '</tr>';
     }).join('');
@@ -1745,7 +1784,7 @@ analysisKeys.forEach(function(key) {
 
     // TRENDS TAB — Multi-State Overlay first, then R plots, then per-state tiles
     '<div class="sub-content active" data-tab-content="trends" data-analysis="' + key + '">' +
-      '<div class="card">' +
+      '<div class="card" style="position:relative;">' +
         '<div class="card-header">Multi-State Overlay <span class="badge badge-info">Median IR per 100,000</span></div>' +
         '<div id="state-overlay-controls-' + key + '" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;"></div>' +
         '<div id="state-overlay-toggles-' + key + '" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>' +
@@ -1876,13 +1915,13 @@ analysisKeys.forEach(function(key) {
         });
         controlsEl.appendChild(b);
       });
-      // Export SVG button
-      var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs;
+      // Export SVG button — positioned absolute top-right of card
+      var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs + 'position:absolute;top:8px;right:8px;z-index:5;';
       svgBtn.addEventListener('click', function() {
         var rect = canvas.parentElement.getBoundingClientRect();
         exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-State Overlay \u2014 ' + label, showObserved: showObservedState.on, canvas: canvas });
       });
-      controlsEl.appendChild(svgBtn);
+      canvas.closest('.card').appendChild(svgBtn);
 
       // Show observed data toggle
       var obsLbl = document.createElement('label');
@@ -1892,30 +1931,48 @@ analysisKeys.forEach(function(key) {
       obsLbl.appendChild(obsCb); obsLbl.appendChild(document.createTextNode('Show observed'));
       controlsEl.appendChild(obsLbl);
 
-      // Axis range and chart dimension controls
+      // Axis range and chart dimension controls — stacked vertically, right-aligned
       var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
-      var axisFields = [
-        {lbl:'Y min',attr:'ymin'},{lbl:'Y max',attr:'ymax'},
-        {lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'},
-        {lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}
+      var axisGroups = [
+        {title:'Y-Axis', fields:[{lbl:'Min',attr:'ymin'},{lbl:'Max',attr:'ymax'}]},
+        {title:'X-Axis', fields:[{lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'}]},
+        {title:'Image Size', fields:[{lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}], note:'May distort in report; exports correctly'}
       ];
-      axisFields.forEach(function(f) {
-        var sp = document.createElement('span');
-        sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);margin-left:4px;';
-        sp.textContent = f.lbl + ' ';
-        var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
-        inp.placeholder = 'auto';
-        inp.addEventListener('input', function() {
-          if (inp.value === '') delete canvas.dataset[f.attr];
-          else canvas.dataset[f.attr] = inp.value;
-          drawStateOverlay();
+      var axisContainer = document.createElement('div');
+      axisContainer.style.cssText = 'display:flex;gap:12px;margin-left:auto;';
+      axisGroups.forEach(function(g) {
+        var grp = document.createElement('div');
+        grp.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+        var titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;';
+        titleEl.textContent = g.title;
+        grp.appendChild(titleEl);
+        g.fields.forEach(function(f) {
+          var sp = document.createElement('span');
+          sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);';
+          sp.textContent = f.lbl + ' ';
+          var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
+          inp.placeholder = 'auto';
+          inp.addEventListener('input', function() {
+            if (inp.value === '') delete canvas.dataset[f.attr];
+            else canvas.dataset[f.attr] = inp.value;
+            drawStateOverlay();
+          });
+          sp.appendChild(inp);
+          grp.appendChild(sp);
         });
-        sp.appendChild(inp);
-        controlsEl.appendChild(sp);
+        if (g.note) {
+          var noteEl = document.createElement('div');
+          noteEl.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;max-width:120px;';
+          noteEl.textContent = g.note;
+          grp.appendChild(noteEl);
+        }
+        axisContainer.appendChild(grp);
       });
+      controlsEl.appendChild(axisContainer);
       var rstBtn = document.createElement('button'); rstBtn.textContent = 'Reset'; rstBtn.style.cssText = _bs;
       rstBtn.addEventListener('click', function() {
-        controlsEl.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
+        axisContainer.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
         delete canvas.dataset.ymin; delete canvas.dataset.ymax;
         delete canvas.dataset.xfrom; delete canvas.dataset.xto;
         delete canvas.dataset.customW; delete canvas.dataset.customH;
@@ -2333,7 +2390,7 @@ function getSignificanceClass(row) {
 
       // SUMMARY TAB
       '<div class="sub-content active" data-tab-content="summary" data-state="' + st + '">' +
-        '<div class="card">' +
+        '<div class="card" style="position:relative;">' +
           '<div class="card-header">Multi-Pathogen Overlay <span class="badge badge-info">Median IR per 100,000</span></div>' +
           '<div id="overlay-controls-' + st + '" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;"></div>' +
           '<div id="overlay-toggles-' + st + '" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>' +
@@ -2527,14 +2584,14 @@ function getSignificanceClass(row) {
           });
           controlsEl.appendChild(b);
         });
-        // Export SVG button
-        var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs;
+        // Export SVG button — positioned absolute top-right of card
+        var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs + 'position:absolute;top:8px;right:8px;z-index:5;';
         svgBtn.addEventListener('click', function() {
           var rect = canvas.parentElement.getBoundingClientRect();
           var sInfo = getStateInfo(st);
           exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-Pathogen Overlay \u2014 ' + (sInfo.name || st), showObserved: showObservedMp.on, canvas: canvas });
         });
-        controlsEl.appendChild(svgBtn);
+        canvas.closest('.card').appendChild(svgBtn);
 
         // Show observed data toggle
         var obsLblMp = document.createElement('label');
@@ -2544,30 +2601,48 @@ function getSignificanceClass(row) {
         obsLblMp.appendChild(obsCbMp); obsLblMp.appendChild(document.createTextNode('Show observed'));
         controlsEl.appendChild(obsLblMp);
 
-        // Axis range and chart dimension controls
+        // Axis range and chart dimension controls — stacked vertically, right-aligned
         var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
-        var axisFields = [
-          {lbl:'Y min',attr:'ymin'},{lbl:'Y max',attr:'ymax'},
-          {lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'},
-          {lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}
+        var axisGroups = [
+          {title:'Y-Axis', fields:[{lbl:'Min',attr:'ymin'},{lbl:'Max',attr:'ymax'}]},
+          {title:'X-Axis', fields:[{lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'}]},
+          {title:'Image Size', fields:[{lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}], note:'May distort in report; exports correctly'}
         ];
-        axisFields.forEach(function(f) {
-          var sp = document.createElement('span');
-          sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);margin-left:4px;';
-          sp.textContent = f.lbl + ' ';
-          var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
-          inp.placeholder = 'auto';
-          inp.addEventListener('input', function() {
-            if (inp.value === '') delete canvas.dataset[f.attr];
-            else canvas.dataset[f.attr] = inp.value;
-            drawOverlay();
+        var axisContainer = document.createElement('div');
+        axisContainer.style.cssText = 'display:flex;gap:12px;margin-left:auto;';
+        axisGroups.forEach(function(g) {
+          var grp = document.createElement('div');
+          grp.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+          var titleEl = document.createElement('div');
+          titleEl.style.cssText = 'font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;';
+          titleEl.textContent = g.title;
+          grp.appendChild(titleEl);
+          g.fields.forEach(function(f) {
+            var sp = document.createElement('span');
+            sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);';
+            sp.textContent = f.lbl + ' ';
+            var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
+            inp.placeholder = 'auto';
+            inp.addEventListener('input', function() {
+              if (inp.value === '') delete canvas.dataset[f.attr];
+              else canvas.dataset[f.attr] = inp.value;
+              drawOverlay();
+            });
+            sp.appendChild(inp);
+            grp.appendChild(sp);
           });
-          sp.appendChild(inp);
-          controlsEl.appendChild(sp);
+          if (g.note) {
+            var noteEl = document.createElement('div');
+            noteEl.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;max-width:120px;';
+            noteEl.textContent = g.note;
+            grp.appendChild(noteEl);
+          }
+          axisContainer.appendChild(grp);
         });
+        controlsEl.appendChild(axisContainer);
         var rstBtn = document.createElement('button'); rstBtn.textContent = 'Reset'; rstBtn.style.cssText = _bs;
         rstBtn.addEventListener('click', function() {
-          controlsEl.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
+          axisContainer.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
           delete canvas.dataset.ymin; delete canvas.dataset.ymax;
           delete canvas.dataset.xfrom; delete canvas.dataset.xto;
           delete canvas.dataset.customW; delete canvas.dataset.customH;
