@@ -1489,10 +1489,6 @@ if [[ "$proceed" =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}tail -f foodnet_run_${timestamp}.log${NC}"
     fi
 
-    # Monitor integration hint
-    echo ""
-    echo -e "To monitor progress:"
-    echo -e "${YELLOW}  bash bin/monitor_pipeline.sh ${outDir}/${timestamp}${NC}"
 else
     echo -e "${RED}Analysis cancelled.${NC}"
 fi

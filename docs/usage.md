@@ -47,20 +47,6 @@ The `run_workflow.sh` script provides an interactive menu-driven launcher for th
 
 The launcher supports `AUTO_DISCOVER` mode: if the `--pathogen` parameter is left empty, all pathogens present in the preprocessed data are discovered automatically.
 
-### Pipeline monitor
-
-The `bin/monitor_pipeline.sh` script provides a real-time terminal dashboard that tracks per-pathogen progress by reading the Nextflow execution trace file.
-
-```bash
-./bin/monitor_pipeline.sh output/20260313_160520           # 5s refresh (default)
-./bin/monitor_pipeline.sh -i 10 output/20260313_160520     # 10s refresh
-./bin/monitor_pipeline.sh -1 output/20260313_160520        # single snapshot, no loop
-```
-
-Options:
-- `-i SECONDS` -- refresh interval (default: 5)
-- `-1` -- print a single snapshot and exit
-- `-h` -- show help
 
 ### Key parameters
 

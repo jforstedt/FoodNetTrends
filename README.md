@@ -15,7 +15,7 @@ A Nextflow pipeline for Bayesian hierarchical spline modeling of CDC FoodNet sur
 7. Interactive HTML dashboard summarizing results across pathogens
 8. Resource profiling to estimate compute requirements per pathogen
 9. Configurable serotype recoding and catchment area definitions
-10. Real-time terminal monitoring of pipeline progress
+10. Self-contained HTML results dashboard with interactive visualizations
 
 ## Requirements
 
@@ -156,17 +156,6 @@ Combine profiles as needed, e.g.:
 nextflow run main.nf -profile singularity,scicomp_rosalind,production ...
 ```
 
-## Monitoring
-
-Use the monitor script to track progress of a running pipeline:
-
-```bash
-bin/monitor_pipeline.sh output/<projID>
-bin/monitor_pipeline.sh -i 10 output/<projID>   # 10-second refresh
-bin/monitor_pipeline.sh -1 output/<projID>       # single snapshot
-```
-
-The monitor parses Nextflow trace files and displays per-pathogen status, runtime, and peak memory in a terminal dashboard.
 
 ## Output
 
