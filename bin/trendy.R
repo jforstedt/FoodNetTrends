@@ -287,14 +287,19 @@ tryCatch({
 })
 
 report_progress("DATA", message="Importing census data")
+# Read SAS or CSV based on file extension
+read_data_file <- function(path) {
+  if (grepl("\\.csv$", path, ignore.case = TRUE)) readr::read_csv(path, show_col_types = FALSE)
+  else haven::read_sas(path)
+}
 tryCatch({
-  census <- haven::read_sas(censusFileB) %>%
+  census <- read_data_file(censusFileB) %>%
     setNames(tolower(names(.))) %>%
     group_by(year, state) %>%
     dplyr::summarize(population = sum(population, na.rm=TRUE)) %>%
     mutate(pathogentype = "Bacterial") %>%
     bind_rows(
-      haven::read_sas(censusFileP) %>%
+      read_data_file(censusFileP) %>%
         setNames(tolower(names(.))) %>%
         group_by(year, state) %>%
         dplyr::summarize(population = sum(population, na.rm=TRUE)) %>%

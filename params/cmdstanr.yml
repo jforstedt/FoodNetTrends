@@ -1,0 +1,25 @@
+# FoodNetTrends publication run with cmdstanr backend
+# Usage: nextflow run main.nf -profile singularity -params-file params/cmdstanr.yml
+#
+# Same as publication settings but uses cmdstanr for faster model compilation
+# and lower memory usage. Requires CmdStan compiled in the container.
+# Update the file paths below to match your environment.
+
+# Input data
+mmwrFile: "/path/to/mmwr_data.sas7bdat"
+censusFileB: "/path/to/census_bacterial.sas7bdat"
+censusFileP: "/path/to/census_parasitic.sas7bdat"
+
+# Pathogen selection
+pathogen: "AUTO_DISCOVER"
+
+# MCMC settings
+chains: 6
+iterations: 10001
+adapt_delta: 0.99
+max_treedepth: 15
+seed: 123
+stan_backend: "cmdstanr"
+
+# Output
+outdir: "output"

@@ -1,0 +1,25 @@
+# FoodNetTrends minimal test run parameters
+# Usage: nextflow run main.nf -profile singularity -params-file params/test.yml
+#
+# Runs quickly (~5 min) with minimal MCMC settings for pipeline validation.
+# Update the file paths below to match your environment.
+
+# Input data
+mmwrFile: "/path/to/mmwr_data.sas7bdat"
+censusFileB: "/path/to/census_bacterial.sas7bdat"
+censusFileP: "/path/to/census_parasitic.sas7bdat"
+
+# Pathogen selection (single pathogen for speed)
+pathogen: "CAMPYLOBACTER"
+
+# Minimal MCMC settings
+chains: 2
+iterations: 200
+adapt_delta: 0.9
+max_treedepth: 10
+seed: 123
+stan_backend: "rstan"
+
+# Output
+outdir: "output"
+skip_dashboard: false
