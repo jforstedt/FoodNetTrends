@@ -1984,7 +1984,6 @@ analysisKeys.forEach(function(key) {
       });
       svgWrap.appendChild(svgNote); svgWrap.appendChild(svgBtn);
       canvas.closest('.card').appendChild(svgWrap);
-      controlsEl.appendChild(obsLbl);
 
       // Axis range and chart dimension controls — stacked vertically, right-aligned
       var _is = 'height:28px;padding:0 4px;font-size:.78rem;width:60px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
@@ -2018,7 +2017,7 @@ analysisKeys.forEach(function(key) {
         });
         axisContainer.appendChild(grp);
       });
-      controlsEl.appendChild(axisContainer);
+      var rstGrp = document.createElement('div'); rstGrp.style.cssText = 'display:flex;flex-direction:column;justify-content:flex-end;';
       var rstBtn = document.createElement('button'); rstBtn.textContent = 'Reset'; rstBtn.style.cssText = _bs;
       rstBtn.addEventListener('click', function() {
         axisContainer.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
@@ -2027,7 +2026,9 @@ analysisKeys.forEach(function(key) {
         delete canvas.dataset.customW; delete canvas.dataset.customH;
         drawStateOverlay();
       });
-      controlsEl.appendChild(rstBtn);
+      rstGrp.appendChild(rstBtn);
+      axisContainer.appendChild(rstGrp);
+      controlsEl.appendChild(axisContainer);
     }
 
     seriesList.forEach(function(s, idx) {
@@ -2036,7 +2037,7 @@ analysisKeys.forEach(function(key) {
       var isOverall = s.key === '_overall';
       var isDkNow = document.documentElement.getAttribute('data-theme') === 'dark';
       var bC = isOverall ? (isDkNow ? '#fff' : '#222') : s.color;
-      var borderC = isDkNow ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.15)';
+      var borderC = isDkNow ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.25)';
       var lbl = document.createElement('label');
       lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isDkNow?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+(isOverall?'':'color:'+bC+';')+'user-select:none;';
       if (isOverall) lbl.className = 'overlay-overall-label';
@@ -2724,7 +2725,7 @@ function getSignificanceClass(row) {
           });
           axisContainer.appendChild(grp);
         });
-        controlsEl.appendChild(axisContainer);
+        var rstGrp = document.createElement('div'); rstGrp.style.cssText = 'display:flex;flex-direction:column;justify-content:flex-end;';
         var rstBtn = document.createElement('button'); rstBtn.textContent = 'Reset'; rstBtn.style.cssText = _bs;
         rstBtn.addEventListener('click', function() {
           axisContainer.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
@@ -2733,14 +2734,16 @@ function getSignificanceClass(row) {
           delete canvas.dataset.customW; delete canvas.dataset.customH;
           drawOverlay();
         });
-        controlsEl.appendChild(rstBtn);
+        rstGrp.appendChild(rstBtn);
+        axisContainer.appendChild(rstGrp);
+        controlsEl.appendChild(axisContainer);
       }
 
       var isDkMp = document.documentElement.getAttribute('data-theme') === 'dark';
       seriesList.forEach(function(s, idx) {
         var wrap = document.createElement('span');
         wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
-        var borderC = isDkMp ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.15)';
+        var borderC = isDkMp ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.25)';
         var lbl = document.createElement('label');
         lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isDkMp?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+'color:'+s.color+';user-select:none;';
         var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.style.accentColor=s.color;
