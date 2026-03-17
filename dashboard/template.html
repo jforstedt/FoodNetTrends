@@ -2626,15 +2626,60 @@ function getSignificanceClass(row) {
       var allCbs = [], allHdiCbs = [];
       if (controlsEl) {
         var _bs = 'height:28px;line-height:28px;padding:0 8px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
-        ['Toggle All','Toggle HDI'].forEach(function(t){
+        var _ts = 'font-size:.68rem;text-transform:uppercase;color:var(--text-muted);letter-spacing:.5px;margin-bottom:2px;';
+        var hideInterceptsMp = { on: false };
+
+        // Trend Lines section
+        var trendGrpMp = document.createElement('div'); trendGrpMp.style.cssText = 'display:inline-flex;flex-direction:column;gap:2px;';
+        var trendTitleMp = document.createElement('div'); trendTitleMp.textContent = 'Trend Lines'; trendTitleMp.style.cssText = _ts;
+        var trendBtnsMp = document.createElement('div'); trendBtnsMp.style.cssText = 'display:flex;gap:4px;';
+        ['Toggle','Select','Off'].forEach(function(t){
           var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
           b.addEventListener('click', function(){
-            if (t === 'Toggle All') allCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
-            else allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+            if (t==='Toggle') allCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+            else if (t==='Select') allCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
+            else allCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
           });
-          controlsEl.appendChild(b);
+          trendBtnsMp.appendChild(b);
         });
-        // Export SVG button and image size note — positioned absolute top-right of card
+        trendGrpMp.appendChild(trendTitleMp); trendGrpMp.appendChild(trendBtnsMp);
+        controlsEl.appendChild(trendGrpMp);
+
+        // HDI section
+        var hdiGrpMp = document.createElement('div'); hdiGrpMp.style.cssText = 'display:inline-flex;flex-direction:column;gap:2px;';
+        var hdiTitleMp = document.createElement('div'); hdiTitleMp.textContent = 'HDI'; hdiTitleMp.style.cssText = _ts;
+        var hdiBtnsMp = document.createElement('div'); hdiBtnsMp.style.cssText = 'display:flex;gap:4px;';
+        ['Toggle','Select','Off'].forEach(function(t){
+          var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
+          b.addEventListener('click', function(){
+            if (t==='Toggle') allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+            else if (t==='Select') allHdiCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
+            else allHdiCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
+          });
+          hdiBtnsMp.appendChild(b);
+        });
+        hdiGrpMp.appendChild(hdiTitleMp); hdiGrpMp.appendChild(hdiBtnsMp);
+        controlsEl.appendChild(hdiGrpMp);
+
+        // Data section
+        var dataGrpMp = document.createElement('div'); dataGrpMp.style.cssText = 'display:inline-flex;flex-direction:column;gap:2px;';
+        var dataTitleMp = document.createElement('div'); dataTitleMp.textContent = 'Data'; dataTitleMp.style.cssText = _ts;
+        var dataBtnsMp = document.createElement('div'); dataBtnsMp.style.cssText = 'display:flex;gap:4px;';
+        var obsLblMp = document.createElement('label');
+        obsLblMp.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;height:28px;padding:0 8px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
+        var obsCbMp = document.createElement('input'); obsCbMp.type = 'checkbox'; obsCbMp.checked = false;
+        obsCbMp.addEventListener('change', function() { showObservedMp.on = obsCbMp.checked; drawOverlay(); });
+        obsLblMp.appendChild(obsCbMp); obsLblMp.appendChild(document.createTextNode('Show observed'));
+        var intLblMp = document.createElement('label');
+        intLblMp.style.cssText = obsLblMp.style.cssText;
+        var intCbMp = document.createElement('input'); intCbMp.type = 'checkbox'; intCbMp.checked = false;
+        intCbMp.addEventListener('change', function() { hideInterceptsMp.on = intCbMp.checked; drawOverlay(); });
+        intLblMp.appendChild(intCbMp); intLblMp.appendChild(document.createTextNode('Hide intercepts'));
+        dataBtnsMp.appendChild(obsLblMp); dataBtnsMp.appendChild(intLblMp);
+        dataGrpMp.appendChild(dataTitleMp); dataGrpMp.appendChild(dataBtnsMp);
+        controlsEl.appendChild(dataGrpMp);
+
+        // Export SVG button and note — positioned top-right of card
         var svgWrap = document.createElement('div'); svgWrap.style.cssText = 'position:absolute;top:8px;right:8px;z-index:5;display:flex;align-items:center;gap:8px;';
         var svgNote = document.createElement('span'); svgNote.textContent = 'Note: Altering image size may distort it here, but should export correctly';
         svgNote.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;';
@@ -2646,14 +2691,6 @@ function getSignificanceClass(row) {
         });
         svgWrap.appendChild(svgNote); svgWrap.appendChild(svgBtn);
         canvas.closest('.card').appendChild(svgWrap);
-
-        // Show observed data toggle
-        var obsLblMp = document.createElement('label');
-        obsLblMp.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;height:28px;padding:0 8px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
-        var obsCbMp = document.createElement('input'); obsCbMp.type = 'checkbox'; obsCbMp.checked = false;
-        obsCbMp.addEventListener('change', function() { showObservedMp.on = obsCbMp.checked; drawOverlay(); });
-        obsLblMp.appendChild(obsCbMp); obsLblMp.appendChild(document.createTextNode('Show observed'));
-        controlsEl.appendChild(obsLblMp);
 
         // Axis range and chart dimension controls — stacked vertically, right-aligned
         var _is = 'height:28px;padding:0 4px;font-size:.78rem;width:60px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
@@ -2850,8 +2887,10 @@ function getSignificanceClass(row) {
           ctx.beginPath();
           s.data.forEach(function(d,i){ var x=xPos(d.year),y=yPos(d.ir); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); });
           ctx.stroke();
-          ctx.fillStyle = s.color;
-          s.data.forEach(function(d){ ctx.beginPath(); ctx.arc(xPos(d.year),yPos(d.ir),3,0,Math.PI*2); ctx.fill(); });
+          if (!hideInterceptsMp.on) {
+            ctx.fillStyle = s.color;
+            s.data.forEach(function(d){ ctx.beginPath(); ctx.arc(xPos(d.year),yPos(d.ir),3,0,Math.PI*2); ctx.fill(); });
+          }
         });
 
         // Y-axis label
