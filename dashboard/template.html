@@ -1907,7 +1907,7 @@ analysisKeys.forEach(function(key) {
     // Add Overall series from ircatch
     if (hasCatch) {
       var cRows = a.ircatch.slice().sort(function(a,b) { return a.year - b.year; });
-      seriesList.unshift({
+      seriesList.push({
         key: '_overall', label: 'Overall', color: document.documentElement.getAttribute('data-theme') === 'dark' ? '#ffffff' : '#222222', isOverall: true,
         data: cRows.map(function(r) { return { year: r.year, ir: r.median_ir || 0, raw_ir: r.raw_ir, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir }; }),
         visible: true, hdiVisible: false
@@ -1920,15 +1920,60 @@ analysisKeys.forEach(function(key) {
     var allCbs = [], allHdiCbs = [];
     if (controlsEl) {
       var _bs = 'height:28px;line-height:28px;padding:0 8px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
-      ['Toggle All','Toggle HDI'].forEach(function(t){
+      var _ts = 'font-size:.68rem;text-transform:uppercase;color:var(--text-muted);letter-spacing:.5px;margin-bottom:2px;';
+      var hideInterceptsState = { on: false };
+
+      // Trend Lines section
+      var trendGrp = document.createElement('div'); trendGrp.style.cssText = 'display:inline-flex;flex-direction:column;gap:2px;';
+      var trendTitle = document.createElement('div'); trendTitle.textContent = 'Trend Lines'; trendTitle.style.cssText = _ts;
+      var trendBtns = document.createElement('div'); trendBtns.style.cssText = 'display:flex;gap:4px;';
+      ['Toggle','Select','Off'].forEach(function(t){
         var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
         b.addEventListener('click', function(){
-          if (t === 'Toggle All') allCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
-          else allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+          if (t==='Toggle') allCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+          else if (t==='Select') allCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
+          else allCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
         });
-        controlsEl.appendChild(b);
+        trendBtns.appendChild(b);
       });
-      // Export SVG button and image size note — positioned absolute top-right of card
+      trendGrp.appendChild(trendTitle); trendGrp.appendChild(trendBtns);
+      controlsEl.appendChild(trendGrp);
+
+      // HDI section
+      var hdiGrp = document.createElement('div'); hdiGrp.style.cssText = 'display:inline-flex;flex-direction:column;gap:2px;';
+      var hdiTitle = document.createElement('div'); hdiTitle.textContent = 'HDI'; hdiTitle.style.cssText = _ts;
+      var hdiBtns = document.createElement('div'); hdiBtns.style.cssText = 'display:flex;gap:4px;';
+      ['Toggle','Select','Off'].forEach(function(t){
+        var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
+        b.addEventListener('click', function(){
+          if (t==='Toggle') allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
+          else if (t==='Select') allHdiCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
+          else allHdiCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
+        });
+        hdiBtns.appendChild(b);
+      });
+      hdiGrp.appendChild(hdiTitle); hdiGrp.appendChild(hdiBtns);
+      controlsEl.appendChild(hdiGrp);
+
+      // Data section
+      var dataGrp = document.createElement('div'); dataGrp.style.cssText = 'display:inline-flex;flex-direction:column;gap:2px;';
+      var dataTitle = document.createElement('div'); dataTitle.textContent = 'Data'; dataTitle.style.cssText = _ts;
+      var dataBtns = document.createElement('div'); dataBtns.style.cssText = 'display:flex;gap:4px;';
+      var obsLbl = document.createElement('label');
+      obsLbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;height:28px;padding:0 8px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
+      var obsCb = document.createElement('input'); obsCb.type = 'checkbox'; obsCb.checked = false;
+      obsCb.addEventListener('change', function() { showObservedState.on = obsCb.checked; drawStateOverlay(); });
+      obsLbl.appendChild(obsCb); obsLbl.appendChild(document.createTextNode('Show observed'));
+      var intLbl = document.createElement('label');
+      intLbl.style.cssText = obsLbl.style.cssText;
+      var intCb = document.createElement('input'); intCb.type = 'checkbox'; intCb.checked = false;
+      intCb.addEventListener('change', function() { hideInterceptsState.on = intCb.checked; drawStateOverlay(); });
+      intLbl.appendChild(intCb); intLbl.appendChild(document.createTextNode('Hide intercepts'));
+      dataBtns.appendChild(obsLbl); dataBtns.appendChild(intLbl);
+      dataGrp.appendChild(dataTitle); dataGrp.appendChild(dataBtns);
+      controlsEl.appendChild(dataGrp);
+
+      // Export SVG button and note — positioned top-right of card
       var svgWrap = document.createElement('div'); svgWrap.style.cssText = 'position:absolute;top:8px;right:8px;z-index:5;display:flex;align-items:center;gap:8px;';
       var svgNote = document.createElement('span'); svgNote.textContent = 'Note: Altering image size may distort it here, but should export correctly';
       svgNote.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;';
@@ -1939,13 +1984,6 @@ analysisKeys.forEach(function(key) {
       });
       svgWrap.appendChild(svgNote); svgWrap.appendChild(svgBtn);
       canvas.closest('.card').appendChild(svgWrap);
-
-      // Show observed data toggle
-      var obsLbl = document.createElement('label');
-      obsLbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;height:28px;padding:0 8px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
-      var obsCb = document.createElement('input'); obsCb.type = 'checkbox'; obsCb.checked = false;
-      obsCb.addEventListener('change', function() { showObservedState.on = obsCb.checked; drawStateOverlay(); });
-      obsLbl.appendChild(obsCb); obsLbl.appendChild(document.createTextNode('Show observed'));
       controlsEl.appendChild(obsLbl);
 
       // Axis range and chart dimension controls — stacked vertically, right-aligned
@@ -1998,7 +2036,7 @@ analysisKeys.forEach(function(key) {
       var isOverall = s.key === '_overall';
       var isDkNow = document.documentElement.getAttribute('data-theme') === 'dark';
       var bC = isOverall ? (isDkNow ? '#fff' : '#222') : s.color;
-      var borderC = isDkNow ? 'rgba(255,255,255,0.4)' : bC;
+      var borderC = isDkNow ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.15)';
       var lbl = document.createElement('label');
       lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isDkNow?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+(isOverall?'':'color:'+bC+';')+'user-select:none;';
       if (isOverall) lbl.className = 'overlay-overall-label';
@@ -2151,7 +2189,9 @@ analysisKeys.forEach(function(key) {
         s.data.forEach(function(d,i){ var x=xPos(d.year),y=yPos(d.ir); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y); });
         ctx.stroke();
         ctx.fillStyle = s.color;
-        s.data.forEach(function(d){ ctx.beginPath(); ctx.arc(xPos(d.year),yPos(d.ir),s.key==='_overall'?4:3,0,Math.PI*2); ctx.fill(); });
+        if (!hideInterceptsState.on) {
+          s.data.forEach(function(d){ ctx.beginPath(); ctx.arc(xPos(d.year),yPos(d.ir),s.key==='_overall'?4:3,0,Math.PI*2); ctx.fill(); });
+        }
       });
 
       // Y-axis label
@@ -2663,7 +2703,7 @@ function getSignificanceClass(row) {
       seriesList.forEach(function(s, idx) {
         var wrap = document.createElement('span');
         wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
-        var borderC = isDkMp ? 'rgba(255,255,255,0.4)' : s.color;
+        var borderC = isDkMp ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.15)';
         var lbl = document.createElement('label');
         lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isDkMp?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+'color:'+s.color+';user-select:none;';
         var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.style.accentColor=s.color;
@@ -3068,15 +3108,15 @@ registerSectionBuilder('pipeline-info', function buildPipelineInfo() {
   var linkCards = [];
 
   [].concat(pi.execution_reports || []).forEach(function(f) {
-    linkCards.push({ icon: '&#128202;', title: 'Execution Report', desc: f, path: 'pipeline_info/' + f });
+    var title = f.indexOf('timeline') >= 0 ? 'Execution Timeline' : 'Execution Report';
+    linkCards.push({ title: title, desc: f, path: 'pipeline_info/' + f });
   });
   [].concat(pi.pipeline_dags || []).forEach(function(f) {
-    linkCards.push({ icon: '&#128296;', title: 'Pipeline DAG', desc: f, path: 'pipeline_info/' + f });
+    linkCards.push({ title: 'Pipeline DAG', desc: f, path: 'pipeline_info/' + f });
   });
   if (linkCards.length > 0) {
     linksEl.innerHTML = linkCards.map(function(lc) {
       return '<a href="' + esc(lc.path) + '" class="pipeline-link-card" target="_blank">' +
-        '<div class="pl-icon">' + lc.icon + '</div>' +
         '<div><div class="pl-title">' + esc(lc.title) + '</div><div class="pl-desc">' + esc(lc.desc) + '</div></div></a>';
     }).join('');
   } else {
