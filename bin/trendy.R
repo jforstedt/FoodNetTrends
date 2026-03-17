@@ -361,7 +361,7 @@ tryCatch({
       } else if (opts$pathogen == "SALMONELLA") {
         if ("serotypesummary" %in% names(mmwrdata_filtered)) {
           mmwrdata_filtered <- mmwrdata_filtered %>%
-            filter(serotypesummary == opts$subgroup)
+            filter(toupper(serotypesummary) == toupper(opts$subgroup))
           report_progress("ANALYSIS", message=paste("Filtered Salmonella to serotype:", opts$subgroup))
         } else {
           stop("serotypesummary column not found - cannot filter by serotype")
@@ -369,11 +369,11 @@ tryCatch({
       } else {
         if ("serotypesummary" %in% names(mmwrdata_filtered)) {
           mmwrdata_filtered <- mmwrdata_filtered %>%
-            filter(serotypesummary == opts$subgroup | is.na(serotypesummary))
+            filter(toupper(serotypesummary) == toupper(opts$subgroup) | is.na(serotypesummary))
           report_progress("ANALYSIS", message=paste("Filtered", opts$pathogen, "to subgroup:", opts$subgroup))
         } else if ("serogroup" %in% names(mmwrdata_filtered)) {
           mmwrdata_filtered <- mmwrdata_filtered %>%
-            filter(serogroup == opts$subgroup | is.na(serogroup))
+            filter(toupper(serogroup) == toupper(opts$subgroup) | is.na(serogroup))
           report_progress("ANALYSIS", message=paste("Filtered", opts$pathogen, "to serogroup:", opts$subgroup))
         }
       }
