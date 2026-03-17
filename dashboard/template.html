@@ -1544,10 +1544,10 @@ analysisKeys.forEach(function(key) {
   var rpSub = (D.preprocessing || {}).resource_profile_subgroups;
   if (rp && rp.length) {
     // Build set of analysis keys and parent pathogens that were actually run
-    var analysisKeys = {};
+    var runAnalysisKeys = {};
     var analyzedPathogens = {};
     Object.keys(D.analyses || {}).forEach(function(k) {
-      analysisKeys[k] = true;
+      runAnalysisKeys[k] = true;
       var a = D.analyses[k];
       if (a.pathogen) analyzedPathogens[a.pathogen] = true;
     });
@@ -1565,7 +1565,7 @@ analysisKeys.forEach(function(key) {
           var parentPathogen = parts[0];
           var subgroup = parts[1];
           var key = parentPathogen + '_' + subgroup;
-          return analysisKeys[key];
+          return runAnalysisKeys[key];
         }
         return false;
       });
