@@ -719,6 +719,7 @@ img { max-width: 100%; display: block; }
         <tbody></tbody>
       </table>
     </div>
+    <div id="resource-key" style="display:none;margin-top:12px;padding:8px 12px;font-size:.72rem;color:var(--text-muted);line-height:1.6;border-top:1px solid var(--border-color);"></div>
   </div>
 
   <div class="card" style="margin-top:24px; display:none;" id="trace-card">
@@ -1602,6 +1603,19 @@ analysisKeys.forEach(function(key) {
         return '<td>' + esc(val != null ? val : '') + '</td>';
       }).join('') + '</tr>';
     }).join('');
+
+    // Resource allocation key
+    var resKey = document.getElementById('resource-key');
+    if (resKey) {
+      var backend = (D.metadata || {}).stan_backend || 'rstan';
+      var isCmd = backend.toLowerCase().indexOf('cmdstanr') >= 0;
+      resKey.style.display = 'block';
+      resKey.innerHTML = '<strong>Resource Allocation Key (' + esc(backend) + '):</strong><br>' +
+        (isCmd
+          ? 'Memory: (chains &times; 2 + 4) GB &nbsp;&bull;&nbsp; CPUs: chains + 2<br>'
+          : 'Memory: (chains &times; 5 + 4) GB &nbsp;&bull;&nbsp; CPUs: chains + difficulty bonus (easy +2, moderate +4, hard +6, very_hard +8)<br>') +
+        'Time: easy 12h, moderate 24h, hard 48h, very_hard 72h &mdash; multiplied by attempt on retry';
+    }
   }
 
   // Overview thumbnails: one horizontal scroll row per analysis
@@ -1905,51 +1919,54 @@ analysisKeys.forEach(function(key) {
     // Control buttons
     var allCbs = [], allHdiCbs = [];
     if (controlsEl) {
-      var _bs = 'padding:4px 10px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
-      ['Select All','Deselect All','Toggle All HDI'].forEach(function(t){
+      var _bs = 'height:28px;line-height:28px;padding:0 8px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
+      ['Toggle All','Toggle HDI'].forEach(function(t){
         var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
         b.addEventListener('click', function(){
-          if (t === 'Select All') allCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
-          else if (t === 'Deselect All') allCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
+          if (t === 'Toggle All') allCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
           else allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
         });
         controlsEl.appendChild(b);
       });
-      // Export SVG button — positioned absolute top-right of card
-      var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs + 'position:absolute;top:8px;right:8px;z-index:5;';
+      // Export SVG button and image size note — positioned absolute top-right of card
+      var svgWrap = document.createElement('div'); svgWrap.style.cssText = 'position:absolute;top:8px;right:8px;z-index:5;display:flex;align-items:center;gap:8px;';
+      var svgNote = document.createElement('span'); svgNote.textContent = 'Note: Altering image size may distort it here, but should export correctly';
+      svgNote.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;';
+      var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs;
       svgBtn.addEventListener('click', function() {
         var rect = canvas.parentElement.getBoundingClientRect();
         exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-State Overlay \u2014 ' + label, showObserved: showObservedState.on, canvas: canvas });
       });
-      canvas.closest('.card').appendChild(svgBtn);
+      svgWrap.appendChild(svgNote); svgWrap.appendChild(svgBtn);
+      canvas.closest('.card').appendChild(svgWrap);
 
       // Show observed data toggle
       var obsLbl = document.createElement('label');
-      obsLbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;padding:4px 10px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
+      obsLbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;height:28px;padding:0 8px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
       var obsCb = document.createElement('input'); obsCb.type = 'checkbox'; obsCb.checked = false;
       obsCb.addEventListener('change', function() { showObservedState.on = obsCb.checked; drawStateOverlay(); });
       obsLbl.appendChild(obsCb); obsLbl.appendChild(document.createTextNode('Show observed'));
       controlsEl.appendChild(obsLbl);
 
       // Axis range and chart dimension controls — stacked vertically, right-aligned
-      var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
+      var _is = 'height:28px;padding:0 4px;font-size:.78rem;width:60px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
       var axisGroups = [
         {title:'Y-Axis', fields:[{lbl:'Min',attr:'ymin'},{lbl:'Max',attr:'ymax'}]},
         {title:'X-Axis', fields:[{lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'}]},
-        {title:'Image Size', fields:[{lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}], note:'May distort in report; exports correctly'}
+        {title:'Image Size', fields:[{lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}]}
       ];
       var axisContainer = document.createElement('div');
       axisContainer.style.cssText = 'display:flex;gap:12px;margin-left:auto;';
       axisGroups.forEach(function(g) {
         var grp = document.createElement('div');
-        grp.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+        grp.style.cssText = 'display:flex;flex-direction:column;gap:4px;align-items:flex-end;';
         var titleEl = document.createElement('div');
-        titleEl.style.cssText = 'font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;';
+        titleEl.style.cssText = 'font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;text-align:right;width:100%;';
         titleEl.textContent = g.title;
         grp.appendChild(titleEl);
         g.fields.forEach(function(f) {
           var sp = document.createElement('span');
-          sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);';
+          sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);text-align:right;';
           sp.textContent = f.lbl + ' ';
           var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
           inp.placeholder = 'auto';
@@ -1961,12 +1978,6 @@ analysisKeys.forEach(function(key) {
           sp.appendChild(inp);
           grp.appendChild(sp);
         });
-        if (g.note) {
-          var noteEl = document.createElement('div');
-          noteEl.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;max-width:120px;';
-          noteEl.textContent = g.note;
-          grp.appendChild(noteEl);
-        }
         axisContainer.appendChild(grp);
       });
       controlsEl.appendChild(axisContainer);
@@ -1989,14 +2000,14 @@ analysisKeys.forEach(function(key) {
       var bC = isOverall ? (isDkNow ? '#fff' : '#222') : s.color;
       var borderC = isDkNow ? 'rgba(255,255,255,0.4)' : bC;
       var lbl = document.createElement('label');
-      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isOverall?'':'color:'+bC+';')+'user-select:none;';
+      lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isDkNow?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+(isOverall?'':'color:'+bC+';')+'user-select:none;';
       if (isOverall) lbl.className = 'overlay-overall-label';
       var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=s.visible; cb.style.accentColor=bC;
       cb.addEventListener('change', function(){ seriesList[idx].visible=cb.checked; drawStateOverlay(); });
       allCbs.push(cb);
       lbl.appendChild(cb); lbl.appendChild(document.createTextNode(s.label));
       var hLbl = document.createElement('label');
-      hLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+borderC+';border-left:none;'+(isOverall?'':'color:'+bC+';')+'user-select:none;opacity:.75;';
+      hLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+borderC+';border-left:none;'+(isDkNow?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+(isOverall?'':'color:'+bC+';')+'user-select:none;opacity:.75;';
       if (isOverall) hLbl.className = 'overlay-overall-label';
       var hCb = document.createElement('input'); hCb.type='checkbox'; hCb.checked=false; hCb.style.accentColor=bC;
       hCb.addEventListener('change', function(){ seriesList[idx].hdiVisible=hCb.checked; drawStateOverlay(); });
@@ -2574,52 +2585,55 @@ function getSignificanceClass(row) {
       // Control buttons
       var allCbs = [], allHdiCbs = [];
       if (controlsEl) {
-        var _bs = 'padding:4px 10px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
-        ['Select All','Deselect All','Toggle All HDI'].forEach(function(t){
+        var _bs = 'height:28px;line-height:28px;padding:0 8px;font-size:.78rem;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);cursor:pointer;';
+        ['Toggle All','Toggle HDI'].forEach(function(t){
           var b = document.createElement('button'); b.textContent = t; b.style.cssText = _bs;
           b.addEventListener('click', function(){
-            if (t === 'Select All') allCbs.forEach(function(c){ c.checked=true; c.dispatchEvent(new Event('change')); });
-            else if (t === 'Deselect All') allCbs.forEach(function(c){ c.checked=false; c.dispatchEvent(new Event('change')); });
+            if (t === 'Toggle All') allCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
             else allHdiCbs.forEach(function(c){ c.checked=!c.checked; c.dispatchEvent(new Event('change')); });
           });
           controlsEl.appendChild(b);
         });
-        // Export SVG button — positioned absolute top-right of card
-        var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs + 'position:absolute;top:8px;right:8px;z-index:5;';
+        // Export SVG button and image size note — positioned absolute top-right of card
+        var svgWrap = document.createElement('div'); svgWrap.style.cssText = 'position:absolute;top:8px;right:8px;z-index:5;display:flex;align-items:center;gap:8px;';
+        var svgNote = document.createElement('span'); svgNote.textContent = 'Note: Altering image size may distort it here, but should export correctly';
+        svgNote.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;';
+        var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs;
         svgBtn.addEventListener('click', function() {
           var rect = canvas.parentElement.getBoundingClientRect();
           var sInfo = getStateInfo(st);
           exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-Pathogen Overlay \u2014 ' + (sInfo.name || st), showObserved: showObservedMp.on, canvas: canvas });
         });
-        canvas.closest('.card').appendChild(svgBtn);
+        svgWrap.appendChild(svgNote); svgWrap.appendChild(svgBtn);
+        canvas.closest('.card').appendChild(svgWrap);
 
         // Show observed data toggle
         var obsLblMp = document.createElement('label');
-        obsLblMp.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;padding:4px 10px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
+        obsLblMp.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;height:28px;padding:0 8px;border-radius:4px;border:1px solid var(--border-strong);background:var(--bg-card);color:var(--text-primary);user-select:none;';
         var obsCbMp = document.createElement('input'); obsCbMp.type = 'checkbox'; obsCbMp.checked = false;
         obsCbMp.addEventListener('change', function() { showObservedMp.on = obsCbMp.checked; drawOverlay(); });
         obsLblMp.appendChild(obsCbMp); obsLblMp.appendChild(document.createTextNode('Show observed'));
         controlsEl.appendChild(obsLblMp);
 
         // Axis range and chart dimension controls — stacked vertically, right-aligned
-        var _is = 'width:60px;font-size:.78rem;padding:2px 4px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
+        var _is = 'height:28px;padding:0 4px;font-size:.78rem;width:60px;border:1px solid var(--border-strong);border-radius:3px;background:var(--bg-input);color:var(--text-primary);';
         var axisGroups = [
           {title:'Y-Axis', fields:[{lbl:'Min',attr:'ymin'},{lbl:'Max',attr:'ymax'}]},
           {title:'X-Axis', fields:[{lbl:'From',attr:'xfrom'},{lbl:'To',attr:'xto'}]},
-          {title:'Image Size', fields:[{lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}], note:'May distort in report; exports correctly'}
+          {title:'Image Size', fields:[{lbl:'W',attr:'customW'},{lbl:'H',attr:'customH'}]}
         ];
         var axisContainer = document.createElement('div');
         axisContainer.style.cssText = 'display:flex;gap:12px;margin-left:auto;';
         axisGroups.forEach(function(g) {
           var grp = document.createElement('div');
-          grp.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+          grp.style.cssText = 'display:flex;flex-direction:column;gap:4px;align-items:flex-end;';
           var titleEl = document.createElement('div');
-          titleEl.style.cssText = 'font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;';
+          titleEl.style.cssText = 'font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;text-align:right;width:100%;';
           titleEl.textContent = g.title;
           grp.appendChild(titleEl);
           g.fields.forEach(function(f) {
             var sp = document.createElement('span');
-            sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);';
+            sp.style.cssText = 'font-size:.78rem;color:var(--text-secondary);text-align:right;';
             sp.textContent = f.lbl + ' ';
             var inp = document.createElement('input'); inp.type = 'number'; inp.style.cssText = _is;
             inp.placeholder = 'auto';
@@ -2631,12 +2645,6 @@ function getSignificanceClass(row) {
             sp.appendChild(inp);
             grp.appendChild(sp);
           });
-          if (g.note) {
-            var noteEl = document.createElement('div');
-            noteEl.style.cssText = 'font-size:.68rem;color:var(--text-muted);font-style:italic;max-width:120px;';
-            noteEl.textContent = g.note;
-            grp.appendChild(noteEl);
-          }
           axisContainer.appendChild(grp);
         });
         controlsEl.appendChild(axisContainer);
@@ -2657,13 +2665,13 @@ function getSignificanceClass(row) {
         wrap.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
         var borderC = isDkMp ? 'rgba(255,255,255,0.4)' : s.color;
         var lbl = document.createElement('label');
-        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';color:'+s.color+';user-select:none;';
+        lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 8px;border-radius:4px 0 0 4px;border:1px solid '+borderC+';'+(isDkMp?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+'color:'+s.color+';user-select:none;';
         var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.style.accentColor=s.color;
         cb.addEventListener('change', function(){ seriesList[idx].visible=cb.checked; drawOverlay(); });
         allCbs.push(cb);
         lbl.appendChild(cb); lbl.appendChild(document.createTextNode(s.label));
         var hdiLbl = document.createElement('label');
-        hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+borderC+';border-left:none;color:'+s.color+';user-select:none;opacity:.75;';
+        hdiLbl.style.cssText = 'display:inline-flex;align-items:center;gap:3px;font-size:.75rem;cursor:pointer;padding:4px 6px;border-radius:0 4px 4px 0;border:1px solid '+borderC+';border-left:none;'+(isDkMp?'':'box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.12);')+'color:'+s.color+';user-select:none;opacity:.75;';
         var hdiCb = document.createElement('input'); hdiCb.type='checkbox'; hdiCb.checked=false; hdiCb.style.accentColor=s.color;
         hdiCb.addEventListener('change', function(){ seriesList[idx].hdiVisible=hdiCb.checked; drawOverlay(); });
         allHdiCbs.push(hdiCb);
@@ -3080,7 +3088,10 @@ registerSectionBuilder('pipeline-info', function buildPipelineInfo() {
     var traceCard = document.getElementById('trace-card');
     traceCard.style.display = 'block';
     var traceTable = document.getElementById('trace-table');
-    var traceCols = Object.keys(pi.trace_data[0]).filter(function(c) { return c !== 'hash'; });
+    var traceColsRaw = Object.keys(pi.trace_data[0]).filter(function(c) { return c !== 'hash'; });
+    var preferredOrder = ['task_id','name','status','cpus','%cpu','memory','peak_rss','realtime'];
+    var traceCols = preferredOrder.filter(function(c) { return traceColsRaw.indexOf(c) >= 0; });
+    traceColsRaw.forEach(function(c) { if (traceCols.indexOf(c) < 0) traceCols.push(c); });
     var traceColDefs = traceCols.map(function(c) {
       return { field: c, title: c, style: c === 'task_id' ? 'width:50px' : '' };
     });
