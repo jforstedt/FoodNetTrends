@@ -25,6 +25,7 @@ def parseMetricsRow = { row ->
         overdispersion: (row.overdispersion in [null, '', 'NA'] ? 0 : row.overdispersion as Double),
         state_cv: (row.state_cv in [null, '', 'NA'] ? 0 : row.state_cv as Double),
         median_count: (row.median_count in [null, '', 'NA'] ? 0 : row.median_count as Double),
+        n_years: (row.n_years in [null, '', 'NA'] ? 0 : row.n_years as Integer),
         low_count_penalty: (row.low_count_penalty in [null, '', 'NA'] ? 0 : row.low_count_penalty as Double),
         year_gap_penalty: (row.year_gap_penalty in [null, '', 'NA'] ? 0 : row.year_gap_penalty as Double),
         difficulty: (row.difficulty in [null, '', 'NA'] ? 0 : row.difficulty as Double),
@@ -133,6 +134,10 @@ def buildGroupingWithMetrics = { pathogenGrouping, metricsChannel ->
                         sparse_cells: pathogenMetrics.sparse_cells,
                         overdispersion: pathogenMetrics.overdispersion,
                         state_cv: pathogenMetrics.state_cv,
+                        median_count: pathogenMetrics.median_count,
+                        n_years: pathogenMetrics.n_years,
+                        low_count_penalty: pathogenMetrics.low_count_penalty,
+                        year_gap_penalty: pathogenMetrics.year_gap_penalty,
                         difficulty: pathogenMetrics.difficulty,
                         difficulty_category: pathogenMetrics.difficulty_category
                     ]

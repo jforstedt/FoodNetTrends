@@ -229,6 +229,10 @@ process RESOURCE_PROFILER {
             sparse_cells = double(),
             overdispersion = double(),
             state_cv = double(),
+            median_count = double(),
+            n_years = integer(),
+            low_count_penalty = double(),
+            year_gap_penalty = double(),
             difficulty = double(),
             difficulty_category = character()
         )
