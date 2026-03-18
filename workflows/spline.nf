@@ -24,6 +24,9 @@ def parseMetricsRow = { row ->
         sparse_cells: (row.sparse_cells in [null, '', 'NA'] ? 0 : row.sparse_cells as Double),
         overdispersion: (row.overdispersion in [null, '', 'NA'] ? 0 : row.overdispersion as Double),
         state_cv: (row.state_cv in [null, '', 'NA'] ? 0 : row.state_cv as Double),
+        median_count: (row.median_count in [null, '', 'NA'] ? 0 : row.median_count as Double),
+        low_count_penalty: (row.low_count_penalty in [null, '', 'NA'] ? 0 : row.low_count_penalty as Double),
+        year_gap_penalty: (row.year_gap_penalty in [null, '', 'NA'] ? 0 : row.year_gap_penalty as Double),
         difficulty: (row.difficulty in [null, '', 'NA'] ? 0 : row.difficulty as Double),
         difficulty_category: (row.difficulty_category in [null, '', 'NA'] ? 'moderate' : row.difficulty_category)
     ]

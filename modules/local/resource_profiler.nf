@@ -69,26 +69,38 @@ process RESOURCE_PROFILER {
         group_by(pathogen, state, year) %>%
         summarise(count = n(), .groups = 'drop')
 
+    # Max years across all pathogens (for relative year coverage)
+    max_years_global <- max(state_year_counts %>% group_by(pathogen) %>%
+        summarise(yrs = n_distinct(year), .groups = 'drop') %>% pull(yrs), na.rm = TRUE)
+
     difficulty_metrics <- state_year_counts %>%
         group_by(pathogen) %>%
         summarise(
             zero_frac = sum(count == 0) / n(),
             sparse_cells = sum(count < 5) / n(),
-            overdispersion = ifelse(mean(count) > 0, var(count) / mean(count), 0),
+            overdispersion = ifelse(mean(count) > 0 & n() > 1, var(count, na.rm = TRUE) / mean(count), 0),
             state_cv = ifelse(
-                mean(count) > 0,
-                sd(tapply(count, state, mean)) / mean(count),
+                mean(count) > 0 & n_distinct(state) > 1,
+                sd(tapply(count, state, mean), na.rm = TRUE) / mean(count),
                 0
             ),
+            median_count = median(count),
+            n_years = n_distinct(year),
             .groups = 'drop'
         ) %>%
         mutate(
             overdispersion = ifelse(is.na(overdispersion), 0, overdispersion),
             state_cv = ifelse(is.na(state_cv), 0, state_cv),
+            # Low median count means wider posteriors, harder sampling
+            low_count_penalty = pmin(1.0 / pmax(log2(median_count + 1), 0.5), 2),
+            # Fewer years = less data for spline, harder fit
+            year_gap_penalty = 1.0 - (n_years / max_years_global),
             difficulty = 2.0 * zero_frac +
                          1.5 * sparse_cells +
                          1.0 * pmin(overdispersion / 100, 2) +
-                         0.5 * pmin(state_cv, 2),
+                         0.5 * pmin(state_cv, 2) +
+                         1.5 * low_count_penalty +
+                         1.0 * year_gap_penalty,
             difficulty_category = case_when(
                 difficulty >= 4.5 ~ "very_hard",
                 difficulty >= 3.0 ~ "hard",
@@ -155,13 +167,21 @@ process RESOURCE_PROFILER {
                     sd(tapply(count, state, mean), na.rm = TRUE) / mean(count),
                     0
                 ),
+                median_count = median(count),
+                n_years = n_distinct(year),
                 .groups = 'drop'
             ) %>%
             mutate(
+                overdispersion = ifelse(is.na(overdispersion), 0, overdispersion),
+                state_cv = ifelse(is.na(state_cv), 0, state_cv),
+                low_count_penalty = pmin(1.0 / pmax(log2(median_count + 1), 0.5), 2),
+                year_gap_penalty = 1.0 - (n_years / max_years_global),
                 difficulty = 2.0 * zero_frac +
                              1.5 * sparse_cells +
                              1.0 * pmin(overdispersion / 100, 2) +
-                             0.5 * pmin(state_cv, 2),
+                             0.5 * pmin(state_cv, 2) +
+                             1.5 * low_count_penalty +
+                             1.0 * year_gap_penalty,
                 difficulty_category = case_when(
                     difficulty >= 4.5 ~ "very_hard",
                     difficulty >= 3.0 ~ "hard",
