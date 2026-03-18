@@ -39,7 +39,7 @@ When pulling from GitHub, use `nextflow run cdcgov/foodnettrends` instead of `ne
 
 ### Interactive launcher
 
-The `run_workflow.sh` script provides an interactive menu-driven launcher for the pipeline on CDC HPC systems. It handles module loading (Nextflow, Singularity, Java), prompts for pathogen selection and subgroup options (e.g., STEC O157/non-O157 split, Salmonella serotype selection), Stan backend choice, and optional configuration files. It can also launch the pipeline in the background and start the monitor script automatically.
+The `run_workflow.sh` script provides an interactive menu-driven launcher for the pipeline on CDC HPC systems. It handles module loading (Nextflow, Singularity, Java), prompts for pathogen selection and subgroup options (e.g., STEC O157/non-O157 split, Salmonella serotype selection), Stan backend choice, and optional configuration files. When serotype subgroups are requested, preprocessing is triggered automatically. The launcher can also run the pipeline in the background.
 
 ```bash
 ./run_workflow.sh
@@ -84,9 +84,10 @@ When `--pathogen` is omitted and preprocessed data is provided, the pipeline can
 --serotype_config /path/to/serotype_config.csv      # Serotype recoding rules
 --catchment_config /path/to/catchment_config.csv    # Catchment area definitions
 --matching_sensitivity MEDIUM                        # Pathogen name matching: STRICT, MEDIUM, or RELAXED (default: MEDIUM)
+--data_rules /path/to/data_rules.csv                # Data cleaning rules (county fixes, exclusions, pathogen filters)
 ```
 
-See [configuration.md](configuration.md) for details on the CSV formats and matching sensitivity levels.
+See [configuration.md](configuration.md) for details on the CSV formats, data rules, and matching sensitivity levels.
 
 #### Output options
 
@@ -116,19 +117,43 @@ chains: 4
 iterations: 2000
 ```
 
+### Parameter presets
+
+Pre-built parameter files are provided in `params/`:
+
+| File | Description |
+|------|-------------|
+| `params/publication.yml` | Publication-quality settings (6 chains, 10001 iterations, adapt_delta 0.99) matching Weller et al. 2026 |
+| `params/cmdstanr.yml` | Same as publication but with `cmdstanr` backend for lower memory usage |
+| `params/test.yml` | Quick validation (2 chains, 200 iterations, single pathogen) |
+
+```bash
+nextflow run main.nf -profile singularity -params-file params/publication.yml
+```
+
+### Test profile
+
+Synthetic test data is included in `test_data/` (pre-cleaned CSV files for CAMPYLOBACTER and SALMONELLA). Run a quick validation with:
+
+```bash
+nextflow run main.nf -profile test,singularity
+```
+
+The test profile uses 1 chain with 100 iterations, includes dashboard generation, and caps resources at 2 CPUs / 8 GB for CI compatibility. See `conf/test.config` for the full set of overrides.
+
 ### Profiles
 
 The pipeline supports the following profiles, defined across `nextflow.config` and `conf/fnt.scicomp.config`:
 
 | Profile | Source | Description |
 |---------|--------|-------------|
-| `test` | nextflow.config | Minimal test run: 2 chains, 50 iterations, CAMPYLOBACTER only, dashboard skipped |
+| `test` | nextflow.config | Minimal test run: 1 chain, 100 iterations, CAMPYLOBACTER + SALMONELLA, dashboard included, 2 CPUs / 8 GB cap |
 | `singularity` | nextflow.config + fnt.scicomp.config | Run with Singularity containers (recommended for HPC) |
 | `production` | nextflow.config | Production settings: 4 chains, 2000 iterations, adapt_delta 0.99, max_treedepth 15 |
 | `debug` | nextflow.config + fnt.scicomp.config | Verbose logging, hash dumping, NXF_DEBUG=3, bash -x tracing |
-| `conda` | fnt.scicomp.config | Use Conda environments instead of containers; loads miniconda module |
+| `conda` | fnt.scicomp.config | Use Conda environments instead of containers; loads `miniconda/24.11.1` module |
 | `local` | fnt.scicomp.config | Run all processes on the local machine (4 CPUs, 16 GB); useful for interactive qlogin testing |
-| `scicomp_rosalind` | fnt.scicomp.config | CDC Rosalind HPC cluster: SGE executor, queue routing (short.q/all.q/long.q), scratch dirs |
+| `scicomp_rosalind` | fnt.scicomp.config | CDC Rosalind HPC cluster: SGE executor, `short.q` routing, scratch dirs on `/scicomp/scratch` |
 | `training` | fnt.scicomp.config | Routes all jobs to `training.q`; combine with `scicomp_rosalind` |
 
 Multiple profiles can be combined with commas. Order matters -- later profiles override earlier ones.
@@ -147,7 +172,7 @@ Multiple profiles can be combined with commas. Order matters -- later profiles o
 -profile singularity,local
 ```
 
-Note that lightweight processes (PREPROCESS, RESOURCE_PROFILER, DASHBOARD) always run on the local executor regardless of profile, to avoid scheduler overhead.
+Lightweight processes (PREPROCESS, RESOURCE_PROFILER, DASHBOARD) use the `process_low` resource label to minimize scheduler overhead.
 
 ### Updating the pipeline
 
@@ -189,10 +214,16 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 
 ## Resource allocation
 
-The default resource settings work for most analyses. The TRENDY process dynamically allocates CPUs based on the number of chains (one CPU per chain) and memory based on data complexity. If a job exits with a retriable error code, it is automatically resubmitted with higher resource requests (up to 3 retries).
+The TRENDY process uses difficulty-based resource profiling. The RESOURCE_PROFILER module analyzes data complexity per pathogen (row counts, site counts, zero fraction, overdispersion, state-level CV) and assigns a difficulty category: easy, moderate, hard, or very_hard. The TRENDY process then allocates resources dynamically:
+
+- **CPUs**: One CPU per chain plus additional threads for BLAS, scaled by difficulty (2-8 extra threads for rstan; 2 for cmdstanr).
+- **Memory**: Backend-aware -- rstan uses 5 GB per chain (in-memory samples), cmdstanr uses 2 GB per chain (disk-backed samples), plus a 4 GB base.
+- **Time**: 12 hours (easy) to 72 hours (very_hard) per attempt, with automatic retry scaling.
+
+If a job exits with a retriable error code (e.g., OOM, segfault), it is automatically resubmitted with higher resource requests (up to 3 retries).
 
 Resource limits vary by profile:
-- **Default (SGE)**: up to 32 CPUs, 128 GB memory, 240 hours
+- **Default (SGE)**: up to 16 CPUs, 128 GB memory, 240 hours
 - **scicomp_rosalind**: up to 44 CPUs, 356 GB memory, 28 days
 - **local**: up to 4 CPUs, 16 GB memory, 4 hours
 

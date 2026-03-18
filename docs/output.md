@@ -24,6 +24,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
   - `clean_mmwr.csv`: Cleaned and filtered MMWR data with calculated incidence rates.
   - `clean_mmwr_preprocessing_report.csv`: Pathogen standardization report showing how pathogen names were matched and recoded during preprocessing.
   - `resource_profile.csv`: Per-pathogen data metrics (row counts, site counts, complexity scores) used for resource allocation.
+  - `resource_profile_subgroups.csv`: Subgroup-level data metrics (row counts, difficulty scores) for pathogen subgroups such as STEC O157/non-O157 or Salmonella serotypes.
   - `metadata_states.csv`: State-level metadata summary (year ranges, case counts).
   - `metadata_cidt.csv`: Diagnostic method (CIDT) distribution summary.
   - `metadata_travel.csv`: Travel status distribution summary.
@@ -46,6 +47,7 @@ The preprocessing step reads the raw FoodNet MMWR SAS data file along with censu
   - `*_convergence_diagnostics.csv`: Convergence diagnostic metrics including R-hat, bulk ESS, tail ESS, and divergent transition counts for each model parameter.
   - `*_site_trends.png`: Trend plots showing fitted splines with credible intervals by surveillance site.
   - `*_overall_trend.png`: Overall trend plot showing the fitted spline with credible intervals across all sites.
+  - `*_<STATE>_trend.png`: Per-state individual trend plots showing fitted splines with credible intervals for each FoodNet site state.
   - `*_error.txt`: Error report for pathogens/subgroups where model fitting failed. Contains the error message and stack trace. Only produced when a model fails.
 
 </details>
@@ -79,4 +81,4 @@ The dashboard aggregates results from all pathogen models into a single interact
 
 </details>
 
-[Nextflow](https://www.nextflow.io/docs/latest/tracing.html) provides functionality for generating reports relevant to the running and execution of the pipeline. These reports help troubleshoot errors and provide information about launch commands, run times, and resource usage. The trace file is also used by `bin/monitor_pipeline.sh` for real-time progress monitoring.
+[Nextflow](https://www.nextflow.io/docs/latest/tracing.html) provides functionality for generating reports relevant to the running and execution of the pipeline. These reports help troubleshoot errors and provide information about launch commands, run times, and resource usage.

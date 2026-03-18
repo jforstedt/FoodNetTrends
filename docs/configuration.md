@@ -2,6 +2,7 @@
 
 ## Table of Contents
 - [Nextflow configuration files](#nextflow-configuration-files)
+- [Data cleaning rules](#data-cleaning-rules)
 - [Serotype configuration](#serotype-configuration)
 - [Catchment configuration](#catchment-configuration)
 - [Pathogen name matching](#pathogen-name-matching)
@@ -17,8 +18,8 @@ The pipeline's behavior is controlled by several Nextflow config files that are 
 | `nextflow.config` | Main config: default parameter values, SGE executor settings, process resource allocation, Singularity/registry setup, trace/report/timeline/DAG output paths, and profile definitions (`test`, `singularity`, `production`, `debug`). |
 | `conf/base.config` | Base resource defaults and retry strategy. Defines process labels (`process_single`, `process_low`, `process_medium`, `process_high`, `process_long`, `process_high_memory`) used by DSL2 modules. |
 | `conf/fnt.scicomp.config` | CDC SciComp HPC profiles: `singularity`, `conda`, `local`, `scicomp_rosalind`, `training`, `debug`. Also defines special queue labels (`process_gpu`, `process_extralong`, `process_highmem`). |
-| `conf/modules.config` | DSL2 module publishing paths and dynamic resource allocation for the TRENDY process (memory scaled by data complexity). |
-| `conf/test.config` | Test profile overrides: 2 chains, 50 iterations, CAMPYLOBACTER only, dashboard skipped, reduced resource limits for CI. |
+| `conf/modules.config` | DSL2 module publishing paths. TRENDY resource allocation (CPUs, memory, time) is defined in `modules/local/trendy.nf` where difficulty metrics are accessible. |
+| `conf/test.config` | Test profile overrides: 1 chain, 100 iterations, CAMPYLOBACTER + SALMONELLA, dashboard included, resource limits capped at 2 CPUs / 8 GB / 1 hour for CI. |
 
 To override settings without editing these files, use Nextflow's `-c` flag:
 
@@ -30,6 +31,50 @@ Or pass individual parameters on the command line with `--` (double hyphen):
 
 ```bash
 nextflow run main.nf -profile singularity --chains 4 --iterations 2000
+```
+
+## Data cleaning rules
+
+The `--data_rules` parameter accepts a CSV file that defines data cleaning operations applied during preprocessing. A bundled default is provided at `analysis_configs/data_rules.csv`.
+
+### CSV format
+
+| Column | Description | Required |
+|--------|-------------|----------|
+| rule_type | Type of rule: `county_fix`, `county_remove`, `site_exclude`, or `pathogen_filter` | Yes |
+| match_column | Column to match against (e.g., `county`, `siteid`, `pathogen`) | Yes |
+| match_value | Value to match in that column | Yes |
+| replacement | Replacement value (for `county_fix` rules; leave empty for removals) | No |
+| condition | Optional condition expression (e.g., `year < 2023`, `cste == 'YES'`) | No |
+| notes | Documentation for the rule | No |
+
+### Rule types
+
+- **county_fix**: Corrects county name typos or inconsistencies (e.g., `ST. MARYS` to `ST. MARY'S`).
+- **county_remove**: Removes records matching the county value (e.g., `OUT OF STATE`, `UNKNOWN`).
+- **site_exclude**: Excludes records for a site ID, optionally with a condition (e.g., exclude COEX before 2023).
+- **pathogen_filter**: Applies pathogen-specific filters (e.g., restrict Listeria to invasive cases where `cste == 'YES'`).
+
+### Example
+
+```csv
+rule_type,match_column,match_value,replacement,condition,notes
+county_fix,county,ST. MARYS,ST. MARY'S,,Apostrophe correction
+county_fix,county,PRINCE GEORGES,PRINCE GEORGE'S,,Apostrophe correction
+county_remove,county,OUT OF STATE,,,Remove out-of-state records
+county_remove,county,UNKNOWN,,,Remove unknown counties
+site_exclude,siteid,COEX,,year < 2023,Exclude COEX pre-2023 (CO expansion)
+pathogen_filter,pathogen,LISTERIA,,cste == 'YES',Invasive Listeria only (CSTE definition)
+```
+
+### Usage
+
+```bash
+nextflow run main.nf \
+  --mmwrFile data/mmwr.sas7bdat \
+  --censusFileB data/census_b.sas7bdat \
+  --censusFileP data/census_p.sas7bdat \
+  --data_rules analysis_configs/data_rules.csv
 ```
 
 ## Serotype configuration

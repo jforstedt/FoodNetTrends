@@ -6,16 +6,19 @@ A Nextflow pipeline for Bayesian hierarchical spline modeling of CDC FoodNet sur
 
 ## Features
 
-1. Preprocesses raw MMWR surveillance data with configurable pathogen name standardization
+1. Preprocesses raw MMWR surveillance data with configurable pathogen name standardization (case-insensitive matching at STRICT, MEDIUM, or RELAXED sensitivity)
 2. Automatic detection of available pathogens from input data (`AUTO_DISCOVER` mode)
 3. Flexible pathogen grouping for STEC (O157 / non-O157) and Salmonella (by serotype)
-4. Bayesian hierarchical models with splines via `brms` (RStan or CmdStanR backend)
-5. Incidence rate estimates with uncertainty intervals per catchment site
-6. Relative risk and percent-change calculations across reference periods
-7. Interactive HTML dashboard summarizing results across pathogens
-8. Resource profiling to estimate compute requirements per pathogen
-9. Configurable serotype recoding and catchment area definitions
-10. Self-contained HTML results dashboard with interactive visualizations
+4. Auto-preprocessing for serotype selection -- the interactive launcher triggers preprocessing automatically when serotype subgroups are requested
+5. Bayesian hierarchical models with splines via `brms` (RStan or CmdStanR backend)
+6. Difficulty-based resource profiling: the RESOURCE_PROFILER module estimates data complexity per pathogen, and the TRENDY process dynamically allocates CPUs, memory, and wall time based on difficulty category (easy / moderate / hard / very_hard)
+7. Incidence rate estimates with uncertainty intervals per catchment site
+8. Per-state individual trend plots alongside site-level and overall trend charts
+9. Relative risk and percent-change calculations across reference periods
+10. Convergence diagnostics (R-hat, ESS, divergent transitions) exported per model
+11. Data cleaning rules via `data_rules.csv` for county fixes, exclusions, and pathogen filters
+12. Interactive HTML dashboard summarizing results across pathogens
+13. Configurable serotype recoding and catchment area definitions via CSV
 
 ## Requirements
 
@@ -31,13 +34,33 @@ module load nextflow/24.10.4 singularity/4.1.4 java/17.0.6
 
 ## Container Setup
 
-The pipeline runs inside a Singularity container built from `foodnet.def`. Build it before your first run:
+The pipeline runs inside a Singularity container built from `foodnet.def` using [pixi](https://pixi.sh) for reproducible R dependency management. Use the provided build script:
+
+```bash
+./build_container.sh
+```
+
+The script checks for `pixi` and `singularity`, generates a lock file from `foodnet.yml` if needed, builds the container, and verifies that core R packages and CmdStan are installed. You can also build manually:
 
 ```bash
 singularity build foodnet.sif foodnet.def
 ```
 
-The container includes R, brms, RStan, CmdStan, and all dependencies, managed via [pixi](https://pixi.sh). The built image must be in the launch directory (or update `process.container` in `nextflow.config`).
+The container includes R, brms, RStan, CmdStan (pre-compiled at `/opt/cmdstan`), and all dependencies. The built image (`foodnet.sif`) must be in the launch directory (or update `process.container` in `nextflow.config`).
+
+## Test Profile
+
+Synthetic test data is included in `test_data/`. Run a quick validation with:
+
+```bash
+nextflow run main.nf -profile test,singularity
+```
+
+This uses pre-cleaned CSV files, fits CAMPYLOBACTER and SALMONELLA with minimal MCMC settings (1 chain, 100 iterations), and caps resources at 2 CPUs / 8 GB for CI compatibility.
+
+## CI
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push and PR to `main`. It lints shell scripts with shellcheck, validates R syntax in `bin/` and `dashboard/`, checks `nextflow_schema.json`, and validates the Nextflow config with the test profile.
 
 ## Input Data
 
@@ -46,6 +69,22 @@ The container includes R, brms, RStan, CmdStan, and all dependencies, managed vi
 | `--mmwrFile` | Path to FoodNet MMWR SAS data file (`.sas7bdat`) |
 | `--censusFileB` | Census data for bacterial pathogens (`.sas7bdat`) |
 | `--censusFileP` | Census data for parasitic pathogens (`.sas7bdat`) |
+
+## Parameter Presets
+
+Pre-built parameter files are provided in `params/`:
+
+| File | Description |
+|------|-------------|
+| `params/publication.yml` | Publication-quality settings (6 chains, 10001 iterations, adapt_delta 0.99) |
+| `params/cmdstanr.yml` | Same as publication but with `cmdstanr` backend for lower memory usage |
+| `params/test.yml` | Quick validation (2 chains, 200 iterations, single pathogen) |
+
+Usage:
+
+```bash
+nextflow run main.nf -profile singularity -params-file params/publication.yml
+```
 
 ## Parameters
 
@@ -72,6 +111,7 @@ When `--pathogen` is `null` and not `AUTO_DISCOVER`, the workflow defaults to `C
 | `--cidt` | `CIDT+,CX+,PARASITIC` | Diagnostic method types to include |
 | `--states` | `null` (all) | Comma-separated state filter |
 | `--matching_sensitivity` | `MEDIUM` | Pathogen name matching: `STRICT`, `MEDIUM`, or `RELAXED` |
+| `--data_rules` | `null` | Path to CSV with data cleaning rules (county fixes, exclusions) |
 
 ### Preprocessing
 
@@ -91,12 +131,15 @@ When `--pathogen` is `null` and not `AUTO_DISCOVER`, the workflow defaults to `C
 | `--seed` | `123` | Random seed |
 | `--stan_backend` | `rstan` | Stan backend: `rstan` or `cmdstanr` |
 
+The `cmdstanr` backend uses less memory per chain (2 GB vs 5 GB for rstan) because it writes samples to disk rather than holding them in memory. It requires CmdStan compiled in the container.
+
 ### Optional Configuration Files
 
 | Parameter | Description |
 |-----------|-------------|
 | `--serotype_config` | CSV with custom serotype recoding rules |
 | `--catchment_config` | CSV with custom catchment area definitions |
+| `--data_rules` | CSV with data cleaning rules (see `analysis_configs/data_rules.csv` for format) |
 
 Example configurations are in `analysis_configs/examples/`.
 
@@ -108,20 +151,27 @@ Example configurations are in `analysis_configs/examples/`.
 ./run_workflow.sh
 ```
 
-The launcher walks you through selecting pathogens, configuring STEC/Salmonella groupings, setting model parameters, and choosing whether to reuse existing preprocessed data. It submits the Nextflow command for you.
+The launcher walks you through selecting pathogens, configuring STEC/Salmonella groupings, setting model parameters, choosing the Stan backend, and selecting optional configuration files. When serotype subgroups are requested, preprocessing is triggered automatically. It submits the Nextflow command for you.
 
 ### Direct Nextflow Command
 
 ```bash
 nextflow run main.nf \
   -profile singularity \
-  \
   --mmwrFile "/path/to/mmwr.sas7bdat" \
   --censusFileB "/path/to/census_b.sas7bdat" \
   --censusFileP "/path/to/census_p.sas7bdat" \
   --pathogen "CAMPYLOBACTER,SALMONELLA" \
   --chains 2 \
   --iterations 500
+```
+
+### Using a Parameter Preset
+
+```bash
+nextflow run main.nf \
+  -profile singularity,scicomp_rosalind \
+  -params-file params/publication.yml
 ```
 
 ### Preprocessing Only
@@ -143,12 +193,12 @@ nextflow run main.nf \
 |---------|-------------|
 | `singularity` | Run with the Singularity container (required for most use cases) |
 | `production` | Production MCMC settings: 4 chains, 2000 iterations, adapt_delta=0.99, max_treedepth=15 |
-| `test` | Quick validation with minimal resources |
-| `scicomp_rosalind` | CDC SciComp Rosalind HPC with SGE queue routing |
+| `test` | Quick validation with synthetic test data, minimal MCMC (1 chain, 100 iterations), capped at 2 CPUs / 8 GB |
+| `scicomp_rosalind` | CDC SciComp Rosalind HPC: SGE executor, `short.q` routing, scratch dirs on `/scicomp/scratch` |
 | `training` | Routes jobs to `training.q` (combine with `scicomp_rosalind`) |
-| `local` | Local execution for interactive sessions (4 CPUs, 16 GB) |
-| `conda` | Conda-based environment instead of container |
-| `debug` | Verbose logging, hash dumps, hostname echo |
+| `local` | Local execution for interactive qlogin sessions (4 CPUs, 16 GB) |
+| `conda` | Conda-based environment instead of container (loads `miniconda/24.11.1` module) |
+| `debug` | Verbose logging: hash dumps, hostname echo, `bash -x` tracing, `NXF_DEBUG=3` |
 
 Combine profiles as needed, e.g.:
 
@@ -170,6 +220,7 @@ output/<projID>/
 │   ├── clean_mmwr.csv
 │   ├── clean_mmwr_preprocessing_report.csv
 │   ├── resource_profile.csv
+│   ├── resource_profile_subgroups.csv
 │   ├── metadata_states.csv
 │   ├── metadata_cidt.csv
 │   └── metadata_travel.csv
@@ -181,10 +232,11 @@ output/<projID>/
 │   ├── <PATHOGEN>_convergence_diagnostics.csv
 │   ├── <PATHOGEN>_site_trends.png
 │   ├── <PATHOGEN>_overall_trend.png
+│   ├── <PATHOGEN>_<STATE>_trend.png      # per-state trend plots
 │   ├── <PATHOGEN>_EstIRRCatch_*.csv
-│   └── <PATHOGEN>_error.txt          # only if model fitting fails
-└── dashboard/                    # unless --skip_dashboard true
-    └── dashboard.html
+│   └── <PATHOGEN>_error.txt              # only if model fitting fails
+└── dashboard/
+    └── dashboard.html                    # unless --skip_dashboard true
 ```
 
 ## Troubleshooting
