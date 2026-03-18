@@ -32,7 +32,7 @@ process TRENDY {
     // Backend-aware memory: rstan holds samples in memory, cmdstanr writes to disk
     memory = {
         def chains = params.chains ?: 2
-        def perChain = params.stan_backend == 'cmdstanr' ? 2 : 5
+        def perChain = params.stan_backend == 'cmdstanr' ? 2 : 8
         def req = ((chains * perChain + 4) as int).GB * task.attempt
         def max = params.max_memory as nextflow.util.MemoryUnit
         return req > max ? max : req
