@@ -83,7 +83,7 @@ if [ -f "$SIF" ]; then
     echo ""
     echo -e "${BLUE}Verifying R packages...${NC}"
     singularity exec "$SIF" Rscript -e "
-        pkgs <- c('brms','rstan','tidybayes','HDInterval','dplyr','ggplot2')
+        pkgs <- c('brms','rstan','cmdstanr','tidybayes','HDInterval','dplyr','ggplot2','argparse','stringdist','base64enc')
         ok <- sapply(pkgs, requireNamespace, quietly=TRUE)
         cat(paste(pkgs, ifelse(ok, 'OK', 'MISSING'), sep=': '), sep='\n')
         if (!all(ok)) quit(status=1)

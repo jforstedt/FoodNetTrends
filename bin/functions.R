@@ -245,10 +245,9 @@ PROPOSED_BM <- function(data, cores = 16, chains = 2, iterations = 500,
 
   set.seed(seed)
 
-  # Explicit priors for reproducibility across brms versions
+  # Pin shape prior; let brms auto-center the intercept on the data
   model_priors <- c(
-    prior(student_t(3, 0, 2.5), class = "Intercept"),
-    prior(inv_gamma(1, 1), class = "shape")
+    prior(inv_gamma(0.4, 0.3), class = "shape")
   )
 
   model <- tryCatch({
