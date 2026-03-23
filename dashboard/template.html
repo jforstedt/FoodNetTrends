@@ -1030,6 +1030,7 @@ function exportOverlayAsSVG(seriesList, options) {
   });
 
   // Lines and data points
+  var hideIntercepts = options.hideIntercepts || false;
   visibleSeries.forEach(function(s) {
     var pts = '';
     s.data.forEach(function(d) { pts += xPos(d.year) + ',' + yPos(d.ir) + ' '; });
@@ -1038,13 +1039,15 @@ function exportOverlayAsSVG(seriesList, options) {
     pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', s.color);
     pl.setAttribute('stroke-width', s.isOverall ? '3' : '2');
     svg.appendChild(pl);
-    s.data.forEach(function(d) {
-      var circ = document.createElementNS(ns, 'circle');
-      circ.setAttribute('cx', xPos(d.year)); circ.setAttribute('cy', yPos(d.ir));
-      circ.setAttribute('r', s.isOverall ? '4' : '3');
-      circ.setAttribute('fill', s.color);
-      svg.appendChild(circ);
-    });
+    if (!hideIntercepts) {
+      s.data.forEach(function(d) {
+        var circ = document.createElementNS(ns, 'circle');
+        circ.setAttribute('cx', xPos(d.year)); circ.setAttribute('cy', yPos(d.ir));
+        circ.setAttribute('r', s.isOverall ? '4' : '3');
+        circ.setAttribute('fill', s.color);
+        svg.appendChild(circ);
+      });
+    }
   });
 
   // Observed data dots (raw_ir values, 50% opacity)
@@ -1980,7 +1983,7 @@ analysisKeys.forEach(function(key) {
       var svgBtn = document.createElement('button'); svgBtn.textContent = 'Export SVG'; svgBtn.style.cssText = _bs;
       svgBtn.addEventListener('click', function() {
         var rect = canvas.parentElement.getBoundingClientRect();
-        exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-State Overlay \u2014 ' + label, showObserved: showObservedState.on, canvas: canvas });
+        exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-State Overlay \u2014 ' + label, showObserved: showObservedState.on, hideIntercepts: hideInterceptsState.on, canvas: canvas });
       });
       svgWrap.appendChild(svgNote); svgWrap.appendChild(svgBtn);
       canvas.closest('.card').appendChild(svgWrap);
@@ -2688,7 +2691,7 @@ function getSignificanceClass(row) {
         svgBtn.addEventListener('click', function() {
           var rect = canvas.parentElement.getBoundingClientRect();
           var sInfo = getStateInfo(st);
-          exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-Pathogen Overlay \u2014 ' + (sInfo.name || st), showObserved: showObservedMp.on, canvas: canvas });
+          exportOverlayAsSVG(seriesList, { width: rect.width || 700, title: 'Multi-Pathogen Overlay \u2014 ' + (sInfo.name || st), showObserved: showObservedMp.on, hideIntercepts: hideInterceptsMp.on, canvas: canvas });
         });
         svgWrap.appendChild(svgNote); svgWrap.appendChild(svgBtn);
         canvas.closest('.card').appendChild(svgWrap);
