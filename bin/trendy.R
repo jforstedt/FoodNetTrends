@@ -54,6 +54,8 @@ parser$add_argument("--travel", type="character", default="NO,UNKNOWN,YES",
                     help="List of travel types to include (default: NO,UNKNOWN,YES)")
 parser$add_argument("--cidt", type="character", default="CIDT+,CX+,PARASITIC",
                     help="List of diagnostic methods to include (default: CIDT+,CX+,PARASITIC)")
+parser$add_argument("--travel_stratify", type="character", default="false",
+                    help="Run separate models for domestic and travel-associated cases")
 
 parser$add_argument("--projID", type="character",
                     help="Project identifier for output naming")
@@ -125,6 +127,7 @@ if (opts$debug == FALSE) {
 
   travel <- CLEAN_LIST(opts$travel)
   cidt <- CLEAN_LIST(opts$cidt)
+  travel_stratify <- tolower(opts$travel_stratify) %in% c("true", "yes", "1")
 
   modelcores <- opts$cores
   chains <- opts$chains
@@ -148,6 +151,7 @@ if (opts$debug == FALSE) {
 
   travel <- CLEAN_LIST("NO,UNKNOWN,YES")
   cidt <- CLEAN_LIST("CIDT+,CX+,PARASITIC")
+  travel_stratify <- FALSE
 
   modelcores <- min(parallel::detectCores(), 8)
   chains <- 2
@@ -398,6 +402,9 @@ tryCatch({
 
   report_progress("ANALYSIS", message="Post-processing pathogen data")
 
+  if (travel_stratify) {
+    mmwrdata_for_stratify <- mmwrdata_filtered
+  }
   remove(mmwrdata_filtered)
   if (exists("mmwrdata")) remove(mmwrdata)
 
@@ -575,6 +582,129 @@ for (pathogen_name in target_pathogens) {
       }, error = function(e) {
         report_progress("WARNING", message=paste("Visualization skipped:", e$message))
       })
+    }
+
+    # Travel stratification: fit separate models for domestic and travel-associated cases
+    if (travel_stratify && exists("mmwrdata_for_stratify")) {
+      report_progress("TRAVEL_STRATIFY", message=paste("Starting travel stratification for", pathogen_name))
+
+      strat_data <- mmwrdata_for_stratify
+      if (!is.null(opts$pathogen)) {
+        strat_data <- strat_data %>% filter(pathogen == opts$pathogen)
+      }
+
+      domestic_data <- strat_data %>% filter(travelint %in% c("NO", "UNKNOWN"))
+      travel_data  <- strat_data %>% filter(travelint == "YES")
+
+      domestic_catch <- NULL
+      domestic_site  <- NULL
+      travel_catch   <- NULL
+      travel_site    <- NULL
+
+      # Domestic stratum
+      report_progress("TRAVEL_STRATIFY", message=paste("Fitting domestic model for", pathogen_name))
+      tryCatch({
+        dom_path <- PATH_ANALYSIS(domestic_data, census, catchment_config) %>% as.data.frame()
+        dom_path <- subset(dom_path, pathogen == pathogen_name)
+        dom_path$yearn <- as.numeric(as.character(dom_path$year))
+        dom_path$year  <- as.factor(dom_path$year)
+
+        dom_model <- PROPOSED_BM(
+          dom_path, cores = modelcores, chains = chains,
+          iterations = iterations, adapt_delta = adapt_delta,
+          max_treedepth = max_treedepth, seed = seed, backend = backend
+        )
+
+        dom_linpred <- LINPREAD_DRAW_FN(
+          data  = (dom_model$data %>% group_by(state)),
+          model = dom_model
+        )
+
+        domestic_site <- LINPRED_TO_SITEIR(dom_linpred)
+        domestic_site$pathogen <- pathogen_name
+        domestic_site$travel   <- "Domestic"
+        domestic_site$culture  <- culture
+
+        dom_catch_draws    <- CATCHMENT(dom_linpred)
+        domestic_catch     <- LINPRED_TO_CATCHIR(dom_catch_draws)
+        domestic_catch$pathogen <- pathogen_name
+        domestic_catch$travel   <- "Domestic"
+        domestic_catch$culture  <- culture
+
+        write.csv(domestic_site,
+                  paste0(outDir, "/", output_prefix, "_domestic_IRSite.csv"),
+                  row.names = FALSE)
+        write.csv(domestic_catch,
+                  paste0(outDir, "/", output_prefix, "_domestic_IRCatch.csv"),
+                  row.names = FALSE)
+        report_progress("TRAVEL_STRATIFY", message=paste("Domestic stratum complete for", pathogen_name))
+      }, error = function(e) {
+        report_progress("WARNING", message=paste("Domestic stratum failed for", pathogen_name, ":", e$message))
+      })
+
+      # Travel stratum
+      report_progress("TRAVEL_STRATIFY", message=paste("Fitting travel model for", pathogen_name))
+      tryCatch({
+        trv_path <- PATH_ANALYSIS(travel_data, census, catchment_config) %>% as.data.frame()
+        trv_path <- subset(trv_path, pathogen == pathogen_name)
+        trv_path$yearn <- as.numeric(as.character(trv_path$year))
+        trv_path$year  <- as.factor(trv_path$year)
+
+        trv_model <- PROPOSED_BM(
+          trv_path, cores = modelcores, chains = chains,
+          iterations = iterations, adapt_delta = adapt_delta,
+          max_treedepth = max_treedepth, seed = seed, backend = backend
+        )
+
+        trv_linpred <- LINPREAD_DRAW_FN(
+          data  = (trv_model$data %>% group_by(state)),
+          model = trv_model
+        )
+
+        travel_site <- LINPRED_TO_SITEIR(trv_linpred)
+        travel_site$pathogen <- pathogen_name
+        travel_site$travel   <- "Travel"
+        travel_site$culture  <- culture
+
+        trv_catch_draws <- CATCHMENT(trv_linpred)
+        travel_catch    <- LINPRED_TO_CATCHIR(trv_catch_draws)
+        travel_catch$pathogen <- pathogen_name
+        travel_catch$travel   <- "Travel"
+        travel_catch$culture  <- culture
+
+        write.csv(travel_site,
+                  paste0(outDir, "/", output_prefix, "_travel_IRSite.csv"),
+                  row.names = FALSE)
+        write.csv(travel_catch,
+                  paste0(outDir, "/", output_prefix, "_travel_IRCatch.csv"),
+                  row.names = FALSE)
+        report_progress("TRAVEL_STRATIFY", message=paste("Travel stratum complete for", pathogen_name))
+      }, error = function(e) {
+        report_progress("WARNING", message=paste("Travel stratum failed for", pathogen_name,
+                        ":", e$message, "- skipping comparison plots"))
+      })
+
+      # Comparison plots (require both strata)
+      if (!is.null(domestic_catch) && !is.null(travel_catch)) {
+        report_progress("TRAVEL_STRATIFY", message=paste("Generating comparison plots for", pathogen_name))
+        tryCatch({
+          if (exists("PLOT_TRAVEL_COMPARISON", mode = "function")) {
+            PLOT_TRAVEL_COMPARISON(domestic_catch, travel_catch, pathogen_name,
+                                  paste0(outDir, "/", output_prefix, "_travel_comparison.png"))
+          }
+          if (exists("PLOT_TRAVEL_COMPARISON_SITE", mode = "function")) {
+            PLOT_TRAVEL_COMPARISON_SITE(domestic_site, travel_site, pathogen_name,
+                                       paste0(outDir, "/", output_prefix, "_travel_comparison_site.png"))
+          }
+          if (exists("PLOT_TRAVEL_FRACTION", mode = "function")) {
+            PLOT_TRAVEL_FRACTION(domestic_catch, travel_catch, pathogen_name,
+                                paste0(outDir, "/", output_prefix, "_travel_fraction.png"))
+          }
+          report_progress("TRAVEL_STRATIFY", message=paste("Comparison plots complete for", pathogen_name))
+        }, error = function(e) {
+          report_progress("WARNING", message=paste("Comparison plot generation failed:", e$message))
+        })
+      }
     }
 
     report_progress("COMPLETE", message=paste("Completed analysis for", pathogen_name))

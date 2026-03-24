@@ -52,6 +52,7 @@ preprocessed_file=""
 skip_to_summary=false
 background=false
 stan_backend="rstan"
+TRAVEL_STRATIFY="false"
 
 # ---------------------------------------------------------------------------
 # Helper functions
@@ -375,6 +376,7 @@ if [[ "$flag" == "test" ]]; then
         selected_states=""
         selected_cidt=""
         selected_travel=""
+        TRAVEL_STRATIFY="false"
         chains=1
         iterations=100
         adapt_delta=0.8
@@ -563,6 +565,7 @@ if [[ "$flag" == "preprocess" ]]; then
     selected_states=""
     selected_cidt=""
     selected_travel=""
+    TRAVEL_STRATIFY="false"
 
 elif [[ "$skip_to_summary" != true ]]; then
     # Pathogen selection
@@ -1300,6 +1303,19 @@ if [[ -n "$selected_travel" ]]; then
     echo -e "${GREEN}Selected travel statuses: $selected_travel${NC}"
 fi
 
+echo ""
+echo "Enable travel stratification? (runs separate models for domestic vs travel-associated)"
+echo "  1) No (default)"
+echo "  2) Yes"
+read -p "Selection [1]: " travel_strat_choice
+travel_strat_choice=${travel_strat_choice:-1}
+
+if [[ "$travel_strat_choice" == "2" ]]; then
+    TRAVEL_STRATIFY="true"
+else
+    TRAVEL_STRATIFY="false"
+fi
+
 fi  # end filter section guard
 
 # ---------------------------------------------------------------------------
@@ -1392,6 +1408,9 @@ fi
 if [[ -n "$selected_travel" ]]; then
     cmd="$cmd --travel \"$selected_travel\""
 fi
+if [[ "$TRAVEL_STRATIFY" == "true" ]]; then
+    cmd="$cmd --travel_stratify \"$TRAVEL_STRATIFY\""
+fi
 # Stan backend (only add if non-default)
 if [[ "$stan_backend" != "rstan" ]]; then
     cmd="$cmd --stan_backend \"$stan_backend\""
@@ -1431,6 +1450,9 @@ if [[ -n "$selected_travel" ]]; then
     echo -e "Travel status: ${GREEN}$selected_travel${NC}"
 else
     echo -e "Travel status: ${GREEN}ALL statuses (NO,UNKNOWN,YES)${NC}"
+fi
+if [[ "$TRAVEL_STRATIFY" == "true" ]]; then
+    echo -e "Travel stratification: ${GREEN}Enabled${NC}"
 fi
 
 if [[ "$flag" != "resume" ]]; then
