@@ -19,8 +19,8 @@ process TRENDY {
 
     output:
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_brm.Rds", emit: rds, optional: true
-    path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_IRCatch.csv", emit: csv, optional: true
-    path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_IRSite.csv", emit: irsite, optional: true
+    path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}*_IRCatch.csv", emit: csv, optional: true
+    path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}*_IRSite.csv", emit: irsite, optional: true
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}*.png", emit: png, optional: true
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}*_EstIRRCatch_*.csv", emit: irr, optional: true
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_summary.txt", emit: summary, optional: true
@@ -59,7 +59,8 @@ process TRENDY {
         def base = cat == 'very_hard' ? 72.h :
                    cat == 'hard' ? 48.h :
                    cat == 'moderate' ? 24.h : 12.h
-        def req = base * task.attempt
+        def stratFactor = params.travel_stratify ? 2 : 1
+        def req = base * stratFactor * task.attempt
         def max = params.max_time as nextflow.util.Duration
         return req > max ? max : req
     }

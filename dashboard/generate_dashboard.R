@@ -193,11 +193,13 @@ metadata_travel_path   <- resolve_preproc_file("metadata_travel.csv")
 
 # Spline result files (glob)
 ircatch_files <- if (dir.exists(spline_dir)) {
-  Sys.glob(file.path(spline_dir, "*_IRCatch.csv"))
+  f <- Sys.glob(file.path(spline_dir, "*_IRCatch.csv"))
+  f[!grepl("_(domestic|travel)_IRCatch\\.csv$", f)]
 } else character(0)
 
 irsite_files <- if (dir.exists(spline_dir)) {
-  Sys.glob(file.path(spline_dir, "*_IRSite.csv"))
+  f <- Sys.glob(file.path(spline_dir, "*_IRSite.csv"))
+  f[!grepl("_(domestic|travel)_IRSite\\.csv$", f)]
 } else character(0)
 
 estirr_files <- if (dir.exists(spline_dir)) {

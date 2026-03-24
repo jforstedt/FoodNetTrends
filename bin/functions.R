@@ -644,12 +644,13 @@ PLOT_TRAVEL_COMPARISON_SITE <- function(domestic_site, travel_site, pathogen, ou
 
 # Stacked bar chart of domestic vs travel IR fraction over time
 PLOT_TRAVEL_FRACTION <- function(domestic_catch, travel_catch, pathogen, outfile) {
-  merged <- inner_join(
+  merged <- left_join(
     domestic_catch %>% select(year, domestic_ir = median_ir),
     travel_catch %>% select(year, travel_ir = median_ir),
     by = "year"
   ) %>%
     mutate(
+      travel_ir = replace_na(travel_ir, 0),
       total_ir = domestic_ir + travel_ir,
       Domestic = domestic_ir / total_ir * 100,
       `Travel-Associated` = travel_ir / total_ir * 100

@@ -588,10 +588,7 @@ for (pathogen_name in target_pathogens) {
     if (travel_stratify && exists("mmwrdata_for_stratify")) {
       report_progress("TRAVEL_STRATIFY", message=paste("Starting travel stratification for", pathogen_name))
 
-      strat_data <- mmwrdata_for_stratify
-      if (!is.null(opts$pathogen)) {
-        strat_data <- strat_data %>% filter(pathogen == opts$pathogen)
-      }
+      strat_data <- mmwrdata_for_stratify %>% filter(pathogen == pathogen_name)
 
       domestic_data <- strat_data %>% filter(travelint %in% c("NO", "UNKNOWN"))
       travel_data  <- strat_data %>% filter(travelint == "YES")

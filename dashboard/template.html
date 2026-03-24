@@ -1934,8 +1934,8 @@ analysisKeys.forEach(function(key) {
     }
 
     function getBadgeLabel(mode) {
-      if (mode === 'domestic') return key + '_domestic_IRCatch.csv';
-      if (mode === 'travel') return key + '_travel_IRCatch.csv';
+      if (mode === 'domestic' && hasDomesticCatch) return key + '_domestic_IRCatch.csv';
+      if (mode === 'travel' && hasTravelCatch) return key + '_travel_IRCatch.csv';
       return key + '_IRCatch.csv';
     }
 
@@ -1957,6 +1957,11 @@ analysisKeys.forEach(function(key) {
       if (compEl) compEl.style.display = (mode === 'comparison') ? 'block' : 'none';
       if (overlayCard) overlayCard.style.display = (mode === 'comparison') ? 'none' : '';
       if (trendPlotsCard) trendPlotsCard.style.display = (mode === 'comparison') ? 'none' : '';
+
+      // Rebuild overlay chart with appropriate irsite data
+      if (mode !== 'comparison' && _overlayRebuild) {
+        _overlayRebuild(getIrsiteData(mode));
+      }
 
       // Rebuild IRCatch table with appropriate data
       if (mode !== 'comparison') {
@@ -1992,6 +1997,7 @@ analysisKeys.forEach(function(key) {
   })();
 
   // Multi-State Overlay chart: one line per state, plotted over years
+  var _overlayRebuild = null;
   (function buildStateOverlay() {
     var canvas = document.getElementById('state-overlay-canvas-' + key);
     var togglesEl = document.getElementById('state-overlay-toggles-' + key);
@@ -2008,8 +2014,26 @@ analysisKeys.forEach(function(key) {
       '#000075','#a9a9a9','#e6beff','#ffe119','#ffd8b1'
     ];
 
+    var currentIrsite = a.irsite;
+    _overlayRebuild = function(newIrsite) {
+      currentIrsite = newIrsite || a.irsite;
+      byState = {};
+      currentIrsite.forEach(function(r) {
+        if (!r.state) return;
+        if (!byState[r.state]) byState[r.state] = [];
+        byState[r.state].push(r);
+      });
+      stateList = Object.keys(byState).sort();
+      seriesList.forEach(function(s) {
+        s.data = (byState[s.key] || []).map(function(r) {
+          return { year: r.year, ir: r.median_ir, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir, raw_ir: r.raw_ir || null };
+        });
+      });
+      drawStateOverlay();
+    };
+
     var byState = {};
-    a.irsite.forEach(function(r) {
+    currentIrsite.forEach(function(r) {
       if (!r.state) return;
       if (!byState[r.state]) byState[r.state] = [];
       byState[r.state].push(r);
