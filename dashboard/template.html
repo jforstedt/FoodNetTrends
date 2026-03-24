@@ -578,6 +578,19 @@ img { max-width: 100%; display: block; }
 .overlay-overall-label input { accent-color: var(--text-primary); }
 [data-theme="dark"] .overlay-toggle input[type="checkbox"] { outline: 1px solid rgba(255,255,255,0.3); outline-offset: 1px; }
 
+/* ===== ACQUISITION MODE TOGGLE ===== */
+.acq-toggle { display: flex; gap: 0; margin-bottom: 16px; }
+.acq-toggle .acq-btn {
+  padding: 7px 16px; font-size: .85rem; font-weight: 500; border-radius: 0;
+  background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-strong);
+  transition: all var(--transition);
+}
+.acq-toggle .acq-btn:first-child { border-radius: 4px 0 0 4px; }
+.acq-toggle .acq-btn:last-child { border-radius: 0 4px 4px 0; }
+.acq-toggle .acq-btn + .acq-btn { border-left: none; }
+.acq-toggle .acq-btn:hover { background: var(--blue-pale); color: var(--blue); }
+.acq-toggle .acq-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: var(--gray-100); }
@@ -1791,6 +1804,14 @@ analysisKeys.forEach(function(key) {
       '<span class="badge badge-success" style="margin-left:auto;font-size:.8rem;">Converged</span>' +
     '</div>' +
 
+    (D.has_travel_strat ?
+      '<div class="acq-toggle" id="acq-toggle-' + key + '">' +
+        '<button class="acq-btn active" data-acq="all">All Cases</button>' +
+        '<button class="acq-btn" data-acq="domestic">Domestic</button>' +
+        '<button class="acq-btn" data-acq="travel">Travel</button>' +
+        '<button class="acq-btn" data-acq="comparison">Comparison</button>' +
+      '</div>' : '') +
+
     '<div class="sub-tabs" id="tabs-' + key + '">' +
       '<button class="sub-tab active" data-tab="trends">Trends</button>' +
       '<button class="sub-tab" data-tab="ircatch">IR Catchment</button>' +
@@ -1815,12 +1836,13 @@ analysisKeys.forEach(function(key) {
         '<div class="card-header">Trend Plots</div>' +
         '<div class="state-trend-tile-grid" id="pathogen-trend-tiles-' + key + '"></div>' +
       '</div>' +
+      '<div id="travel-comparison-' + key + '" style="display:none;"></div>' +
     '</div>' +
 
     // IR CATCHMENT TAB
     '<div class="sub-content" data-tab-content="ircatch" data-analysis="' + key + '">' +
       '<div class="card">' +
-        '<div class="card-header">Catchment-Level Incidence Rates <span class="badge badge-info">' + esc(key) + '_IRCatch.csv</span>' +
+        '<div class="card-header">Catchment-Level Incidence Rates <span class="badge badge-info" id="ircatch-badge-' + key + '">' + esc(key) + '_IRCatch.csv</span>' +
                   '</div>' +
         '<div class="table-wrapper"><table class="data-table ircatch-table" data-analysis="' + key + '"><thead><tr></tr></thead><tbody></tbody></table></div>' +
       '</div>' +
@@ -1867,6 +1889,107 @@ analysisKeys.forEach(function(key) {
       if (target) target.classList.add('active');
     });
   });
+
+  // Acquisition mode state: tracks which IR dataset to display
+  var acqMode = { current: 'all' };
+
+  // Build travel comparison images container
+  (function buildTravelComparison() {
+    var container = document.getElementById('travel-comparison-' + key);
+    if (!container) return;
+    var imgs = [];
+    if (a.travel_comparison_b64) imgs.push({ src: a.travel_comparison_b64, label: 'Travel vs Domestic Comparison', file: key + '_travel_comparison.png' });
+    if (a.travel_comparison_site_b64) imgs.push({ src: a.travel_comparison_site_b64, label: 'Travel vs Domestic (Site-Level)', file: key + '_travel_comparison_site.png' });
+    if (a.travel_fraction_b64) imgs.push({ src: a.travel_fraction_b64, label: 'Travel Fraction', file: key + '_travel_fraction.png' });
+    if (imgs.length === 0) return;
+    imgs.forEach(function(img) {
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<div class="card-header">' + esc(img.label) + '</div>' +
+        '<div class="plot-container"><img src="' + img.src + '" alt="' + esc(img.label) + '" onclick="openLightbox(this.src,\'' + splinePath(img.file) + '\')"></div>';
+      container.appendChild(card);
+    });
+  })();
+
+  // Wire acquisition mode toggle
+  (function wireAcqToggle() {
+    var toggleBar = document.getElementById('acq-toggle-' + key);
+    if (!toggleBar) return;
+
+    var hasDomesticCatch = a.domestic_ircatch && a.domestic_ircatch.length > 0;
+    var hasTravelCatch = a.travel_ircatch && a.travel_ircatch.length > 0;
+    var hasDomesticSite = a.domestic_irsite && a.domestic_irsite.length > 0;
+    var hasTravelSite = a.travel_irsite && a.travel_irsite.length > 0;
+
+    function getIrcatchData(mode) {
+      if (mode === 'domestic' && hasDomesticCatch) return a.domestic_ircatch;
+      if (mode === 'travel' && hasTravelCatch) return a.travel_ircatch;
+      return a.ircatch;
+    }
+
+    function getIrsiteData(mode) {
+      if (mode === 'domestic' && hasDomesticSite) return a.domestic_irsite;
+      if (mode === 'travel' && hasTravelSite) return a.travel_irsite;
+      return a.irsite;
+    }
+
+    function getBadgeLabel(mode) {
+      if (mode === 'domestic') return key + '_domestic_IRCatch.csv';
+      if (mode === 'travel') return key + '_travel_IRCatch.csv';
+      return key + '_IRCatch.csv';
+    }
+
+    toggleBar.addEventListener('click', function(e) {
+      var btn = e.target.closest('.acq-btn');
+      if (!btn) return;
+      var mode = btn.dataset.acq;
+      if (mode === acqMode.current) return;
+      acqMode.current = mode;
+
+      toggleBar.querySelectorAll('.acq-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+
+      // Toggle comparison images visibility
+      var compEl = document.getElementById('travel-comparison-' + key);
+      var trendsContent = section.querySelector('[data-tab-content="trends"][data-analysis="' + key + '"]');
+      var overlayCard = trendsContent ? trendsContent.querySelector('.card') : null;
+      var trendPlotsCard = trendsContent ? trendsContent.querySelectorAll('.card')[1] : null;
+      if (compEl) compEl.style.display = (mode === 'comparison') ? 'block' : 'none';
+      if (overlayCard) overlayCard.style.display = (mode === 'comparison') ? 'none' : '';
+      if (trendPlotsCard) trendPlotsCard.style.display = (mode === 'comparison') ? 'none' : '';
+
+      // Rebuild IRCatch table with appropriate data
+      if (mode !== 'comparison') {
+        var catchData = getIrcatchData(mode);
+        if (catchData && catchData.length > 0) {
+          var catchTable = section.querySelector('.ircatch-table[data-analysis="' + key + '"]');
+          if (catchTable) buildSortableTable(catchTable, catchData, catchCols);
+        }
+        var badge = document.getElementById('ircatch-badge-' + key);
+        if (badge) badge.textContent = getBadgeLabel(mode);
+
+        // Rebuild IRSite table with appropriate data
+        var siteData = getIrsiteData(mode);
+        if (siteData && siteData.length > 0) {
+          var siteTable = section.querySelector('.irsite-table[data-analysis="' + key + '"]');
+          if (siteTable) {
+            var siteCountEl = section.querySelector('.irsite-count[data-analysis="' + key + '"]');
+            var siteCtrl = buildSortableTable(siteTable, siteData, siteCols, {
+              onRender: function(n) { if (siteCountEl) siteCountEl.textContent = n + ' rows'; }
+            });
+            var siteFilter = section.querySelector('.irsite-state-filter[data-analysis="' + key + '"]');
+            if (siteFilter) {
+              siteFilter.onchange = function() {
+                var sf = siteFilter.value;
+                var filtered = sf ? siteData.filter(function(r) { return r.state === sf; }) : siteData;
+                siteCtrl.render(filtered);
+              };
+            }
+          }
+        }
+      }
+    });
+  })();
 
   // Multi-State Overlay chart: one line per state, plotted over years
   (function buildStateOverlay() {
@@ -2264,18 +2387,34 @@ analysisKeys.forEach(function(key) {
     }
   })();
 
+  // Column definitions (hoisted for reuse by acquisition toggle)
+  var catchCols = [
+    { field: 'year', title: 'Year' },
+    { field: 'population', title: 'Population', formatter: function(v) { return fmt(v); } },
+    { field: 'raw_count', title: 'Raw Count', formatter: function(v) { return fmt(v); } },
+    { field: 'raw_ir', title: 'Raw IR', formatter: function(v) { return round2(v); } },
+    { field: 'median_ir', title: 'Median IR', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
+    { field: 'mean_ir', title: 'Mean IR', formatter: function(v) { return round2(v); } },
+    { field: 'lower_hdi_ir', title: 'Lower HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
+    { field: 'upper_hdi_ir', title: 'Upper HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } }
+  ];
+
+  var siteCols = [
+    { field: 'year', title: 'Year' },
+    { field: 'state', title: 'State', formatter: function(v) {
+      return '<a class="state-link" href="#" onclick="event.preventDefault();navigateToState(\'' + v + '\')">' + esc(v) + '</a>';
+    }},
+    { field: 'population', title: 'Population', formatter: function(v) { return fmt(v); } },
+    { field: 'raw_count', title: 'Raw Count', formatter: function(v) { return fmt(v); } },
+    { field: 'raw_ir', title: 'Raw IR', formatter: function(v) { return round2(v); } },
+    { field: 'median_ir', title: 'Median IR', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
+    { field: 'mean_ir', title: 'Mean IR', formatter: function(v) { return round2(v); } },
+    { field: 'lower_hdi_ir', title: 'Lower HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
+    { field: 'upper_hdi_ir', title: 'Upper HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } }
+  ];
+
   // Populate IR Catchment table
   if (hasCatch) {
-    var catchCols = [
-      { field: 'year', title: 'Year' },
-      { field: 'population', title: 'Population', formatter: function(v) { return fmt(v); } },
-      { field: 'raw_count', title: 'Raw Count', formatter: function(v) { return fmt(v); } },
-      { field: 'raw_ir', title: 'Raw IR', formatter: function(v) { return round2(v); } },
-      { field: 'median_ir', title: 'Median IR', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
-      { field: 'mean_ir', title: 'Mean IR', formatter: function(v) { return round2(v); } },
-      { field: 'lower_hdi_ir', title: 'Lower HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
-      { field: 'upper_hdi_ir', title: 'Upper HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } }
-    ];
     var catchTable = section.querySelector('.ircatch-table[data-analysis="' + key + '"]');
     buildSortableTable(catchTable, a.ircatch, catchCols);
   }
@@ -2285,20 +2424,6 @@ analysisKeys.forEach(function(key) {
     var siteTable = section.querySelector('.irsite-table[data-analysis="' + key + '"]');
     var siteCountEl = section.querySelector('.irsite-count[data-analysis="' + key + '"]');
     var siteStateFilter = section.querySelector('.irsite-state-filter[data-analysis="' + key + '"]');
-
-    var siteCols = [
-      { field: 'year', title: 'Year' },
-      { field: 'state', title: 'State', formatter: function(v) {
-        return '<a class="state-link" href="#" onclick="event.preventDefault();navigateToState(\'' + v + '\')">' + esc(v) + '</a>';
-      }},
-      { field: 'population', title: 'Population', formatter: function(v) { return fmt(v); } },
-      { field: 'raw_count', title: 'Raw Count', formatter: function(v) { return fmt(v); } },
-      { field: 'raw_ir', title: 'Raw IR', formatter: function(v) { return round2(v); } },
-      { field: 'median_ir', title: 'Median IR', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
-      { field: 'mean_ir', title: 'Mean IR', formatter: function(v) { return round2(v); } },
-      { field: 'lower_hdi_ir', title: 'Lower HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } },
-      { field: 'upper_hdi_ir', title: 'Upper HDI', cssClass: 'col-highlight', formatter: function(v) { return round2(v); } }
-    ];
 
     var siteTableCtrl = buildSortableTable(siteTable, a.irsite, siteCols, {
       onRender: function(n) { siteCountEl.textContent = n + ' rows'; }

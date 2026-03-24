@@ -124,6 +124,7 @@ process TRENDY {
       --max_treedepth ${params.max_treedepth} \\
       --seed ${params.seed} \\
       --backend ${params.stan_backend} \\
+      --travel_stratify ${params.travel_stratify} \\
       ${catchmentConfigArg} \\
       --debug FALSE
     """

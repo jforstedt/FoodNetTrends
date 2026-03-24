@@ -580,4 +580,102 @@ IR_COMP_CATCH <- function(catch, start_year, end_year, output_file = NULL) {
   return(result)
 }
 
+# Overlay domestic vs travel-associated catchment IR trends with 95% HDI bands
+PLOT_TRAVEL_COMPARISON <- function(domestic_catch, travel_catch, pathogen, outfile) {
+  dom <- domestic_catch %>% mutate(group = "Domestic")
+  trv <- travel_catch %>% mutate(group = "Travel-Associated")
+  combined <- bind_rows(dom, trv)
 
+  p <- ggplot(combined, aes(x = year, y = median_ir, color = group, fill = group)) +
+    geom_line(linewidth = 1.5) +
+    geom_ribbon(aes(ymin = lower_hdi_ir, ymax = upper_hdi_ir), alpha = 0.2, color = NA) +
+    geom_vline(xintercept = 2004, linetype = "dashed", color = "grey40") +
+    scale_color_manual(values = c("Domestic" = "blue", "Travel-Associated" = "red")) +
+    scale_fill_manual(values = c("Domestic" = "blue", "Travel-Associated" = "red")) +
+    labs(
+      title = paste("Domestic vs Travel-Associated Trends for", pathogen),
+      subtitle = "Median incidence with 95% HDI intervals",
+      y = "Incidence per 100,000 population",
+      x = "Year",
+      color = NULL, fill = NULL
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5),
+      legend.position = "bottom"
+    )
+
+  ggsave(outfile, plot = p, width = 10, height = 6, dpi = 300)
+  return(p)
+}
+
+# Faceted site-level domestic vs travel-associated IR trends with 95% HDI bands
+PLOT_TRAVEL_COMPARISON_SITE <- function(domestic_site, travel_site, pathogen, outfile) {
+  dom <- domestic_site %>% mutate(group = "Domestic")
+  trv <- travel_site %>% mutate(group = "Travel-Associated")
+  combined <- bind_rows(dom, trv)
+
+  p <- ggplot(combined, aes(x = year, y = median_ir, color = group, fill = group)) +
+    geom_line(linewidth = 1) +
+    geom_ribbon(aes(ymin = lower_hdi_ir, ymax = upper_hdi_ir), alpha = 0.2, color = NA) +
+    geom_vline(xintercept = 2004, linetype = "dashed", color = "grey40") +
+    facet_wrap(~ state, scales = "free_y") +
+    scale_color_manual(values = c("Domestic" = "blue", "Travel-Associated" = "red")) +
+    scale_fill_manual(values = c("Domestic" = "blue", "Travel-Associated" = "red")) +
+    labs(
+      title = paste("Site-Specific Domestic vs Travel-Associated Trends for", pathogen),
+      subtitle = "Median incidence with 95% HDI intervals",
+      y = "Incidence per 100,000 population",
+      x = "Year",
+      color = NULL, fill = NULL
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5),
+      strip.text = element_text(face = "bold"),
+      legend.position = "bottom"
+    )
+
+  ggsave(outfile, plot = p, width = 14, height = 10, dpi = 300)
+  return(p)
+}
+
+# Stacked bar chart of domestic vs travel IR fraction over time
+PLOT_TRAVEL_FRACTION <- function(domestic_catch, travel_catch, pathogen, outfile) {
+  merged <- inner_join(
+    domestic_catch %>% select(year, domestic_ir = median_ir),
+    travel_catch %>% select(year, travel_ir = median_ir),
+    by = "year"
+  ) %>%
+    mutate(
+      total_ir = domestic_ir + travel_ir,
+      Domestic = domestic_ir / total_ir * 100,
+      `Travel-Associated` = travel_ir / total_ir * 100
+    ) %>%
+    select(year, Domestic, `Travel-Associated`) %>%
+    pivot_longer(cols = c(Domestic, `Travel-Associated`),
+                 names_to = "group", values_to = "pct")
+
+  p <- ggplot(merged, aes(x = year, y = pct, fill = group)) +
+    geom_col(width = 0.8) +
+    scale_fill_manual(values = c("Domestic" = "blue", "Travel-Associated" = "red")) +
+    scale_y_continuous(limits = c(0, 100), labels = function(x) paste0(x, "%")) +
+    labs(
+      title = paste("Travel-Associated Fraction for", pathogen),
+      subtitle = "Proportion of modeled incidence rate by travel status",
+      y = "Percentage of Total IR",
+      x = "Year",
+      fill = NULL
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5),
+      legend.position = "bottom"
+    )
+
+  ggsave(outfile, plot = p, width = 10, height = 5, dpi = 300)
+  return(p)
+}

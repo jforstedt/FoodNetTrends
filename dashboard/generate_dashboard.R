@@ -220,6 +220,35 @@ site_trends_files <- if (dir.exists(spline_dir)) {
   Sys.glob(file.path(spline_dir, "*_site_trends.png"))
 } else character(0)
 
+# Travel-stratified result files
+domestic_ircatch_files <- if (dir.exists(spline_dir)) {
+  Sys.glob(file.path(spline_dir, "*_domestic_IRCatch.csv"))
+} else character(0)
+
+travel_ircatch_files <- if (dir.exists(spline_dir)) {
+  Sys.glob(file.path(spline_dir, "*_travel_IRCatch.csv"))
+} else character(0)
+
+domestic_irsite_files <- if (dir.exists(spline_dir)) {
+  Sys.glob(file.path(spline_dir, "*_domestic_IRSite.csv"))
+} else character(0)
+
+travel_irsite_files <- if (dir.exists(spline_dir)) {
+  Sys.glob(file.path(spline_dir, "*_travel_IRSite.csv"))
+} else character(0)
+
+travel_comparison_files <- if (dir.exists(spline_dir)) {
+  Sys.glob(file.path(spline_dir, "*_travel_comparison.png"))
+} else character(0)
+
+travel_comparison_site_files <- if (dir.exists(spline_dir)) {
+  Sys.glob(file.path(spline_dir, "*_travel_comparison_site.png"))
+} else character(0)
+
+travel_fraction_files <- if (dir.exists(spline_dir)) {
+  Sys.glob(file.path(spline_dir, "*_travel_fraction.png"))
+} else character(0)
+
 # Per-state individual trend plots (exclude overall_trend and site_trends)
 state_trend_files <- if (dir.exists(spline_dir)) {
   all_trend_pngs <- Sys.glob(file.path(spline_dir, "*_trend.png"))
@@ -239,11 +268,16 @@ pipeline_dags <- if (dir.exists(pipeline_info_dir)) {
   Sys.glob(file.path(pipeline_info_dir, "pipeline_dag_*.html"))
 } else character(0)
 
+has_travel_strat <- length(domestic_ircatch_files) > 0 && length(travel_ircatch_files) > 0
+
 msg("Found: ", length(ircatch_files), " IRCatch, ",
     length(irsite_files), " IRSite, ",
     length(estirr_files), " EstIRR, ",
     length(overall_trend_files), " trend plots, ",
-    length(error_files), " error files")
+    length(error_files), " error files",
+    if (has_travel_strat) paste0(", travel strat: ",
+      length(domestic_ircatch_files), " domestic + ",
+      length(travel_ircatch_files), " travel") else "")
 
 # --- Pathogen/subgroup discovery ----------------------------------------------
 
@@ -411,11 +445,18 @@ for (aid in names(analysis_ids)) {
     has_subgroups = info$pathogen %in% HIERARCHICAL_PATHOGENS,
     ircatch = NULL,
     irsite = NULL,
+    domestic_ircatch = NULL,
+    travel_ircatch = NULL,
+    domestic_irsite = NULL,
+    travel_irsite = NULL,
     irr = list(),
     summary_txt = NULL,
     error_txt = NULL,
     overall_trend_b64 = NULL,
     site_trends_b64 = NULL,
+    travel_comparison_b64 = NULL,
+    travel_comparison_site_b64 = NULL,
+    travel_fraction_b64 = NULL,
     state_plots = list()
   )
 
@@ -437,6 +478,27 @@ for (aid in names(analysis_ids)) {
   irsite_path <- paste0(prefix, "_IRSite.csv")
   if (file.exists(irsite_path)) {
     entry$irsite <- safe_read_csv(irsite_path)
+  }
+
+  # Read travel-stratified IR files
+  domestic_ircatch_path <- paste0(prefix, "_domestic_IRCatch.csv")
+  if (file.exists(domestic_ircatch_path)) {
+    entry$domestic_ircatch <- safe_read_csv(domestic_ircatch_path)
+  }
+
+  travel_ircatch_path <- paste0(prefix, "_travel_IRCatch.csv")
+  if (file.exists(travel_ircatch_path)) {
+    entry$travel_ircatch <- safe_read_csv(travel_ircatch_path)
+  }
+
+  domestic_irsite_path <- paste0(prefix, "_domestic_IRSite.csv")
+  if (file.exists(domestic_irsite_path)) {
+    entry$domestic_irsite <- safe_read_csv(domestic_irsite_path)
+  }
+
+  travel_irsite_path <- paste0(prefix, "_travel_IRSite.csv")
+  if (file.exists(travel_irsite_path)) {
+    entry$travel_irsite <- safe_read_csv(travel_irsite_path)
   }
 
   # Read EstIRRCatch files (may be multiple comparison periods)
@@ -464,6 +526,22 @@ for (aid in names(analysis_ids)) {
   site_png <- paste0(prefix, "_site_trends.png")
   if (file.exists(site_png)) {
     entry$site_trends_b64 <- encode_png_b64(site_png)
+  }
+
+  # Encode travel comparison PNGs
+  travel_comp_png <- paste0(prefix, "_travel_comparison.png")
+  if (file.exists(travel_comp_png)) {
+    entry$travel_comparison_b64 <- encode_png_b64(travel_comp_png)
+  }
+
+  travel_comp_site_png <- paste0(prefix, "_travel_comparison_site.png")
+  if (file.exists(travel_comp_site_png)) {
+    entry$travel_comparison_site_b64 <- encode_png_b64(travel_comp_site_png)
+  }
+
+  travel_frac_png <- paste0(prefix, "_travel_fraction.png")
+  if (file.exists(travel_frac_png)) {
+    entry$travel_fraction_b64 <- encode_png_b64(travel_frac_png)
   }
 
   # Encode per-state trend PNGs
@@ -640,11 +718,18 @@ dashboard_data <- list(
       has_subgroups = entry$has_subgroups,
       ircatch = df_to_list(entry$ircatch),
       irsite = df_to_list(entry$irsite),
+      domestic_ircatch = df_to_list(entry$domestic_ircatch),
+      travel_ircatch = df_to_list(entry$travel_ircatch),
+      domestic_irsite = df_to_list(entry$domestic_irsite),
+      travel_irsite = df_to_list(entry$travel_irsite),
       irr = lapply(entry$irr, df_to_list),
       summary_txt = entry$summary_txt,
       error_txt = entry$error_txt,
       overall_trend_b64 = entry$overall_trend_b64,
       site_trends_b64 = entry$site_trends_b64,
+      travel_comparison_b64 = entry$travel_comparison_b64,
+      travel_comparison_site_b64 = entry$travel_comparison_site_b64,
+      travel_fraction_b64 = entry$travel_fraction_b64,
       state_plots = entry$state_plots
     )
   }),
@@ -663,6 +748,7 @@ dashboard_data <- list(
     list(name = si$name, joinYear = si$joinYear)
   }),
 
+  has_travel_strat = has_travel_strat,
   pathogen_colors = PATHOGEN_COLORS,
   hierarchical_pathogens = HIERARCHICAL_PATHOGENS,
 
