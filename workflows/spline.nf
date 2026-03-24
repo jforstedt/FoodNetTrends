@@ -361,6 +361,7 @@ workflow FOODNETTRENDS {
         trendy_done = TRENDY.out.csv
             .mix(TRENDY.out.errors)
             .collect()
+            .ifEmpty(["done"])
             .map { "done" }
 
         DASHBOARD(trendy_done, params.projID)

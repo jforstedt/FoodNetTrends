@@ -1901,7 +1901,10 @@ analysisKeys.forEach(function(key) {
     if (a.travel_comparison_b64) imgs.push({ src: a.travel_comparison_b64, label: 'Travel vs Domestic Comparison', file: key + '_travel_comparison.png' });
     if (a.travel_comparison_site_b64) imgs.push({ src: a.travel_comparison_site_b64, label: 'Travel vs Domestic (Site-Level)', file: key + '_travel_comparison_site.png' });
     if (a.travel_fraction_b64) imgs.push({ src: a.travel_fraction_b64, label: 'Travel Fraction', file: key + '_travel_fraction.png' });
-    if (imgs.length === 0) return;
+    if (imgs.length === 0) {
+      container.innerHTML = '<p style="padding:16px;color:var(--text-muted);">Travel stratification results are not available for this analysis.</p>';
+      return;
+    }
     imgs.forEach(function(img) {
       var card = document.createElement('div');
       card.className = 'card';
@@ -2028,6 +2031,7 @@ analysisKeys.forEach(function(key) {
         s.data = (byState[s.key] || []).map(function(r) {
           return { year: r.year, ir: r.median_ir, lower_hdi: r.lower_hdi_ir, upper_hdi: r.upper_hdi_ir, raw_ir: r.raw_ir || null };
         });
+        if (s.key !== '_overall') s.visible = s.data.length > 0;
       });
       drawStateOverlay();
     };

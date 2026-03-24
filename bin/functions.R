@@ -652,8 +652,8 @@ PLOT_TRAVEL_FRACTION <- function(domestic_catch, travel_catch, pathogen, outfile
     mutate(
       travel_ir = replace_na(travel_ir, 0),
       total_ir = domestic_ir + travel_ir,
-      Domestic = domestic_ir / total_ir * 100,
-      `Travel-Associated` = travel_ir / total_ir * 100
+      Domestic = if_else(total_ir > 0, domestic_ir / total_ir * 100, NA_real_),
+      `Travel-Associated` = if_else(total_ir > 0, travel_ir / total_ir * 100, NA_real_)
     ) %>%
     select(year, Domestic, `Travel-Associated`) %>%
     pivot_longer(cols = c(Domestic, `Travel-Associated`),
