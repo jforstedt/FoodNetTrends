@@ -8,12 +8,13 @@
 trap 'stty sane 2>/dev/null' EXIT INT TSTP
 
 # ---------------------------------------------------------------------------
-# Data file paths (edit these when data files change)
+# Data paths: override with environment variables; missing files prompt below.
 # ---------------------------------------------------------------------------
-dataDir="/scicomp/groups-pure/OID/NCEZID/DFWED/EDEB/foodnet/trends/data/"
-MMWR_FILE="${dataDir}/mmwr9624_May2025.sas7bdat"
-CENSUS_FILE_B="${dataDir}/cen9624.sas7bdat"
-CENSUS_FILE_P="${dataDir}/cen9624_para.sas7bdat"
+dataDir="${FNT_DATA_DIR:-/scicomp/groups-pure/OID/NCEZID/DFWED/EDEB/foodnet/trends/data}"
+dataDir="${dataDir%/}"
+MMWR_FILE="${FNT_MMWR_FILE:-${dataDir}/mmwr9624_May2025.sas7bdat}"
+CENSUS_FILE_B="${FNT_CENSUS_FILE_B:-${dataDir}/cen9624.sas7bdat}"
+CENSUS_FILE_P="${FNT_CENSUS_FILE_P:-${dataDir}/cen9624_para.sas7bdat}"
 
 outDir="output"  # Default to "output" directory in current location
 
@@ -61,6 +62,29 @@ serotype_source="${FNT_SEROTYPE_SOURCE:-auto}"
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+
+resolve_input_file() {
+    local label="$1" candidate="$2"
+    while [[ ! -f "$candidate" || ! -r "$candidate" ]]; do
+        echo "${label} file not found or unreadable: $candidate" >&2
+        if ! read -r -p "Enter the full path to the ${label} file (blank to cancel): " candidate; then
+            return 1
+        fi
+        [[ -n "$candidate" ]] || return 1
+    done
+    printf '%s\n' "$candidate"
+}
+
+run_mode_label() {
+    case "$1" in
+        test) echo "Test" ;;
+        publication) echo "Publication" ;;
+        max) echo "Max" ;;
+        custom) echo "Custom" ;;
+        resume) echo "Resume previous run" ;;
+        preprocess) echo "Preprocessing only" ;;
+    esac
+}
 
 handle_pathogen_grouping() {
     local pathogen="$1" data_file="$2" choice grouping values selection value item
@@ -252,6 +276,13 @@ case $run_mode in
     5) flag="resume" ;;
     6) flag="preprocess" ;;
 esac
+
+# Validate paths before the remaining configuration prompts or job submission.
+MMWR_FILE=$(resolve_input_file "MMWR" "$MMWR_FILE") || exit 1
+if [[ "$flag" != "preprocess" ]]; then
+    CENSUS_FILE_B=$(resolve_input_file "bacterial census" "$CENSUS_FILE_B") || exit 1
+    CENSUS_FILE_P=$(resolve_input_file "parasitic census" "$CENSUS_FILE_P") || exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Step 1b: Quick-run fast path for test mode
@@ -1258,7 +1289,7 @@ fi
 echo ""
 echo -e "${BLUE}========= Analysis Summary ==========${NC}"
 echo "Baseline: $baseline_start-$baseline_end | Classification rules: $classification_rules | Source: $serotype_source"
-echo -e "Mode: ${GREEN}$([ "$flag" == "test" ] && echo "Test" || [ "$flag" == "publication" ] && echo "Publication" || [ "$flag" == "max" ] && echo "Max" || [ "$flag" == "custom" ] && echo "Custom" || [ "$flag" == "resume" ] && echo "Resume previous run" || [ "$flag" == "preprocess" ] && echo "Preprocessing only")${NC}"
+echo -e "Mode: ${GREEN}$(run_mode_label "$flag")${NC}"
 if [[ "$pathogens" == "AUTO_DISCOVER" ]]; then
     echo -e "Pathogens: ${GREEN}All pathogens found in data (auto-discovery)${NC}"
 else

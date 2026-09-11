@@ -129,3 +129,15 @@ packages plus argparse/readr available, `python3 tests/test_model_flow.py` tests
 the actual model-script filtering and exports using a deterministic Stan substitute.
 `tests/mock_model.R` implements that substitute and must not be used for real
 incidence estimates. CI also exercises Nextflow staging and dashboard generation.
+
+## HPC input paths
+
+The launcher checks that input files exist and are readable before the remaining
+setup questions. If an old default path is unavailable, enter the current full
+file path at the prompt; a blank entry cancels without submitting jobs.
+
+Set `FNT_DATA_DIR` to change the default directory while retaining the default
+filenames. If filenames have changed too, set `FNT_MMWR_FILE`,
+`FNT_CENSUS_FILE_B`, and `FNT_CENSUS_FILE_P` to the current full paths. These can
+be exported in your shell session or shell configuration, without editing the
+tracked launcher. Preprocessing-only mode requires just the MMWR file.

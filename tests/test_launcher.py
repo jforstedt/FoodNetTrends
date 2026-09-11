@@ -25,3 +25,25 @@ assert menu('CAMPYLOBACTER','y\nJEJUNI|COLI\n')=='CAMPYLOBACTER~JEJUNI|CAMPYLOBA
 assert menu('SALMONELLA','2\n999\n1\nn\nn\n','test_data/test_mmwr.csv')=='SALMONELLA~Typhimurium'
 assert menu('SALMONELLA','6\n')=='SALMONELLA~TYPHOIDAL|SALMONELLA~NONTYPHOIDAL|SALMONELLA~UNCLASSIFIED'
 print('Launcher preset, custom, species, STEC and invalid-selection tests passed.')
+
+# Missing HPC paths must be corrected or cancelled before setup proceeds.
+helpers=script[script.index('resolve_input_file() {'):script.index('handle_pathogen_grouping() {')]
+import tempfile
+with tempfile.TemporaryDirectory() as temp:
+    actual=Path(temp)/'current data.sas7bdat'
+    actual.touch()
+    p=subprocess.run(['bash','-c',helpers+'\nresolve_input_file MMWR "$1"','path-test','/missing/old.sas7bdat'],
+                     input=str(actual)+'\n',text=True,capture_output=True)
+    assert p.returncode==0 and p.stdout.strip()==str(actual)
+    p=subprocess.run(['bash','-c',helpers+'\nresolve_input_file MMWR "$1"','path-test','/missing/old.sas7bdat'],
+                     input='\n',text=True,capture_output=True)
+    assert p.returncode!=0
+    p=subprocess.run(['bash','-c',helpers+'\nresolve_input_file MMWR "$1"','path-test',str(actual)],
+                     input='',text=True,capture_output=True)
+    assert p.returncode==0 and not p.stderr
+for mode,label in [('test','Test'),('publication','Publication'),('max','Max'),('custom','Custom'),
+                   ('resume','Resume previous run'),('preprocess','Preprocessing only')]:
+    p=subprocess.run(['bash','-c',helpers+'\nrun_mode_label "$1"','mode-test',mode],
+                     text=True,capture_output=True,check=True)
+    assert p.stdout.strip()==label
+print('Input-path correction/cancellation and all six mode labels passed.')
