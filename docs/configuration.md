@@ -18,7 +18,7 @@ The pipeline's behavior is controlled by several Nextflow config files that are 
 | `nextflow.config` | Main config: default parameter values, SGE executor settings, process resource allocation, Singularity/registry setup, trace/report/timeline/DAG output paths, and profile definitions (`test`, `singularity`, `production`, `debug`). |
 | `conf/base.config` | Base resource defaults and retry strategy. Defines process labels (`process_single`, `process_low`, `process_medium`, `process_high`, `process_long`, `process_high_memory`) used by DSL2 modules. |
 | `conf/fnt.scicomp.config` | CDC SciComp HPC profiles: `singularity`, `conda`, `local`, `scicomp_rosalind`, `training`, `debug`. Also defines special queue labels (`process_gpu`, `process_extralong`, `process_highmem`). |
-| `conf/modules.config` | DSL2 module publishing paths. TRENDY resource allocation (CPUs, memory, time) is defined in `modules/local/trendy.nf` where difficulty metrics are accessible. |
+| `conf/modules.config` | DSL2 module publishing paths and explicit TRENDY resource selectors. CPU-only overrides retain the model memory/time requests. |
 | `conf/test.config` | Test profile overrides: 1 chain, 100 iterations, CAMPYLOBACTER + SALMONELLA, dashboard included, resource limits capped at 2 CPUs / 8 GB / 1 hour for CI. |
 
 To override settings without editing these files, use Nextflow's `-c` flag:

@@ -194,3 +194,53 @@ for blank values.
 The completed HPC run predating these controls remains a computational test;
 rerun affected models and inspect convergence and denominator exports before
 interpreting their estimates.
+
+## Acceptance checks and September resource repair
+
+The September 11 follow-up checks cover all requested options with synthetic
+cases and independently specified expected counts. `tests/test_feature_matrix.py`
+runs the actual R model-script flow for 12 subgroup selections, alternating
+2016–2018 and single-year 2019 baselines, and checks the generated dashboard.
+Stan fitting and prediction are replaced by deterministic fixture draws in this
+test; these are not scientific estimates or evidence of subgroup convergence.
+
+| Requested behavior | Verification |
+| --- | --- |
+| Single baseline year and range | CLI single-year override in Nextflow 24.10.4 integration; both ranges in R model flow |
+| Crude and estimated baseline incidence | Known population-weighted fixture values, exported columns and dashboard payload |
+| STEC positive/negative override and fallback | Both field spellings; exact O157/nonO157/unresolved membership |
+| Salmonella not serotyped | Blank-source membership and separate output |
+| Other Salmonella serotypes | Excludes individually selected serotypes and not-serotyped cases; changes with selection |
+| Typhoidal/nontyphoidal | Typhi and the three explicitly named Paratyphi categories; ambiguous B remains unclassified |
+| Other serotype/species values | Exact JEJUNI/COLI membership and separate output; blank values excluded |
+| Launcher options | Preset/custom selection, unresolved categories and all six mode labels |
+| Diagnostics display | Failed diagnostics and nominally converged fits with warnings remain visibly flagged |
+
+Resource selectors were tested with Nextflow **24.10.4** for standard rstan,
+cmdstanr, explicit resource caps, and the fully qualified CPU-only override.
+Six-chain rstan requests resolve to **12 CPUs / 52 GB / 48 hours**, or
+**6 CPUs / 52 GB / 48 hours** with the previous CPU-only override. Formula,
+priors, sampler controls, classifications and coverage rules were not changed
+by this resource repair. Difficulty profiling remains informational; a
+conservative time request replaces difficulty-dependent scheduling.
+
+For the HPC installation, one command collects the R contract tests, the
+12-group synthetic end-to-end test, membership checks on the existing cleaned
+cases, checks of saved crude baseline calculations, and the saved convergence
+reports:
+
+```bash
+bash scripts/validate_features.sh 20260911_140750
+```
+
+It writes `foodnet_feature_validation_<project>_<timestamp>.txt`, submits no
+jobs, fits no new Stan models and leaves completed results untouched. The
+real-data group checks require the published `preprocessed/clean_mmwr.csv`.
+They check implementation consistency, not FoodNet approval of classification
+rules. The baseline comparison uses existing outputs; posterior equivalence to
+Daniel's reference implementation remains a separate scientific validation.
+
+The completed run's diagnostic flags remain: Shigella 12 divergent transitions,
+Cyclospora 2, STEC 2 and Yersinia 1. All reported R-hat and ESS checks passed.
+These warnings should accompany review of those estimates; this follow-up does
+not clear them or automatically refit the models.

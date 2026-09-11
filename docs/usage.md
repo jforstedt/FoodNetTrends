@@ -214,11 +214,13 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 
 ## Resource allocation
 
-The TRENDY process uses difficulty-based resource profiling. The RESOURCE_PROFILER module analyzes data complexity per pathogen (row counts, site counts, zero fraction, overdispersion, state-level CV) and assigns a difficulty category: easy, moderate, hard, or very_hard. The TRENDY process then allocates resources dynamically:
+The RESOURCE_PROFILER reports data complexity for each pathogen. TRENDY resource requests are set explicitly in `conf/modules.config`, so a CPU-only configuration override does not revert memory and time to generic process defaults.
 
-- **CPUs**: One CPU per chain plus additional threads for BLAS, scaled by difficulty (2-8 extra threads for rstan; 2 for cmdstanr).
-- **Memory**: Backend-aware -- rstan uses 5 GB per chain (in-memory samples), cmdstanr uses 2 GB per chain (disk-backed samples), plus a 4 GB base.
-- **Time**: 12 hours (easy) to 72 hours (very_hard) per attempt, with automatic retry scaling.
+- **CPUs**: One per chain plus six for rstan, or two for cmdstanr, capped by `max_cpus`. BLAS threads are always at least one.
+- **Memory**: Eight GB per rstan chain or two GB per cmdstanr chain, plus four GB, multiplied by the attempt number and capped by `max_memory`.
+- **Time**: A conservative 48 hours for each model task, tripled for travel stratification, multiplied by the attempt number and capped by `max_time`.
+
+Six rstan chains therefore start at 12 CPUs, 52 GB and 48 hours. This matches the earlier successful Cryptosporidium allocation. The generic 8/16/24 GB retry sequence that failed for all nine models is no longer used for TRENDY. An existing fully qualified CPU-only override still takes precedence for CPUs; omit that temporary override on future runs to use the standard allocation.
 
 If a job exits with a retriable error code (e.g., OOM, segfault), it is automatically resubmitted with higher resource requests (up to 3 retries).
 

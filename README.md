@@ -14,7 +14,7 @@ Salmonella groups, STEC cleaning, editable classification rules, and launcher mo
 3. Flexible pathogen grouping for STEC (O157 / non-O157) and Salmonella (by serotype)
 4. Select serotypes/species from cleaned data, enter exact labels, or use the FoodNet Salmonella preset
 5. Bayesian hierarchical models with splines via `brms` (RStan or CmdStanR backend)
-6. Difficulty-based resource profiling: the RESOURCE_PROFILER module estimates data complexity per pathogen, and the TRENDY process dynamically allocates CPUs, memory, and wall time based on difficulty category (easy / moderate / hard / very_hard)
+6. Resource profiling reports data complexity per pathogen. Explicit TRENDY resource selectors allocate by backend and chain count, with a conservative time request and retry scaling.
 7. Incidence rate estimates with uncertainty intervals per catchment site
 8. Per-state individual trend plots alongside site-level and overall trend charts
 9. Relative risk and percent-change calculations across reference periods
@@ -134,7 +134,7 @@ When `--pathogen` is `null` and not `AUTO_DISCOVER`, the workflow defaults to `C
 | `--seed` | `123` | Random seed |
 | `--stan_backend` | `rstan` | Stan backend: `rstan` or `cmdstanr` |
 
-The `cmdstanr` backend uses less memory per chain (2 GB vs 5 GB for rstan) because it writes samples to disk rather than holding them in memory. It requires CmdStan compiled in the container.
+The `cmdstanr` backend uses less memory per chain (2 GB vs 8 GB for rstan) because it writes samples to disk rather than holding them in memory. It requires CmdStan compiled in the container.
 
 ### Optional Configuration Files
 

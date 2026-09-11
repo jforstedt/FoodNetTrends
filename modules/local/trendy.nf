@@ -38,41 +38,7 @@ process TRENDY {
 
     // errorStrategy and maxRetries defined in nextflow.config withName:TRENDY
 
-    // Backend-aware memory: rstan holds samples in memory, cmdstanr writes to disk
-    memory = {
-        def chains = params.chains ?: 2
-        def perChain = params.stan_backend == 'cmdstanr' ? 2 : 8
-        def req = ((chains * perChain + 4) as int).GB * task.attempt
-        def max = params.max_memory as nextflow.util.MemoryUnit
-        return req > max ? max : req
-    }
-
-    // Backend-aware CPUs: rstan benefits from BLAS threading, cmdstanr less so
-    cpus = {
-        def chains = params.chains ?: 2
-        def blas
-        if (params.stan_backend == 'cmdstanr') {
-            blas = 2
-        } else {
-            def cat = dataMetrics?.difficulty_category ?: 'moderate'
-            blas = cat == 'very_hard' ? 8 :
-                   cat == 'hard' ? 6 :
-                   cat == 'moderate' ? 4 : 2
-        }
-        return Math.min(chains + blas, params.max_cpus as int)
-    }
-
-    // Difficulty-based time allocation from resource profiler metrics
-    time = {
-        def cat = dataMetrics?.difficulty_category ?: 'moderate'
-        def base = cat == 'very_hard' ? 72.h :
-                   cat == 'hard' ? 48.h :
-                   cat == 'moderate' ? 24.h : 12.h
-        def stratFactor = params.travel_stratify ? 3 : 1
-        def req = base * stratFactor * task.attempt
-        def max = params.max_time as nextflow.util.Duration
-        return req > max ? max : req
-    }
+    // Resources are configured explicitly in conf/modules.config.
 
     script:
     def quote = { value -> "'" + value.toString().replace("'", "'\"'\"'") + "'" }
@@ -120,7 +86,7 @@ process TRENDY {
     fi
 
     # Use extra CPUs beyond chain count for BLAS threading
-    export OPENBLAS_NUM_THREADS=\$((${task.cpus} / ${params.chains}))
+    export OPENBLAS_NUM_THREADS=${Math.max(1, (task.cpus / (params.chains as int)).intValue())}
 
     Rscript ${quote(whichScript)} \\
       --mmwrFile ${quote(mmwrFile)} \\
