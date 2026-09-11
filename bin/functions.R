@@ -37,13 +37,20 @@ log_hdi <- function(x, credMass = 0.95) {
 # Return default FoodNet catchment start years or read from CSV
 read_catchment_config <- function(config_path = NULL) {
   if (is.null(config_path)) {
-    return(data.frame(
+    config <- data.frame(
       state = c("CA", "CO", "CT", "GA", "MD", "MN", "NM", "NY", "OR", "TN"),
       start_year = c(1996, 2001, 1996, 1996, 1998, 1996, 2004, 1998, 1996, 2000),
       end_year = rep(9999, 10),  # 9999 = ongoing participation
       pathogen_type = rep("both", 10),
       stringsAsFactors = FALSE
-    ))
+    )
+    # The audited parasite census starts Georgia in 1998, while bacterial
+    # coverage starts in 1996. Do not create parasite zero-count cells in 1997.
+    config$pathogen_type[config$state == "GA"] <- "bacterial"
+    georgia_parasitic <- config[config$state == "GA", ]
+    georgia_parasitic$start_year <- 1998
+    georgia_parasitic$pathogen_type <- "parasitic"
+    return(rbind(config, georgia_parasitic))
   }
   config <- read.csv(config_path, stringsAsFactors = FALSE)
   validate_catchment_config(config)
