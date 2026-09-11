@@ -88,6 +88,11 @@
                     "default": "CIDT+,CX+,PARASITIC",
                     "description": "Comma-separated CIDT classification values to include.",
                     "fa_icon": "fas fa-vial"
+                },
+                "travel_stratify": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Fit separate domestic and travel models in addition to the combined model."
                 }
             }
         },
@@ -136,6 +141,23 @@
                         "cmdstanr"
                     ],
                     "fa_icon": "fas fa-cogs"
+                },
+                "baseline_year": {
+                    "type": "integer",
+                    "minimum": 1900,
+                    "description": "Single baseline year; overrides baseline_start and baseline_end."
+                },
+                "baseline_start": {
+                    "type": "integer",
+                    "default": 2016,
+                    "minimum": 1900,
+                    "description": "First baseline year, inclusive."
+                },
+                "baseline_end": {
+                    "type": "integer",
+                    "default": 2018,
+                    "minimum": 1900,
+                    "description": "Last baseline year, inclusive."
                 }
             }
         },
@@ -192,6 +214,16 @@
                         "RELAXED"
                     ],
                     "fa_icon": "fas fa-bullseye"
+                },
+                "classification_rules": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "CSV with classification, match_type and value; default is analysis_configs/classification_rules.csv."
+                },
+                "serotype_source": {
+                    "type": "string",
+                    "default": "auto",
+                    "description": "Source column; auto prefers serotypesummary2, otherwise preserved/legacy serotypesummary, then sero1."
                 }
             }
         },

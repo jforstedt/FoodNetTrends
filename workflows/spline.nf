@@ -116,7 +116,7 @@ def buildGroupingWithMetrics = { pathogenGrouping, metricsChannel ->
             // Fall back to 15% of the parent pathogen estimate when unavailable.
             if (subgroup != 'combined') {
                 def subgroupKey = "${pathogen}_${subgroup}"
-                def subMetrics = subgroupMap[subgroupKey]
+                def subMetrics = subgroupMap.find { key, value -> key.equalsIgnoreCase(subgroupKey) }?.value
 
                 if (subMetrics) {
                     pathogenMetrics = subMetrics
@@ -158,6 +158,10 @@ def buildGroupingWithMetrics = { pathogenGrouping, metricsChannel ->
 }
 
 workflow FOODNETTRENDS {
+    def baselineStart = params.baseline_year != null ? params.baseline_year : params.baseline_start
+    def baselineEnd = params.baseline_year != null ? params.baseline_year : params.baseline_end
+    if (!baselineStart.toString().isInteger() || !baselineEnd.toString().isInteger() ||
+        (baselineStart as Integer) > (baselineEnd as Integer)) error "Baseline must be a single integer year or an ordered year range"
     // Define input channels
     if (params.pathogen && params.pathogen != 'AUTO_DISCOVER') {
         // Convert comma-separated string to a channel of pathogens
@@ -174,7 +178,10 @@ workflow FOODNETTRENDS {
     // Handle pathogen grouping if specified
     if (params.pathogen_grouping && params.pathogen_grouping.trim()) {
         // Parse pathogen~subgroup format using pipe delimiter
-        def groupingList = params.pathogen_grouping.tokenize('|')
+        def groupingList = params.pathogen_grouping.tokenize('|').unique()
+        def outputNames = groupingList.collect { it.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '') }
+        if (outputNames.unique(false).size() != groupingList.size()) error "Subgroup names collide after filename sanitization; run these selections separately"
+        if (groupingList.any { it.split('~', -1).size() != 2 || !it.split('~', -1)[1] }) error "Each grouping must be PATHOGEN~subgroup"
         pathogenGrouping = Channel.fromList(groupingList)
     } else if (params.pathogen == 'AUTO_DISCOVER') {
         // Defer pathogenGrouping creation until after preprocessing
@@ -198,6 +205,7 @@ workflow FOODNETTRENDS {
     serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_SEROTYPE_CONFIG')
     catchmentConfig = params.catchment_config ? file(params.catchment_config) : file('NO_CATCHMENT_CONFIG')
     dataRules = params.data_rules ? file(params.data_rules) : file('NO_DATA_RULES')
+    classificationRules = file(params.classification_rules, checkIfExists: true)
 
     // Check if files exist
     if (!mmwrFile.exists()) {
@@ -240,28 +248,12 @@ workflow FOODNETTRENDS {
             error "Preprocessed file not found: ${params.cleanFile}"
         }
 
-        // Check for existing resource profile
-        def resourceProfilePath = cleanFile.parent.resolve("resource_profile.csv")
-        def resourceProfile = file(resourceProfilePath)
-
-        if (resourceProfile.exists()) {
-            log.info "Using existing resource profile: ${resourceProfilePath}"
-            def subgroupProfilePath = cleanFile.parent.resolve("resource_profile_subgroups.csv")
-            def subgroupProfile = file(subgroupProfilePath)
-            def subgroupFile = subgroupProfile.exists() ? subgroupProfile : null
-
-            def metricsMap = parseResourceProfiles(resourceProfile, subgroupFile)
-            metricsChannel = Channel.value(metricsMap)
-        } else {
-            log.info "Generating resource profile for preprocessed data"
-            RESOURCE_PROFILER(cleanFile)
-
-            metricsChannel = RESOURCE_PROFILER.out.profile
-                .combine(RESOURCE_PROFILER.out.subgroup_profile)
-                .map { csvFile, subgroupFile ->
-                    parseResourceProfiles(csvFile, subgroupFile)
-                }
-        }
+        // Recompute against the current classification rules, including reused cleaned inputs.
+        RESOURCE_PROFILER(cleanFile, classificationRules)
+        metricsChannel = RESOURCE_PROFILER.out.profile
+            .combine(RESOURCE_PROFILER.out.subgroup_profile)
+            .map { csvFile, subgroupFile -> parseResourceProfiles(csvFile, subgroupFile) }
+        dashboardCleanFile = cleanFile
 
         // Handle AUTO_DISCOVER with preprocessed data
         if (!pathogenGrouping) {
@@ -288,7 +280,8 @@ workflow FOODNETTRENDS {
             params.trendyScript,
             params.preprocessed,
             cleanFile,
-            catchmentConfig
+            catchmentConfig,
+            classificationRules
         )
     } else {
         log.info "Preprocessing raw data files"
@@ -298,14 +291,16 @@ workflow FOODNETTRENDS {
             mmwrFile,
             params.projID,
             serotypeConfig,
-            dataRules
+            dataRules,
+            classificationRules
         )
 
         // Create a proper channel from the preprocessed file
         processedFile = PREPROCESS.out.cleanFile
 
         // Generate resource profile for new data
-        RESOURCE_PROFILER(processedFile)
+        RESOURCE_PROFILER(processedFile, classificationRules)
+        dashboardCleanFile = processedFile
 
         metricsChannel = RESOURCE_PROFILER.out.profile
             .combine(RESOURCE_PROFILER.out.subgroup_profile)
@@ -351,20 +346,29 @@ workflow FOODNETTRENDS {
             params.trendyScript,
             true,
             processedFile,
-            catchmentConfig
+            catchmentConfig,
+            classificationRules
         )
     }
 
-    // Generate dashboard after all TRENDY jobs complete
-    // Mix csv (always emitted on success) with errors (emitted on failure) for a reliable signal
+    // Stage actual process outputs; publication is asynchronous and is not an input dependency.
     if (!params.skip_dashboard) {
-        trendy_done = TRENDY.out.csv
-            .mix(TRENDY.out.errors)
-            .collect()
-            .ifEmpty(["done"])
-            .map { "done" }
-
-        DASHBOARD(trendy_done, params.projID)
+        dashboardResults = TRENDY.out.csv.mix(TRENDY.out.irsite, TRENDY.out.png,
+            TRENDY.out.irr, TRENDY.out.summary, TRENDY.out.errors, TRENDY.out.diagnostics,
+            TRENDY.out.domesticDiagnostics, TRENDY.out.travelDiagnostics,
+            TRENDY.out.classificationReport, TRENDY.out.classificationRulesUsed,
+            TRENDY.out.settings).collect().ifEmpty([])
+        dashboardMetadata = RESOURCE_PROFILER.out.profile.mix(RESOURCE_PROFILER.out.subgroup_profile,
+            RESOURCE_PROFILER.out.states_metadata, RESOURCE_PROFILER.out.cidt_metadata,
+            RESOURCE_PROFILER.out.travel_metadata)
+        if (!params.preprocessed) {
+            dashboardMetadata = dashboardMetadata.mix(PREPROCESS.out.preprocessingReport)
+        } else {
+            def previousReport = cleanFile.parent.resolve('clean_mmwr_preprocessing_report.csv')
+            if (previousReport.exists()) dashboardMetadata = dashboardMetadata.mix(Channel.value(previousReport))
+        }
+        dashboardMetadata = dashboardMetadata.collect()
+        DASHBOARD(dashboardResults, dashboardMetadata, dashboardCleanFile, params.projID)
     }
 
 }
@@ -385,6 +389,7 @@ workflow PREPROCESS_ONLY {
     // Configuration files (optional)
     serotypeConfig = params.serotype_config ? file(params.serotype_config) : file('NO_SEROTYPE_CONFIG')
     dataRules = params.data_rules ? file(params.data_rules) : file('NO_DATA_RULES')
+    classificationRules = file(params.classification_rules, checkIfExists: true)
 
     // Log preprocessing start
     log.info """
@@ -404,10 +409,11 @@ workflow PREPROCESS_ONLY {
         mmwrFile,
         params.projID,
         serotypeConfig,
-        dataRules
+        dataRules,
+        classificationRules
     )
 
     // Run resource profiler on preprocessed data
-    RESOURCE_PROFILER(PREPROCESS.out.cleanFile)
+    RESOURCE_PROFILER(PREPROCESS.out.cleanFile, classificationRules)
 
 }

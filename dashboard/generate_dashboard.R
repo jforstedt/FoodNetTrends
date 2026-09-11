@@ -120,6 +120,8 @@ HIERARCHICAL_PATHOGENS <- c("SALMONELLA", "STEC")
 parser <- ArgumentParser(description = "Generate FoodNetTrends results dashboard")
 parser$add_argument("--output_dir", type = "character", required = TRUE,
                     help = "Path to pipeline output directory")
+parser$add_argument("--results_dir", default = NULL)
+parser$add_argument("--preprocessed_dir", default = NULL)
 parser$add_argument("--projID", type = "character", required = TRUE,
                     help = "Project ID string")
 parser$add_argument("--output", type = "character", default = "dashboard.html",
@@ -139,7 +141,7 @@ projID     <- opts$projID
 output_file <- opts$output
 clean_file_arg <- opts$cleanFile
 
-if (!dir.exists(output_dir)) {
+if (!dir.exists(output_dir) && is.null(opts$results_dir)) {
   msg("FATAL: Output directory does not exist: ", output_dir)
   quit(status = 1)
 }
@@ -151,8 +153,8 @@ msg("Output directory: ", output_dir)
 
 msg("Discovering pipeline output files...")
 
-preprocessed_dir  <- file.path(output_dir, "preprocessed")
-spline_dir        <- file.path(output_dir, "spline_results")
+preprocessed_dir <- if (is.null(opts$preprocessed_dir)) file.path(output_dir, "preprocessed") else opts$preprocessed_dir
+spline_dir <- if (is.null(opts$results_dir)) file.path(output_dir, "spline_results") else opts$results_dir
 pipeline_info_dir <- file.path(output_dir, "pipeline_info")
 
 # Determine the source directory for preprocessing metadata.
@@ -183,7 +185,7 @@ resolve_preproc_file <- function(filename) {
 }
 
 # Preprocessed files
-clean_mmwr_path        <- resolve_preproc_file("clean_mmwr.csv")
+clean_mmwr_path <- if (!is.null(clean_file_arg)) clean_file_arg else resolve_preproc_file("clean_mmwr.csv")
 preprocess_report_path <- resolve_preproc_file("clean_mmwr_preprocessing_report.csv")
 resource_profile_path  <- resolve_preproc_file("resource_profile.csv")
 resource_profile_subgroups_path <- resolve_preproc_file("resource_profile_subgroups.csv")
@@ -442,6 +444,9 @@ for (aid in names(analysis_ids)) {
     subgroup = info$subgroup,
     id = aid,
     status = "unknown",
+    diagnostics = list(),
+    convergence_status = "Not assessed",
+    settings = NULL,
     color = ifelse(info$pathogen %in% names(PATHOGEN_COLORS),
                    PATHOGEN_COLORS[[info$pathogen]], "#666666"),
     has_subgroups = info$pathogen %in% HIERARCHICAL_PATHOGENS,
@@ -473,7 +478,23 @@ for (aid in names(analysis_ids)) {
   ircatch_path <- paste0(prefix, "_IRCatch.csv")
   if (file.exists(ircatch_path)) {
     entry$ircatch <- safe_read_csv(ircatch_path)
-    entry$status <- "success"
+    if (is.null(entry$error_txt) && !is.null(entry$ircatch)) entry$status <- "success"
+  }
+
+  for (stratum in c("all", "domestic", "travel")) {
+    diag_path <- paste0(prefix, if (stratum == "all") "" else paste0("_", stratum), "_convergence_diagnostics.csv")
+    if (file.exists(diag_path)) entry$diagnostics[[stratum]] <- safe_read_csv(diag_path)
+  }
+  diag <- entry$diagnostics$all
+  if (!is.null(diag) && nrow(diag)) {
+    entry$convergence_status <- if (!isTRUE(diag$converged[1])) "Not converged" else
+      if (!is.na(diag$warnings[1]) && nzchar(diag$warnings[1])) "Review diagnostics" else "Converged"
+  }
+  settings_path <- paste0(prefix, "_analysis_settings.csv")
+  if (file.exists(settings_path)) {
+    entry$settings <- safe_read_csv(settings_path)
+    if (!is.null(entry$settings) && "subgroup" %in% names(entry$settings) && nrow(entry$settings))
+      entry$subgroup <- entry$settings$subgroup[1]
   }
 
   # Read IRSite
@@ -716,6 +737,9 @@ dashboard_data <- list(
       subgroup = entry$subgroup,
       id = entry$id,
       status = entry$status,
+      convergence_status = entry$convergence_status,
+      diagnostics = lapply(entry$diagnostics, df_to_list),
+      settings = df_to_list(entry$settings),
       color = entry$color,
       has_subgroups = entry$has_subgroups,
       ircatch = df_to_list(entry$ircatch),
@@ -766,6 +790,8 @@ dashboard_data <- list(
 msg("Serializing to JSON...")
 json_str <- toJSON(dashboard_data, auto_unbox = TRUE, pretty = FALSE,
                    na = "null", null = "null", digits = 6)
+# JSON strings can contain HTML closing tags; keep them inert inside the script element.
+json_str <- gsub("<", "\\u003c", json_str, fixed = TRUE)
 msg("JSON size: ", format(nchar(json_str), big.mark = ","), " characters")
 
 # --- Template assembly --------------------------------------------------------

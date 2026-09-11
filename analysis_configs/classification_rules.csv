@@ -1,0 +1,15 @@
+classification,match_type,value
+not_serotyped,exact,
+not_serotyped,exact,NOT SEROTYPED
+not_serotyped,exact,NOT SPECIATED
+not_serotyped,exact,UNKNOWN
+not_serotyped,exact,PARTIAL SERO
+not_serotyped,exact,NOT SERO
+not_serotyped,exact,MISSING
+not_serotyped,contains,UNDET
+typhoidal,exact,TYPHI
+typhoidal,exact,PARATYPHI A
+typhoidal,exact,PARATYPHI C
+typhoidal,exact,PARATYPHI B TARTRATE-NEGATIVE
+unclassified,contains,PARATYPHI B
+unclassified,exact,OTHER SEROTYPES

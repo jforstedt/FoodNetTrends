@@ -5,13 +5,16 @@
 suppressPackageStartupMessages(library("argparse"))
 suppressPackageStartupMessages(library("dplyr"))
 suppressPackageStartupMessages(library("haven"))
-suppressPackageStartupMessages(library("gtools"))
 # stringdist is optional - used for fuzzy pathogen matching if available
 if (requireNamespace("stringdist", quietly = TRUE)) {
   suppressPackageStartupMessages(library("stringdist"))
 }
 
+script_dir <- dirname(sub("--file=", "", grep("^--file=", commandArgs(), value = TRUE)[1]))
+source(file.path(script_dir, "classification.R"))
 parser <- ArgumentParser()
+parser$add_argument("--classification_rules", default = file.path(dirname(script_dir), "analysis_configs", "classification_rules.csv"))
+parser$add_argument("--serotype_source", default = "auto")
 parser$add_argument("--mmwrFile", type = "character", help = "Path to the raw MMWR SAS file", required = TRUE)
 parser$add_argument("--outputFile", type = "character", help = "Path to save the cleaned CSV file", required = TRUE)
 parser$add_argument("--serotype-config", type = "character", help = "Path to CSV file with serotype recoding rules (optional)", required = FALSE, default = NULL)
@@ -53,6 +56,10 @@ validate_serotype_config <- function(config) {
 
 # Apply serotype recoding rules (exact first, then pattern matches)
 apply_serotype_config <- function(data, config) {
+  if (!"sero1" %in% names(data)) {
+    data$sero1 <- if ("serotypesummary" %in% names(data)) data$serotypesummary else
+      rep(NA_character_, nrow(data))
+  }
   data$sero2 <- data$sero1
 
   exact_rules <- config[config$match_type == "exact", ]
@@ -467,6 +474,13 @@ if(!"pathogentype" %in% names(mmwrdata)) {
   mmwrdata <- mmwrdata %>%
     mutate(pathogentype = ifelse(pathogen %in% c("CRYPTOSPORIDIUM", "CYCLOSPORA"), "Parasitic", "Bacterial"))
 }
+
+# Shared classification retains the original source and re-runs safely on cleaned CSVs.
+classification_rules <- read_classification_rules(args$classification_rules)
+mmwrdata <- classify_cases(mmwrdata, classification_rules, args$serotype_source)
+write.csv(classification_counts(mmwrdata),
+          sub("\\.csv$", "_classification_report.csv", args$outputFile), row.names = FALSE)
+write.csv(classification_rules, file.path(dirname(args$outputFile), "classification_rules_used.csv"), row.names = FALSE)
 
 # --- Write Output ---
 cat("Writing cleaned data to:", args$outputFile, "\n")

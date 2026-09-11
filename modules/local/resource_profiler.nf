@@ -8,6 +8,7 @@ process RESOURCE_PROFILER {
 
     input:
     path cleanFile
+    path classificationRules
 
     output:
     path "resource_profile.csv", emit: profile
@@ -38,6 +39,9 @@ process RESOURCE_PROFILER {
         cat("First few pathogens:", paste(head(unique(data\$pathogen), 10), collapse=", "), "\\n")
     }
     
+    source("${workflow.projectDir}/bin/classification.R")
+    data <- classify_cases(data, read_classification_rules("${classificationRules}"), ${groovy.json.JsonOutput.toJson(params.serotype_source)})
+
     # Calculate metrics for each pathogen
     pathogen_metrics <- data %>%
         filter(!is.na(pathogen)) %>%  # Filter out NA values only
@@ -67,7 +71,8 @@ process RESOURCE_PROFILER {
     state_year_counts <- data %>%
         filter(!is.na(pathogen)) %>%
         group_by(pathogen, state, year) %>%
-        summarise(count = n(), .groups = 'drop')
+        summarise(count = n(), .groups = 'drop') %>%
+        complete(nesting(pathogen), state, year, fill = list(count = 0))
 
     # Max years across all pathogens (for relative year coverage)
     max_years_global <- max(state_year_counts %>% group_by(pathogen) %>%
@@ -154,7 +159,8 @@ process RESOURCE_PROFILER {
                    .data[[group_col]] != "" &
                    .data[[group_col]] != "Missing") %>%
             group_by(pathogen, subgroup = .data[[group_col]], state, year) %>%
-            summarise(count = n(), .groups = 'drop')
+            summarise(count = n(), .groups = 'drop') %>%
+            complete(nesting(pathogen, subgroup), state, year, fill = list(count = 0))
 
         diff <- sy %>%
             group_by(pathogen, subgroup) %>%

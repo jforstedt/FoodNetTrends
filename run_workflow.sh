@@ -53,198 +53,105 @@ skip_to_summary=false
 background=false
 stan_backend="rstan"
 TRAVEL_STRATIFY="false"
+baseline_start=2016
+baseline_end=2018
+classification_rules="${FNT_CLASSIFICATION_RULES:-analysis_configs/classification_rules.csv}"
+serotype_source="${FNT_SEROTYPE_SOURCE:-auto}"
 
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
 
 handle_pathogen_grouping() {
-    local pathogen="$1"
-    local preprocessed_file="$2"
-    local grouping=""
-
-    case "$pathogen" in
-        STEC)
-            echo "" >&2
-            echo -e "${BLUE}STEC Grouping Options:${NC}" >&2
-            echo "STEC can be analyzed as:" >&2
-            echo "1) Combined - All STEC serogroups together" >&2
-            echo "2) O157 - Serogroup O157 only" >&2
-            echo "3) Non-O157 - All non-O157 serogroups" >&2
-            echo "4) Both separately - O157 and non-O157 as independent analyses" >&2
-            echo "5) All three - Combined + O157 + non-O157" >&2
-            echo "" >&2
-
-            while true; do
-                read -p "Select STEC grouping option [1]: " stec_choice
-                stec_choice=${stec_choice:-1}
-
-                case "$stec_choice" in
-                    1) grouping="STEC~combined"; break ;;
-                    2) grouping="STEC~O157"; break ;;
-                    3) grouping="STEC~nonO157"; break ;;
-                    4) grouping="STEC~O157|STEC~nonO157"; break ;;
-                    5) grouping="STEC~combined|STEC~O157|STEC~nonO157"; break ;;
-                    *)
-                        echo -e "${RED}Invalid choice: '$stec_choice'. Please enter 1-5.${NC}" >&2
-                        ;;
-                esac
-            done
-            ;;
-
-        SALMONELLA)
-            echo "" >&2
-            echo -e "${BLUE}Salmonella Grouping Options:${NC}" >&2
-            if [[ -n "${_FNT_SAL_CHOICE:-}" ]]; then
-                # Choice was already made before auto-preprocessing
-                sal_choice="$_FNT_SAL_CHOICE"
-            else
-                echo "1) Combined - All serotypes together" >&2
-                echo "2) Custom selection - Choose specific serotypes" >&2
-                echo "3) Combined + custom - Run combined AND specific serotypes" >&2
-                echo "" >&2
-
-                while true; do
-                    read -p "Select Salmonella grouping option [1]: " sal_choice
-                    sal_choice=${sal_choice:-1}
-
-                    if [[ "$sal_choice" =~ ^[123]$ ]]; then
-                        break
-                    else
-                        echo -e "${RED}Invalid choice: '$sal_choice'. Please enter 1, 2, or 3.${NC}" >&2
-                    fi
-                done
-            fi
-
-            if [[ "$sal_choice" == "2" ]] || [[ "$sal_choice" == "3" ]]; then
-                # Extract and rank serotypes
-                echo "" >&2
-                echo "Analyzing serotypes in data..." >&2
-
-                serotype_data=$(awk -v pathogen="SALMONELLA" '
-                    BEGIN { OFS="\t" }
-                    NR==1 {
-                        n = split($0, hdr, ",")
-                        for (i = 1; i <= n; i++) {
-                            gsub(/^"|"$/, "", hdr[i])
-                            if (hdr[i] == "pathogen") p_col = i
-                            if (hdr[i] == "serotypesummary") s_col = i
-                        }
-                        if (p_col && s_col)
-                            max_col = (p_col > s_col) ? p_col : s_col
-                    }
-                    NR>1 && p_col && s_col {
-                        if (index($0, pathogen) == 0) next
-
-                        nf = 0; current = ""; in_q = 0; pval = ""; sval = ""
-                        for (i = 1; i <= length($0); i++) {
-                            c = substr($0, i, 1)
-                            if (c == "\"") { in_q = !in_q }
-                            else if (c == "," && !in_q) {
-                                nf++
-                                if (nf == p_col) pval = current
-                                if (nf == s_col) sval = current
-                                if (nf >= max_col) break
-                                current = ""
-                            } else { current = current c }
-                        }
-                        if (nf < max_col) {
-                            nf++
-                            if (nf == p_col) pval = current
-                            if (nf == s_col) sval = current
-                        }
-
-                        gsub(/^"|"$/, "", pval)
-                        gsub(/^"|"$/, "", sval)
-                        if (pval == pathogen && sval != "") {
-                            serotypes[sval]++
-                        }
-                    }
-                    END {
-                        for (s in serotypes) {
-                            print serotypes[s], s
-                        }
-                    }
-                ' "$preprocessed_file" | sort -rn)
-
-                if [[ -z "$serotype_data" ]]; then
-                    echo -e "${YELLOW}No serotype data found. Using combined analysis.${NC}" >&2
-                    grouping="SALMONELLA~combined"
-                else
-                    echo -e "${GREEN}Top serotypes found:${NC}" >&2
-                    echo "$serotype_data" | head -20 | nl -nln -w3 | while read num count serotype; do
-                        printf "[%s] %-30s (n=%s)\n" "$num" "$serotype" "$count" >&2
-                    done
-
-                    total_serotypes=$(echo "$serotype_data" | wc -l)
-                    if [[ $total_serotypes -gt 20 ]]; then
-                        echo "" >&2
-                        echo "... and $((total_serotypes - 20)) more serotypes" >&2
-
-                        while true; do
-                            read -p "Show all serotypes? (y/n) [n]: " show_all
-                            show_all=${show_all:-n}
-
-                            if [[ "$show_all" =~ ^[YyNn]$ ]]; then
-                                break
-                            else
-                                echo -e "${RED}Invalid input: '$show_all'. Please enter y or n.${NC}" >&2
-                            fi
-                        done
-
-                        if [[ "$show_all" =~ ^[Yy]$ ]]; then
-                            echo "$serotype_data" | tail -n +21 | nl -nln -w3 -v 21 | while read num count serotype; do
-                                printf "[%s] %-30s (n=%s)\n" "$num" "$serotype" "$count" >&2
-                            done
-                        fi
-                    fi
-
-                    echo "" >&2
-                    echo "Enter serotype numbers to analyze (comma-separated, e.g., 1,2,5)" >&2
-                    echo "Or press Enter to analyze all serotypes combined" >&2
-                    read -p "Selection: " serotype_selection
-
-                    if [[ -z "$serotype_selection" ]]; then
-                        grouping="SALMONELLA~combined"
-                    else
-                        selected_serotypes=""
-                        IFS=',' read -ra selections <<< "$serotype_selection"
-                        for sel in "${selections[@]}"; do
-                            serotype_name=$(echo "$serotype_data" | sed -n "${sel}p" | cut -f2-)
-                            if [[ -n "$serotype_name" ]]; then
-                                if [[ -n "$selected_serotypes" ]]; then
-                                    selected_serotypes="${selected_serotypes}|SALMONELLA~${serotype_name}"
-                                else
-                                    selected_serotypes="SALMONELLA~${serotype_name}"
-                                fi
-                            fi
-                        done
-                        if [[ -z "$selected_serotypes" ]]; then
-                            echo -e "${YELLOW}No valid serotypes selected. Using combined analysis.${NC}" >&2
-                            grouping="SALMONELLA~combined"
-                        elif [[ "$sal_choice" == "3" ]]; then
-                            grouping="SALMONELLA~combined|$selected_serotypes"
-                        else
-                            grouping="$selected_serotypes"
-                        fi
-                    fi
-                fi
-            else
-                grouping="SALMONELLA~combined"
-            fi
-            ;;
-
-        *)
-            grouping="${pathogen}~combined"
-            ;;
-    esac
-
-    # Validate that grouping is not empty
-    if [[ -z "$grouping" ]] || [[ -z "${grouping// }" ]]; then
-        echo -e "${YELLOW}Warning: Empty grouping detected. Using default.${NC}" >&2
-        grouping="${pathogen}~combined"
+    local pathogen="$1" data_file="$2" choice grouping values selection value item
+    local -a available selections
+    if [[ "$pathogen" == "STEC" ]]; then
+        echo "STEC: 1) Combined  2) O157  3) Non-O157  4) O157 + non-O157" >&2
+        echo "      5) Combined + O157 + non-O157  6) Not serogrouped  7) All four" >&2
+        while true; do
+            read -r -p "STEC selection [1]: " choice
+            case "${choice:-1}" in
+                1) echo 'STEC~combined'; return ;;
+                2) echo 'STEC~O157'; return ;;
+                3) echo 'STEC~nonO157'; return ;;
+                4) echo 'STEC~O157|STEC~nonO157'; return ;;
+                5) echo 'STEC~combined|STEC~O157|STEC~nonO157'; return ;;
+                6) echo 'STEC~NOT SEROGROUPED'; return ;;
+                7) echo 'STEC~combined|STEC~O157|STEC~nonO157|STEC~NOT SEROGROUPED'; return ;;
+                *) echo 'Enter 1-7.' >&2 ;;
+            esac
+        done
+    fi
+    if [[ "$pathogen" == "SALMONELLA" ]]; then
+        echo 'Salmonella: 1) Combined  2) Custom serotypes  3) Combined + custom' >&2
+        echo '            4) FoodNet five + other + not serotyped' >&2
+        echo '            5) Not serotyped only' >&2
+        echo '            6) Typhoidal + nontyphoidal + unclassified separately' >&2
+        while true; do
+            read -r -p 'Salmonella selection [1]: ' choice
+            choice=${choice:-1}
+            case "$choice" in
+                1) echo 'SALMONELLA~combined'; return ;;
+                2|3) break ;;
+                4) echo 'SALMONELLA~ENTERITIDIS|SALMONELLA~NEWPORT|SALMONELLA~TYPHIMURIUM|SALMONELLA~JAVIANA|SALMONELLA~I 4,[5],12:i:-|SALMONELLA~OTHER SEROTYPES|SALMONELLA~NOT SEROTYPED'; return ;;
+                5) echo 'SALMONELLA~NOT SEROTYPED'; return ;;
+                6) echo 'SALMONELLA~TYPHOIDAL|SALMONELLA~NONTYPHOIDAL|SALMONELLA~UNCLASSIFIED'; return ;;
+                *) echo 'Enter 1-6.' >&2 ;;
+            esac
+        done
+    else
+        read -r -p "$pathogen: select individual serotypes/species? (y/n) [n]: " choice
+        if [[ ! "$choice" =~ ^[Yy]$ ]]; then echo "${pathogen}~combined"; return; fi
+        choice=2
     fi
 
+    values=""
+    if [[ -f "$data_file" ]]; then
+        if command -v Rscript >/dev/null 2>&1; then
+            values=$(Rscript bin/list_subgroups.R "$data_file" "$pathogen" "$classification_rules" "$serotype_source")
+        elif command -v singularity >/dev/null 2>&1; then
+            values=$(singularity exec --bind /scicomp foodnet.sif Rscript bin/list_subgroups.R "$data_file" "$pathogen" "$classification_rules" "$serotype_source")
+        fi
+    fi
+    available=()
+    if [[ -n "$values" ]]; then
+        mapfile -t available < <(printf '%s\n' "$values" | cut -f2-)
+        printf '%s\n' "$values" | nl -ba >&2
+        echo 'Enter row numbers separated by commas, or exact labels separated by |.' >&2
+    else
+        echo 'Enter exact serotypesummary labels separated by | (commas can be part of a label).' >&2
+    fi
+    while true; do
+        read -r -p 'Selection [combined]: ' selection
+        grouping=""
+        if [[ -z "$selection" ]]; then echo "${pathogen}~combined"; return; fi
+        if [[ "$selection" == *'~'* ]]; then echo 'Labels cannot contain ~.' >&2; continue; fi
+        if [[ ${#available[@]} -gt 0 && "$selection" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+            IFS=',' read -r -a selections <<< "$selection"
+            for item in "${selections[@]}"; do
+                if (( 10#$item < 1 || 10#$item > ${#available[@]} )); then grouping=""; break; fi
+                value=${available[$((10#$item - 1))]}
+                grouping+="${grouping:+|}${pathogen}~${value}"
+            done
+        else
+            IFS='|' read -r -a selections <<< "$selection"
+            for value in "${selections[@]}"; do
+                value="${value#"${value%%[![:space:]]*}"}"
+                value="${value%"${value##*[![:space:]]}"}"
+                if [[ -z "$value" ]]; then grouping=""; break; fi
+                grouping+="${grouping:+|}${pathogen}~${value}"
+            done
+        fi
+        if [[ -n "$grouping" ]]; then break; fi
+        echo 'Invalid or empty selection; try again.' >&2
+    done
+    if [[ "$pathogen" == "SALMONELLA" ]]; then
+        read -r -p 'Also model other identified serotypes? (y/n) [y]: ' item
+        if [[ "${item:-y}" =~ ^[Yy]$ ]]; then grouping+='|SALMONELLA~OTHER SEROTYPES'; fi
+        read -r -p 'Also model not-serotyped cases separately? (y/n) [y]: ' item
+        if [[ "${item:-y}" =~ ^[Yy]$ ]]; then grouping+='|SALMONELLA~NOT SEROTYPED'; fi
+    fi
+    if [[ "$choice" == 3 ]]; then grouping="${pathogen}~combined|${grouping}"; fi
     echo "$grouping"
 }
 
@@ -320,13 +227,13 @@ echo ""
 # ---------------------------------------------------------------------------
 while true; do
     echo -e "Select run mode:"
-    echo "1) Test"
-    echo "2) Publication"
-    echo "3) Max"
-    echo "4) Custom"
-    echo "5) Resume previous run"
-    echo "6) Preprocessing only"
-    read -p "Enter selection [1]: " run_mode
+    echo "1) Test - Smoke check: 1 chain, 100 iterations; not for interpreting trends"
+    echo "2) Publication - 6 chains, 10001 iterations; review convergence before use"
+    echo "3) Max - 8 chains, 20000 iterations; longest runtime, no convergence guarantee"
+    echo "4) Custom - Choose sampling settings yourself"
+    echo "5) Resume - Request Nextflow cache reuse; verify settings match the original run"
+    echo "6) Preprocessing only - Clean/classify cases and profile data; no model fitting"
+    read -r -p "Enter selection [1]: " run_mode
     run_mode=${run_mode:-1}
 
     if [[ "$run_mode" =~ ^[1-6]$ ]]; then
@@ -353,7 +260,7 @@ if [[ "$flag" == "test" ]]; then
     echo ""
     echo -e "${BLUE}Test mode selected.${NC} Defaults: all pathogens, all states, all filters."
     while true; do
-        read -p "Proceed with defaults (y) or customize (c)? [y]: " quick_choice
+        read -r -p "Proceed with defaults (y) or customize (c)? [y]: " quick_choice
         quick_choice=${quick_choice:-y}
 
         if [[ "$quick_choice" =~ ^[YyCc]$ ]]; then
@@ -398,7 +305,7 @@ fi
 # ---------------------------------------------------------------------------
 if [[ "$skip_to_summary" != true ]]; then
     echo ""
-    read -p "Output directory [${outDir}]: " user_outdir
+    read -r -p "Output directory [${outDir}]: " user_outdir
     outDir=${user_outdir:-$outDir}
 fi
 
@@ -457,7 +364,7 @@ else
     echo "0) Skip - run preprocessing again"
     echo "C) Specify custom path to preprocessed data"
     echo ""
-    read -p "Select preprocessed file to use [0]: " selection
+    read -r -p "Select preprocessed file to use [0]: " selection
     selection=${selection:-0}
 
     if [[ "$selection" =~ ^[1-9][0-9]*$ ]] && [[ $selection -le ${#preprocessed_files[@]} ]]; then
@@ -468,7 +375,7 @@ else
         echo ""
         echo "Enter the full path to the preprocessed directory"
         echo "(This directory should contain clean_mmwr.csv and resource_profile.csv)"
-        read -p "Path: " custom_path
+        read -r -p "Path: " custom_path
 
         if [[ -d "$custom_path" ]]; then
             custom_clean="${custom_path}/clean_mmwr.csv"
@@ -500,7 +407,7 @@ else
     echo -e "${YELLOW}No preprocessed data found locally.${NC}"
     echo ""
     while true; do
-        read -p "Do you want to specify a custom path to preprocessed data? (y/n) [n]: " custom_choice
+        read -r -p "Do you want to specify a custom path to preprocessed data? (y/n) [n]: " custom_choice
         custom_choice=${custom_choice:-n}
 
         if [[ "$custom_choice" =~ ^[YyNn]$ ]]; then
@@ -514,7 +421,7 @@ else
         echo ""
         echo "Enter the full path to the preprocessed directory"
         echo "(This directory should contain clean_mmwr.csv and resource_profile.csv)"
-        read -p "Path: " custom_path
+        read -r -p "Path: " custom_path
 
         if [[ -d "$custom_path" ]]; then
             custom_clean="${custom_path}/clean_mmwr.csv"
@@ -573,7 +480,7 @@ elif [[ "$skip_to_summary" != true ]]; then
     echo -e "Pathogen selection:"
     echo "1) Run ALL available pathogens"
     echo "2) Select specific pathogens"
-    read -p "Enter selection [2]: " pathogen_mode
+    read -r -p "Enter selection [2]: " pathogen_mode
     pathogen_mode=${pathogen_mode:-2}
 
 if [[ "$pathogen_mode" == "1" ]]; then
@@ -660,7 +567,7 @@ else
             echo ""
             echo "Enter pathogens to analyze (comma-separated with NO spaces)"
             echo -e "${YELLOW}Available: $available_pathogens${NC}"
-            read -p "Leave blank to analyze all found pathogens: " pathogens
+            read -r -p "Leave blank to analyze all found pathogens: " pathogens
             pathogens=${pathogens:-"$available_pathogens"}
             if [[ -z "$pathogens" ]] || [[ -z "${pathogens// }" ]]; then
                 echo -e "${YELLOW}No pathogens could be determined. Using default.${NC}"
@@ -678,7 +585,7 @@ else
             echo "- YERSINIA"
             echo ""
             echo "Enter pathogens to analyze (comma-separated with NO spaces)"
-            read -p "Leave blank for default (CAMPYLOBACTER,CYCLOSPORA): " pathogens
+            read -r -p "Leave blank for default (CAMPYLOBACTER,CYCLOSPORA): " pathogens
             pathogens=${pathogens:-"CAMPYLOBACTER,CYCLOSPORA"}
         fi
     else
@@ -692,7 +599,7 @@ else
         echo "- YERSINIA"
         echo ""
         echo "Enter pathogens to analyze (comma-separated with NO spaces)"
-        read -p "Leave blank for default (CAMPYLOBACTER,CYCLOSPORA): " pathogens
+        read -r -p "Leave blank for default (CAMPYLOBACTER,CYCLOSPORA): " pathogens
         pathogens=${pathogens:-"CAMPYLOBACTER,CYCLOSPORA"}
     fi
 
@@ -730,7 +637,7 @@ else
 
             if [[ "$invalid_found" == true ]]; then
                 echo ""
-                read -p "Please re-enter pathogen names (comma-separated): " pathogens
+                read -r -p "Please re-enter pathogen names (comma-separated): " pathogens
             else
                 pathogens="$normalized_pathogens"
                 break
@@ -758,7 +665,7 @@ if [[ "$flag" != "preprocess" ]] && [[ "$flag" != "resume" ]] && [[ "$skip_to_su
 
     # Serotype configuration
     while true; do
-        read -p "Use custom serotype configuration? (y/n) [n]: " use_serotype_config
+        read -r -p "Use custom serotype configuration? (y/n) [n]: " use_serotype_config
         use_serotype_config=${use_serotype_config:-n}
 
         if [[ "$use_serotype_config" =~ ^[YyNn]$ ]]; then
@@ -772,7 +679,7 @@ if [[ "$flag" != "preprocess" ]] && [[ "$flag" != "resume" ]] && [[ "$skip_to_su
     if [[ "$use_serotype_config" =~ ^[Yy]$ ]]; then
         echo "Enter path to serotype configuration CSV file"
         echo "(Example: analysis_configs/examples/serotype_config.csv)"
-        read -p "Path: " serotype_config
+        read -r -p "Path: " serotype_config
         if [[ -n "$serotype_config" ]] && [[ ! -f "$serotype_config" ]]; then
             echo -e "${YELLOW}Warning: File not found: $serotype_config${NC}"
             echo -e "${YELLOW}Pipeline will fail if file doesn't exist at runtime.${NC}"
@@ -782,7 +689,7 @@ if [[ "$flag" != "preprocess" ]] && [[ "$flag" != "resume" ]] && [[ "$skip_to_su
     # Catchment configuration
     echo ""
     while true; do
-        read -p "Use custom catchment configuration? (y/n) [n]: " use_catchment_config
+        read -r -p "Use custom catchment configuration? (y/n) [n]: " use_catchment_config
         use_catchment_config=${use_catchment_config:-n}
 
         if [[ "$use_catchment_config" =~ ^[YyNn]$ ]]; then
@@ -796,7 +703,7 @@ if [[ "$flag" != "preprocess" ]] && [[ "$flag" != "resume" ]] && [[ "$skip_to_su
     if [[ "$use_catchment_config" =~ ^[Yy]$ ]]; then
         echo "Enter path to catchment configuration CSV file"
         echo "(Example: analysis_configs/examples/catchment_config.csv)"
-        read -p "Path: " catchment_config
+        read -r -p "Path: " catchment_config
         if [[ -n "$catchment_config" ]] && [[ ! -f "$catchment_config" ]]; then
             echo -e "${YELLOW}Warning: File not found: $catchment_config${NC}"
             echo -e "${YELLOW}Pipeline will fail if file doesn't exist at runtime.${NC}"
@@ -813,7 +720,7 @@ if [[ "$flag" != "preprocess" ]] && [[ "$flag" != "resume" ]] && [[ "$skip_to_su
         echo "  RELAXED - All matching methods + fuzzy (2 char diff)"
         echo ""
         while true; do
-            read -p "Matching sensitivity [MEDIUM]: " matching_sensitivity
+            read -r -p "Matching sensitivity [MEDIUM]: " matching_sensitivity
             matching_sensitivity=${matching_sensitivity:-MEDIUM}
             matching_sensitivity_upper="${matching_sensitivity^^}"
 
@@ -876,7 +783,7 @@ elif [[ "$flag" == "custom" ]]; then
     echo -e "${BLUE}======== MCMC Parameters ========${NC}"
 
     echo ""
-    read -p "Number of chains [2]: " chains
+    read -r -p "Number of chains [2]: " chains
     chains=${chains:-2}
 
     if ! [[ "$chains" =~ ^[0-9]+$ ]]; then
@@ -891,7 +798,7 @@ elif [[ "$flag" == "custom" ]]; then
     fi
 
     echo ""
-    read -p "Number of iterations [500]: " iterations
+    read -r -p "Number of iterations [500]: " iterations
     iterations=${iterations:-500}
 
     if ! [[ "$iterations" =~ ^[0-9]+$ ]]; then
@@ -906,7 +813,7 @@ elif [[ "$flag" == "custom" ]]; then
     fi
 
     echo ""
-    read -p "Adapt delta (0.0-1.0) [0.95]: " adapt_delta
+    read -r -p "Adapt delta (0.0-1.0) [0.95]: " adapt_delta
     adapt_delta=${adapt_delta:-0.95}
 
     if [[ ! "$adapt_delta" =~ ^0?\.[0-9]+$ ]]; then
@@ -921,7 +828,7 @@ elif [[ "$flag" == "custom" ]]; then
     fi
 
     echo ""
-    read -p "Max treedepth [10]: " max_treedepth
+    read -r -p "Max treedepth [10]: " max_treedepth
     max_treedepth=${max_treedepth:-10}
 
     if ! [[ "$max_treedepth" =~ ^[0-9]+$ ]]; then
@@ -942,9 +849,9 @@ elif [[ "$flag" == "resume" ]]; then
     max_treedepth=10
 
     echo ""
-    echo -e "${BLUE}Resume Mode: Using parameters from previous run${NC}"
-    echo -e "${YELLOW}Note: Resume mode uses settings from the previous run.${NC}"
-    echo -e "${YELLOW}Configuration files and pathogen groupings are preserved.${NC}"
+    echo -e "${BLUE}Resume Mode: Requesting cached task reuse${NC}"
+    echo -e "${YELLOW}Note: This launcher reconstructs a command; it does not restore all previous settings.${NC}"
+    echo -e "${YELLOW}For exact settings, use the saved command from the previous run.${NC}"
 
     if [[ -z "$pathogens" ]]; then
         echo -e "${YELLOW}Warning: No pathogens specified for resume. Using default.${NC}"
@@ -968,7 +875,7 @@ if [[ "$skip_to_summary" != true ]] && [[ "$flag" != "preprocess" ]]; then
     echo "               Produces equivalent results but draws will differ"
     echo "               numerically due to different RNG streams."
     while true; do
-        read -p "Enter selection [1]: " backend_choice
+        read -r -p "Enter selection [1]: " backend_choice
         backend_choice=${backend_choice:-1}
         if [[ "$backend_choice" =~ ^[12]$ ]]; then
             break
@@ -983,124 +890,35 @@ if [[ "$skip_to_summary" != true ]] && [[ "$flag" != "preprocess" ]]; then
     echo -e "Stan backend: ${GREEN}$stan_backend${NC}"
 fi
 
-# ---------------------------------------------------------------------------
-# Step 7: Pathogen grouping (skip for resume, preprocess, quick-run)
-# ---------------------------------------------------------------------------
-if [[ "$skip_to_summary" != true ]]; then
-
-pathogen_grouping=""
-if [[ "$flag" != "resume" ]] && [[ "$flag" != "preprocess" ]] && [[ "$pathogens" != "AUTO_DISCOVER" ]]; then
-    IFS=',' read -ra selected_pathogens <<< "$pathogens"
-    grouped_pathogens=""
-
-    for pathogen in "${selected_pathogens[@]}"; do
-        if [[ "$pathogen" == "STEC" ]] || [[ "$pathogen" == "SALMONELLA" ]]; then
-            if [[ "$use_preprocessed" == true ]]; then
-                data_file="$preprocessed_file"
-            else
-                data_file=""
-            fi
-
-            if [[ -n "$data_file" ]] && [[ -f "$data_file" ]]; then
-                grouping=$(handle_pathogen_grouping "$pathogen" "$data_file")
-            else
-                if [[ "$pathogen" == "STEC" ]]; then
-                    grouping=$(handle_pathogen_grouping "$pathogen" "")
-                else
-                    # No preprocessed data — ask combined vs custom first
-                    echo "" >&2
-                    echo -e "${BLUE}Salmonella Grouping Options:${NC}" >&2
-                    echo "1) Combined - All serotypes together" >&2
-                    echo "2) Custom selection - Choose specific serotypes (requires preprocessing)" >&2
-                    echo "3) Combined + custom - Run combined AND specific serotypes (requires preprocessing)" >&2
-                    echo "" >&2
-                    read -p "Select Salmonella grouping option [1]: " sal_quick_choice
-                    sal_quick_choice=${sal_quick_choice:-1}
-
-                    if [[ "$sal_quick_choice" == "2" ]] || [[ "$sal_quick_choice" == "3" ]]; then
-                        echo "" >&2
-                        echo -e "${YELLOW}Custom serotype selection requires preprocessed data.${NC}" >&2
-                        read -p "Run preprocessing now? (y/n) [y]: " run_preprocess
-                        run_preprocess=${run_preprocess:-y}
-                        if [[ "$run_preprocess" == "y" ]]; then
-                            preprocess_projID=$(date +%Y%m%d_%H%M%S)
-                            echo -e "${BLUE}Submitting preprocessing to cluster...${NC}" >&2
-                            nextflow run main.nf -profile singularity -entry PREPROCESS_ONLY \
-                                --mmwrFile "${MMWR_FILE}" \
-                                --outdir "$outDir" \
-                                --projID "$preprocess_projID" \
-                                --matching_sensitivity "$matching_sensitivity"
-                            preprocess_clean="$outDir/${preprocess_projID}/preprocessed/clean_mmwr.csv"
-                            if [[ -f "$preprocess_clean" ]]; then
-                                echo -e "${GREEN}Preprocessing complete.${NC}" >&2
-                                data_file="$preprocess_clean"
-                                use_preprocessed=true
-                                preprocessed_file="$preprocess_clean"
-                                # User already chose custom (2) or combined+custom (3) — go straight to serotype picker
-                                export _FNT_SAL_CHOICE="$sal_quick_choice"
-                                grouping=$(handle_pathogen_grouping "$pathogen" "$data_file")
-                                unset _FNT_SAL_CHOICE
-                            else
-                                echo -e "${RED}Preprocessing failed. Using combined analysis.${NC}" >&2
-                                grouping="SALMONELLA~combined"
-                            fi
-                        else
-                            echo "" >&2
-                            echo -e "${YELLOW}Without preprocessing, serotype-level analysis is not possible.${NC}" >&2
-                            echo -e "${YELLOW}The pipeline will run all Salmonella serotypes as a single combined analysis.${NC}" >&2
-                            echo -e "${YELLOW}To run individual serotypes later, use: ./run_workflow.sh and select PREPROCESS_ONLY first.${NC}" >&2
-                            echo "" >&2
-                            read -p "Proceed with combined analysis? (y) or go back and preprocess? (p) [y]: " fallback_choice
-                            fallback_choice=${fallback_choice:-y}
-                            if [[ "$fallback_choice" == "p" ]]; then
-                                preprocess_projID=$(date +%Y%m%d_%H%M%S)
-                                echo -e "${BLUE}Submitting preprocessing to cluster...${NC}" >&2
-                                nextflow run main.nf -profile singularity -entry PREPROCESS_ONLY \
-                                    --mmwrFile "${MMWR_FILE}" \
-                                    --outdir "$outDir" \
-                                    --projID "$preprocess_projID" \
-                                    --matching_sensitivity "$matching_sensitivity"
-                                preprocess_clean="$outDir/${preprocess_projID}/preprocessed/clean_mmwr.csv"
-                                if [[ -f "$preprocess_clean" ]]; then
-                                    echo -e "${GREEN}Preprocessing complete.${NC}" >&2
-                                    data_file="$preprocess_clean"
-                                    use_preprocessed=true
-                                    preprocessed_file="$preprocess_clean"
-                                    export _FNT_SAL_CHOICE="$sal_quick_choice"
-                                    grouping=$(handle_pathogen_grouping "$pathogen" "$data_file")
-                                    unset _FNT_SAL_CHOICE
-                                else
-                                    echo -e "${RED}Preprocessing failed. Using combined analysis.${NC}" >&2
-                                    grouping="SALMONELLA~combined"
-                                fi
-                            else
-                                grouping="SALMONELLA~combined"
-                            fi
-                        fi
-                    else
-                        grouping="SALMONELLA~combined"
-                    fi
-                fi
-            fi
-
-            if [[ -n "$grouped_pathogens" ]]; then
-                grouped_pathogens="${grouped_pathogens}|$grouping"
-            else
-                grouped_pathogens="$grouping"
-            fi
-        else
-            if [[ -n "$grouped_pathogens" ]]; then
-                grouped_pathogens="${grouped_pathogens}|${pathogen}~combined"
-            else
-                grouped_pathogens="${pathogen}~combined"
-            fi
+if [[ "$skip_to_summary" != true && "$flag" != "preprocess" ]]; then
+    while true; do
+        read -r -p 'Baseline year or year range [2016-2018]: ' baseline
+        baseline=${baseline:-2016-2018}
+        if [[ "$baseline" =~ ^([0-9]{4})(-([0-9]{4}))?$ ]]; then
+            baseline_start=${BASH_REMATCH[1]}
+            baseline_end=${BASH_REMATCH[3]:-${BASH_REMATCH[1]}}
+            if (( baseline_start <= baseline_end )); then break; fi
         fi
+        echo 'Enter a year (2019) or an ordered range (2016-2018).'
     done
-
-    pathogen_grouping="$grouped_pathogens"
+fi
+if [[ "$skip_to_summary" != true ]]; then
+    read -r -p "Classification rules CSV [$classification_rules]: " rules_choice
+    classification_rules=${rules_choice:-$classification_rules}
+    if [[ ! -f "$classification_rules" ]]; then echo "Rules file not found: $classification_rules" >&2; exit 1; fi
+    read -r -p "Serotype source column [$serotype_source]: " source_choice
+    serotype_source=${source_choice:-$serotype_source}
 fi
 
-fi  # end skip_to_summary guard for pathogen grouping
+# Select any pathogen's serotypes/species; cleaned data supplies an optional ranked list.
+if [[ "$skip_to_summary" != true && "$flag" != "resume" && "$flag" != "preprocess" && "$pathogens" != "AUTO_DISCOVER" ]]; then
+    pathogen_grouping=""
+    IFS=',' read -r -a selected_pathogens <<< "$pathogens"
+    for pathogen in "${selected_pathogens[@]}"; do
+        grouping=$(handle_pathogen_grouping "$pathogen" "$preprocessed_file")
+        pathogen_grouping+="${pathogen_grouping:+|}${grouping}"
+    done
+fi
 
 # ---------------------------------------------------------------------------
 # Step 8: Filters -- state, CIDT, travel (skip for preprocess, resume, quick-run)
@@ -1123,7 +941,7 @@ fi
 echo "Select states to analyze:"
 echo "1) ALL states (default)"
 echo "2) Select specific states"
-read -p "Enter selection [1]: " state_mode
+read -r -p "Enter selection [1]: " state_mode
 state_mode=${state_mode:-1}
 
 if [[ "$state_mode" == "2" ]]; then
@@ -1137,13 +955,13 @@ if [[ "$state_mode" == "2" ]]; then
         while IFS=',' read -r state first_year last_year total_cases; do
             state_name=$(get_state_name "$state")
             printf "%2d. %-2s - %-15s (%d-%d, %'d cases)\n" $i "$state" "$state_name" "$first_year" "$last_year" "$total_cases"
-            state_array[$i]=$state
+            state_array[i]=$state
             ((i++))
         done < <(extract_states_from_data "$metadata_dir")
 
         echo ""
         echo "Enter state numbers separated by spaces (e.g., 1 3 5), or 'all' for all states:"
-        read -p "Selection: " state_selection
+        read -r -p "Selection: " state_selection
 
         if [[ "$state_selection" == "all" ]]; then
             selected_states=""
@@ -1165,7 +983,7 @@ if [[ "$state_mode" == "2" ]]; then
         echo ""
         echo "Enter state codes separated by commas (e.g., CA,NY,GA):"
         echo "Available states: CA, CO, CT, GA, MD, MN, NM, NY, OR, TN"
-        read -p "States: " selected_states
+        read -r -p "States: " selected_states
         selected_states=$(echo "$selected_states" | tr -d ' ')
     fi
 fi
@@ -1211,7 +1029,7 @@ else
 fi
 
 while true; do
-    read -p "Enter selection [1]: " cidt_mode
+    read -r -p "Enter selection [1]: " cidt_mode
     cidt_mode=${cidt_mode:-1}
 
     if [[ "$cidt_mode" =~ ^[1-6]$ ]]; then
@@ -1229,7 +1047,7 @@ case $cidt_mode in
     5) selected_cidt="CX+,CIDT+" ;;
     6)
         echo "Enter diagnostic methods separated by commas (e.g., CX+,CIDT+):"
-        read -p "Methods: " selected_cidt
+        read -r -p "Methods: " selected_cidt
         selected_cidt=$(echo "$selected_cidt" | tr -d ' ')
         ;;
 esac
@@ -1276,7 +1094,7 @@ else
 fi
 
 while true; do
-    read -p "Enter selection [1]: " travel_mode
+    read -r -p "Enter selection [1]: " travel_mode
     travel_mode=${travel_mode:-1}
 
     if [[ "$travel_mode" =~ ^[1-6]$ ]]; then
@@ -1294,7 +1112,7 @@ case $travel_mode in
     5) selected_travel="YES,UNKNOWN" ;;
     6)
         echo "Enter travel statuses separated by commas (NO,YES,UNKNOWN):"
-        read -p "Statuses: " selected_travel
+        read -r -p "Statuses: " selected_travel
         selected_travel=$(echo "$selected_travel" | tr -d ' ')
         ;;
 esac
@@ -1307,7 +1125,7 @@ echo ""
 echo "Enable travel stratification? (runs separate models for domestic vs travel-associated)"
 echo "  1) No (default)"
 echo "  2) Yes"
-read -p "Selection [1]: " travel_strat_choice
+read -r -p "Selection [1]: " travel_strat_choice
 travel_strat_choice=${travel_strat_choice:-1}
 
 if [[ "$travel_strat_choice" == "2" ]]; then
@@ -1324,7 +1142,7 @@ fi  # end filter section guard
 if [[ "$flag" != "preprocess" ]]; then
     echo ""
     while true; do
-        read -p "Run in background? (y/n) [n]: " bg_choice
+        read -r -p "Run in background? (y/n) [n]: " bg_choice
         bg_choice=${bg_choice:-n}
 
         if [[ "$bg_choice" =~ ^[YyNn]$ ]]; then
@@ -1383,6 +1201,14 @@ else
       --projID \"$timestamp\""
 fi
 
+# Shell-quote user-provided values before the existing eval-based execution.
+printf -v rules_arg '%q' "$classification_rules"
+printf -v source_arg '%q' "$serotype_source"
+cmd="$cmd --classification_rules $rules_arg --serotype_source $source_arg"
+if [[ "$flag" != "preprocess" ]]; then
+    cmd="$cmd --baseline_start $baseline_start --baseline_end $baseline_end"
+fi
+
 # Append optional parameters
 if [[ -n "$serotype_config" ]]; then
     cmd="$cmd --serotype_config \"$serotype_config\""
@@ -1397,7 +1223,8 @@ if [[ "$use_preprocessed" == true ]]; then
     cmd="$cmd --preprocessed true --cleanFile \"$preprocessed_file\""
 fi
 if [[ -n "$pathogen_grouping" ]] && [[ -n "${pathogen_grouping// }" ]]; then
-    cmd="$cmd --pathogen_grouping \"$pathogen_grouping\""
+    printf -v grouping_arg '%q' "$pathogen_grouping"
+    cmd="$cmd --pathogen_grouping $grouping_arg"
 fi
 if [[ -n "$selected_states" ]]; then
     cmd="$cmd --states \"$selected_states\""
@@ -1430,6 +1257,7 @@ fi
 # =============================================================================
 echo ""
 echo -e "${BLUE}========= Analysis Summary ==========${NC}"
+echo "Baseline: $baseline_start-$baseline_end | Classification rules: $classification_rules | Source: $serotype_source"
 echo -e "Mode: ${GREEN}$([ "$flag" == "test" ] && echo "Test" || [ "$flag" == "publication" ] && echo "Publication" || [ "$flag" == "max" ] && echo "Max" || [ "$flag" == "custom" ] && echo "Custom" || [ "$flag" == "resume" ] && echo "Resume previous run" || [ "$flag" == "preprocess" ] && echo "Preprocessing only")${NC}"
 if [[ "$pathogens" == "AUTO_DISCOVER" ]]; then
     echo -e "Pathogens: ${GREEN}All pathogens found in data (auto-discovery)${NC}"
@@ -1492,7 +1320,7 @@ echo ""
 # LAUNCH
 # =============================================================================
 while true; do
-    read -p "Proceed with analysis? (y/n) [y]: " proceed
+    read -r -p "Proceed with analysis? (y/n) [y]: " proceed
     proceed=${proceed:-y}
 
     if [[ "$proceed" =~ ^[YyNn]$ ]]; then

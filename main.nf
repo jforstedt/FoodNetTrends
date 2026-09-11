@@ -19,12 +19,21 @@ if (params.help) {
 
     Pathogen selection:
         --pathogen              Comma-separated list of pathogens (e.g., CAMPYLOBACTER,SALMONELLA)
-        --pathogen_grouping     Pipe-separated subgroup definitions (e.g., STEC~O157|STEC~nonO157)
+        --pathogen_grouping     Pipe-separated PATHOGEN~subgroup definitions
+                               STEC: O157, nonO157, NOT SEROGROUPED
+                               Salmonella: named serotypes, OTHER SEROTYPES, NOT SEROTYPED,
+                               TYPHOIDAL, NONTYPHOIDAL, UNCLASSIFIED
+                               Other pathogens: any exact serotypesummary value
 
     Data filtering:
         --states                States to include, comma-separated (default: all)
         --travel                Travel types (default: NO,UNKNOWN,YES)
         --cidt                  CIDT types (default: CIDT+,CX+,PARASITIC)
+
+    Baseline:
+        --baseline_year         Single baseline year (overrides start/end)
+        --baseline_start        First baseline year (default: 2016)
+        --baseline_end          Last baseline year (default: 2018)
 
     Model parameters:
         --chains                Number of MCMC chains (default: 2)
@@ -35,6 +44,8 @@ if (params.help) {
         --stan_backend          Stan backend: rstan or cmdstanr (default: rstan)
 
     Configuration:
+        --classification_rules  CSV rules for untyped/typhoidal classification
+        --serotype_source       Source column; auto prefers serotypesummary2
         --serotype_config       Path to CSV with serotype recoding rules
         --catchment_config      Path to CSV with catchment area definitions
         --matching_sensitivity  Pathogen name matching: STRICT, MEDIUM, or RELAXED (default: MEDIUM)

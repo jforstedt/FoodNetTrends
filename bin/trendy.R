@@ -8,6 +8,7 @@ options(warn = 1)
 script_path <- commandArgs(trailingOnly = FALSE)
 script_path <- sub("--file=", "", script_path[grep("--file=", script_path)])
 script_dir <- dirname(script_path)
+source(file.path(script_dir, "classification.R"))
 
 tryCatch({
   source(file.path(script_dir, "functions.R"))
@@ -40,6 +41,12 @@ LOAD_PACKAGES <- function(packages) {
 ##############################################################
 
 parser <- ArgumentParser(description="FoodNetTrends Bayesian Modeling Pipeline")
+parser$add_argument("--baseline_start", type = "integer", default = 2016L)
+parser$add_argument("--baseline_end", type = "integer", default = 2018L)
+parser$add_argument("--classification_rules", default = file.path(dirname(script_dir), "analysis_configs", "classification_rules.csv"))
+parser$add_argument("--serotype_source", default = "auto")
+parser$add_argument("--selected_serotypes", default = "",
+                    help = "Pipe-separated individually selected Salmonella serotypes")
 
 parser$add_argument("--mmwrFile", type="character",
                     help="Path to FoodNet MMWR SAS data file")
@@ -117,6 +124,11 @@ report_progress <- function(stage, percent=NULL, message=NULL) {
 }
 
 report_progress("SETUP", message="Initializing pipeline")
+baseline_start <- opts$baseline_start
+baseline_end <- if (is.null(opts$baseline_end)) baseline_start else opts$baseline_end
+if (baseline_start > baseline_end) stop("baseline_start must not exceed baseline_end")
+classification_rules <- read_classification_rules(opts$classification_rules)
+selected_serotypes <- strsplit(opts$selected_serotypes, "|", fixed = TRUE)[[1]]
 
 if (opts$debug == FALSE) {
   mmwrFile <- opts$mmwrFile
@@ -268,6 +280,13 @@ tryCatch({
     stop("This script is designed to work with preprocessed data. Please ensure preprocess.R has been run first.")
   }
 
+  mmwrdata <- classify_cases(mmwrdata, classification_rules, opts$serotype_source)
+  # Establish observation years and selected sites before case/subgroup filtering.
+  surveillance_years <- seq.int(min(mmwrdata$year, na.rm = TRUE), max(mmwrdata$year, na.rm = TRUE))
+  surveillance_states <- if (!is.null(opts$states) && nzchar(opts$states))
+    CLEAN_LIST(opts$states) else NULL
+  classification_audit <- classification_counts(mmwrdata)
+
   mmwrdata <- mmwrdata %>%
     filter((cxcidt %in% cidt) & (travelint %in% travel)) %>%
     filter(!county %in% c("OUT OF STATE", "UNKNOWN", "99997"))
@@ -312,6 +331,10 @@ tryCatch({
     ungroup()
 
   census <- as.data.frame(census)
+  surveillance <- census %>% filter(year %in% surveillance_years) %>% distinct(year, state)
+  if (!is.null(surveillance_states)) surveillance <- surveillance %>% filter(state %in% surveillance_states)
+  missing_baseline <- setdiff(seq.int(baseline_start, baseline_end), unique(surveillance$year))
+  if (length(missing_baseline)) stop("Baseline years unavailable: ", paste(missing_baseline, collapse = ", "))
   report_progress("DATA", message=paste("Processed census data with",
                                         length(unique(census$year)), "years and",
                                         length(unique(census$state)), "states"))
@@ -348,52 +371,27 @@ tryCatch({
     mmwrdata_filtered <- mmwrdata_filtered %>%
       filter(pathogen == opts$pathogen)
 
-    if (opts$subgroup != "combined") {
-      if (opts$pathogen == "STEC" && opts$subgroup %in% c("O157", "nonO157")) {
-        if ("stec_class" %in% names(mmwrdata_filtered)) {
-          if (opts$subgroup == "O157") {
-            mmwrdata_filtered <- mmwrdata_filtered %>%
-              filter(stec_class == "STEC O157")
-          } else if (opts$subgroup == "nonO157") {
-            mmwrdata_filtered <- mmwrdata_filtered %>%
-              filter(stec_class %in% c("STEC NONO157", "STEC O AG UNDET"))
-          }
-          report_progress("ANALYSIS", message=paste("Filtered STEC to subgroup:", opts$subgroup))
-        } else {
-          stop("stec_class column not found - cannot filter by STEC subgroup")
-        }
-      } else if (opts$pathogen == "SALMONELLA") {
-        if ("serotypesummary" %in% names(mmwrdata_filtered)) {
-          mmwrdata_filtered <- mmwrdata_filtered %>%
-            filter(toupper(serotypesummary) == toupper(opts$subgroup))
-          report_progress("ANALYSIS", message=paste("Filtered Salmonella to serotype:", opts$subgroup))
-        } else {
-          stop("serotypesummary column not found - cannot filter by serotype")
-        }
-      } else {
-        if ("serotypesummary" %in% names(mmwrdata_filtered)) {
-          mmwrdata_filtered <- mmwrdata_filtered %>%
-            filter(toupper(serotypesummary) == toupper(opts$subgroup) | is.na(serotypesummary))
-          report_progress("ANALYSIS", message=paste("Filtered", opts$pathogen, "to subgroup:", opts$subgroup))
-        } else if ("serogroup" %in% names(mmwrdata_filtered)) {
-          mmwrdata_filtered <- mmwrdata_filtered %>%
-            filter(toupper(serogroup) == toupper(opts$subgroup) | is.na(serogroup))
-          report_progress("ANALYSIS", message=paste("Filtered", opts$pathogen, "to serogroup:", opts$subgroup))
-        }
-      }
-    }
+    mmwrdata_filtered <- select_analysis_cases(mmwrdata, opts$pathogen, opts$subgroup, selected_serotypes)
 
     if (nrow(mmwrdata_filtered) == 0) {
       pathogen_desc <- ifelse(opts$subgroup == "combined",
                               opts$pathogen,
                               paste(opts$pathogen, opts$subgroup, sep=":"))
-      stop(paste("No data found for:", pathogen_desc, "after filtering"))
+      empty_prefix <- sub("_$", "", gsub("_+", "_", gsub("[^a-zA-Z0-9_-]", "_",
+        paste(opts$pathogen, opts$subgroup, sep = "_"))))
+      writeLines(paste("No data found for:", pathogen_desc, "after filtering; no model fitted."),
+                 file.path(outDir, paste0(empty_prefix, "_error.txt")))
+      write.csv(data.frame(pathogen = opts$pathogen, subgroup = opts$subgroup,
+        baseline_start = baseline_start, baseline_end = baseline_end),
+        file.path(outDir, paste0(empty_prefix, "_analysis_settings.csv")), row.names = FALSE)
+      report_progress("WARNING", message=paste("Skipping empty analysis:", pathogen_desc))
+      quit(status = 0)
     }
 
     report_progress("ANALYSIS", message=paste("Filtered data contains", nrow(mmwrdata_filtered), "records"))
   }
 
-  pathDf <- PATH_ANALYSIS(mmwrdata_filtered, census, catchment_config)%>%as.data.frame()
+  pathDf <- PATH_ANALYSIS(mmwrdata_filtered, census, catchment_config, surveillance)%>%as.data.frame()
   report_progress("ANALYSIS", message=paste("Processed",
                                             length(unique(pathDf$pathogen)),
                                             "pathogens"))
@@ -435,7 +433,7 @@ tryCatch({
       )
       writeLines(error_content, error_file)
 
-      stop(paste("No data found for:", pathogen_desc, "- see error file for details"))
+      quit(status = 0)
     }
   } else {
     report_progress("ANALYSIS", message="No specific pathogen requested, analyzing all pathogens in dataset")
@@ -473,6 +471,13 @@ for (pathogen_name in target_pathogens) {
   output_prefix <- sub("_$", "", output_prefix)
 
   tryCatch({
+    write.csv(classification_audit, file.path(outDir, paste0(output_prefix, "_classification_report.csv")), row.names = FALSE)
+    write.csv(classification_rules, file.path(outDir, paste0(output_prefix, "_classification_rules.csv")), row.names = FALSE)
+    write.csv(data.frame(pathogen = pathogen_name, subgroup = opts$subgroup,
+      baseline_start = baseline_start, baseline_end = baseline_end,
+      serotype_source = opts$serotype_source, selected_serotypes = opts$selected_serotypes,
+      travel = opts$travel, cidt = opts$cidt, states = paste(surveillance_states, collapse = ",")),
+      file.path(outDir, paste0(output_prefix, "_analysis_settings.csv")), row.names = FALSE)
     proposed <- PROPOSED_BM(
       current_data,
       cores = modelcores,
@@ -550,9 +555,8 @@ for (pathogen_name in target_pathogens) {
 
     report_progress("ANALYSIS", message="Calculating relative risks and percent changes")
 
-    # Healthy People 2030 baseline period
-    hp30<-IR_COMP_CATCH(catch, 2016, 2018,
-                  paste0(outDir, "/", output_prefix, "_EstIRRCatch_2016_2018.csv"))
+    baseline_comparison <- IR_COMP_CATCH(catch, baseline_start, baseline_end,
+      paste0(outDir, "/", output_prefix, "_EstIRRCatch_", baseline_start, "_", baseline_end, ".csv"))
 
     if (requireNamespace("ggplot2", quietly = TRUE)) {
       stable_yr <- get_catchment_stable_year(catchment_config)
@@ -601,7 +605,7 @@ for (pathogen_name in target_pathogens) {
       # Domestic stratum
       report_progress("TRAVEL_STRATIFY", message=paste("Fitting domestic model for", pathogen_name))
       tryCatch({
-        dom_path <- PATH_ANALYSIS(domestic_data, census, catchment_config) %>% as.data.frame()
+        dom_path <- PATH_ANALYSIS(domestic_data, census, catchment_config, surveillance) %>% as.data.frame()
         dom_path <- subset(dom_path, pathogen == pathogen_name)
         dom_path$yearn <- as.numeric(as.character(dom_path$year))
         dom_path$year  <- as.factor(dom_path$year)
@@ -612,6 +616,7 @@ for (pathogen_name in target_pathogens) {
           max_treedepth = max_treedepth, seed = seed, backend = backend
         )
 
+        CHECK_CONVERGENCE(dom_model, paste0(output_prefix, "_domestic"), outDir)
         dom_linpred <- LINPREAD_DRAW_FN(
           data  = (dom_model$data %>% group_by(state)),
           model = dom_model
@@ -627,6 +632,8 @@ for (pathogen_name in target_pathogens) {
         domestic_catch$pathogen <- pathogen_name
         domestic_catch$travel   <- "Domestic"
         domestic_catch$culture  <- culture
+        IR_COMP_CATCH(dom_catch_draws, baseline_start, baseline_end,
+          file.path(outDir, paste0(output_prefix, "_domestic_EstIRRCatch_", baseline_start, "_", baseline_end, ".csv")))
 
         write.csv(domestic_site,
                   paste0(outDir, "/", output_prefix, "_domestic_IRSite.csv"),
@@ -642,7 +649,7 @@ for (pathogen_name in target_pathogens) {
       # Travel stratum
       report_progress("TRAVEL_STRATIFY", message=paste("Fitting travel model for", pathogen_name))
       tryCatch({
-        trv_path <- PATH_ANALYSIS(travel_data, census, catchment_config) %>% as.data.frame()
+        trv_path <- PATH_ANALYSIS(travel_data, census, catchment_config, surveillance) %>% as.data.frame()
         trv_path <- subset(trv_path, pathogen == pathogen_name)
         trv_path$yearn <- as.numeric(as.character(trv_path$year))
         trv_path$year  <- as.factor(trv_path$year)
@@ -653,6 +660,7 @@ for (pathogen_name in target_pathogens) {
           max_treedepth = max_treedepth, seed = seed, backend = backend
         )
 
+        CHECK_CONVERGENCE(trv_model, paste0(output_prefix, "_travel"), outDir)
         trv_linpred <- LINPREAD_DRAW_FN(
           data  = (trv_model$data %>% group_by(state)),
           model = trv_model
@@ -668,6 +676,8 @@ for (pathogen_name in target_pathogens) {
         travel_catch$pathogen <- pathogen_name
         travel_catch$travel   <- "Travel"
         travel_catch$culture  <- culture
+        IR_COMP_CATCH(trv_catch_draws, baseline_start, baseline_end,
+          file.path(outDir, paste0(output_prefix, "_travel_EstIRRCatch_", baseline_start, "_", baseline_end, ".csv")))
 
         write.csv(travel_site,
                   paste0(outDir, "/", output_prefix, "_travel_IRSite.csv"),

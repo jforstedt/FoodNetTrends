@@ -51,7 +51,7 @@ SIF="foodnet.sif"
 if [ -f "$SIF" ]; then
     echo ""
     echo -e "${YELLOW}Existing container found: $SIF${NC}"
-    read -p "Rebuild? (y/n) [y]: " rebuild
+    read -r -p "Rebuild? (y/n) [y]: " rebuild
     rebuild=${rebuild:-y}
     if [[ "$rebuild" != "y" ]]; then
         echo "Skipping build."

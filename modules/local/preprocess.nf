@@ -11,16 +11,20 @@ process PREPROCESS {
     val projID
     path serotypeConfig
     path dataRules
+    path classificationRules
 
     output:
     path "clean_mmwr.csv", emit: cleanFile
     path "clean_mmwr_preprocessing_report.csv", emit: preprocessingReport
+    path "clean_mmwr_classification_report.csv", emit: classificationReport
+    path "classification_rules_used.csv", emit: classificationRulesUsed
 
     script:
+    def quote = { value -> "'" + value.toString().replace("'", "'\"'\"'") + "'" }
     // Use absolute path to the script or a relative path from the current directory
     def scriptPath = "${workflow.projectDir}/bin/preprocess.R"
-    def serotypeConfigArg = serotypeConfig.name.startsWith('NO_') ? "" : "--serotype-config ${serotypeConfig}"
-    def dataRulesArg = dataRules.name.startsWith('NO_') ? "" : "--data_rules ${dataRules}"
+    def serotypeConfigArg = serotypeConfig.name.startsWith('NO_') ? "" : "--serotype-config ${quote(serotypeConfig)}"
+    def dataRulesArg = dataRules.name.startsWith('NO_') ? "" : "--data_rules ${quote(dataRules)}"
 
     // Validate matching sensitivity
     def validSensitivities = ['STRICT', 'MEDIUM', 'RELAXED']
@@ -29,8 +33,10 @@ process PREPROCESS {
     }
 
     """
-    Rscript ${scriptPath} \\
-      --mmwrFile ${mmwrFile} \\
+    Rscript ${quote(scriptPath)} \\
+      --mmwrFile ${quote(mmwrFile)} \\
+      --classification_rules ${quote(classificationRules)} \\
+      --serotype_source ${quote(params.serotype_source)} \\
       --outputFile clean_mmwr.csv \\
       --matching-sensitivity ${params.matching_sensitivity} \\
       ${serotypeConfigArg} \\

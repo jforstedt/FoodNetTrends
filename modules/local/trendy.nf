@@ -5,17 +5,18 @@ process TRENDY {
 
     input:
     tuple val(pathogenGrouping), val(pathogen), val(subgroup), val(dataMetrics)
-    path mmwrFile
-    path censusFileB
-    path censusFileP
+    path mmwrFile, stageAs: 'raw/*'
+    path censusFileB, stageAs: 'census_b/*'
+    path censusFileP, stageAs: 'census_p/*'
     val travel
     val cidt
     val states
     val projID
     val whichScript
     val preprocessed
-    path cleanFile
+    path cleanFile, stageAs: 'clean/*'
     path catchmentConfig
+    path classificationRules
 
     output:
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_brm.Rds", emit: rds, optional: true
@@ -26,6 +27,12 @@ process TRENDY {
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_summary.txt", emit: summary, optional: true
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_error.txt", optional: true, emit: errors
     path "${pathogenGrouping.replaceAll('[^a-zA-Z0-9_-]', '_').replaceAll('_+', '_').replaceAll('_$', '')}_convergence_diagnostics.csv", emit: diagnostics, optional: true
+
+    path "*_classification_report.csv", emit: classificationReport, optional: true
+    path "*_classification_rules.csv", emit: classificationRulesUsed, optional: true
+    path "*_analysis_settings.csv", emit: settings, optional: true
+    path "*_domestic_convergence_diagnostics.csv", emit: domesticDiagnostics, optional: true
+    path "*_travel_convergence_diagnostics.csv", emit: travelDiagnostics, optional: true
 
     // errorStrategy and maxRetries defined in nextflow.config withName:TRENDY
 
@@ -59,13 +66,21 @@ process TRENDY {
         def base = cat == 'very_hard' ? 72.h :
                    cat == 'hard' ? 48.h :
                    cat == 'moderate' ? 24.h : 12.h
-        def stratFactor = params.travel_stratify ? 2 : 1
+        def stratFactor = params.travel_stratify ? 3 : 1
         def req = base * stratFactor * task.attempt
         def max = params.max_time as nextflow.util.Duration
         return req > max ? max : req
     }
 
     script:
+    def quote = { value -> "'" + value.toString().replace("'", "'\"'\"'") + "'" }
+    def reserved = ['combined', 'OTHER SEROTYPES', 'NOT SEROTYPED', 'TYPHOIDAL', 'NONTYPHOIDAL', 'UNCLASSIFIED']
+    def selectedSerotypes = (params.pathogen_grouping ?: '').tokenize('|')
+        .collect { it.split('~', 2) }
+        .findAll { it.size() == 2 && it[0] == 'SALMONELLA' && !(it[1] in reserved) }
+        .collect { it[1] }.unique().join('|')
+    def baselineStart = params.baseline_year != null ? params.baseline_year : params.baseline_start
+    def baselineEnd = params.baseline_year != null ? params.baseline_year : params.baseline_end
     // Log resource allocation for this pathogen
     log.info "Pathogen: ${pathogen}, Rows: ${dataMetrics?.rows ?: 'unknown'}, " +
              "Difficulty: ${dataMetrics?.difficulty_category ?: 'unknown'}, " +
@@ -75,21 +90,21 @@ process TRENDY {
     def cleanFileParam = ""
     if (preprocessed) {
         if (cleanFile && !cleanFile.name.startsWith('NO_')) {
-            cleanFileParam = "--cleanFile ${cleanFile}"
+            cleanFileParam = "--cleanFile ${quote(cleanFile)}"
         } else {
             error "Preprocessing enabled but no clean file provided for pathogen: ${pathogen}"
         }
     }
     
     // Handle catchment config parameter
-    def catchmentConfigArg = catchmentConfig.name.startsWith('NO_') ? "" : "--catchment-config ${catchmentConfig}"
+    def catchmentConfigArg = catchmentConfig.name.startsWith('NO_') ? "" : "--catchment-config ${quote(catchmentConfig)}"
     
     // Handle states parameter (empty string means all states)
-    def statesArg = states ? "--states ${states}" : ""
+    def statesArg = states ? "--states ${quote(states)}" : ""
 
     """
     # Copy functions.R to the current directory
-    cp ${workflow.projectDir}/bin/functions.R .
+    cp ${quote(workflow.projectDir + '/bin/functions.R')} .
 
     if [ ! -f functions.R ]; then
         echo "Error: Failed to copy functions.R"
@@ -105,17 +120,17 @@ process TRENDY {
     # Use extra CPUs beyond chain count for BLAS threading
     export OPENBLAS_NUM_THREADS=\$((${task.cpus} / ${params.chains}))
 
-    Rscript ${whichScript} \\
-      --mmwrFile ${mmwrFile} \\
-      --censusFileB ${censusFileB} \\
-      --censusFileP ${censusFileP} \\
-      --travel ${travel} \\
-      --cidt ${cidt} \\
+    Rscript ${quote(whichScript)} \\
+      --mmwrFile ${quote(mmwrFile)} \\
+      --censusFileB ${quote(censusFileB)} \\
+      --censusFileP ${quote(censusFileP)} \\
+      --travel ${quote(travel)} \\
+      --cidt ${quote(cidt)} \\
       ${statesArg} \\
-      --projID ${projID} \\
+      --projID ${quote(projID)} \\
       --outDir . \\
-      --pathogen ${pathogen} \\
-      --subgroup '${subgroup}' \\
+      --pathogen ${quote(pathogen)} \\
+      --subgroup ${quote(subgroup)} \\
       --preprocessed ${preprocessed} \\
       ${cleanFileParam} \\
       --cores ${task.cpus} \\
@@ -125,6 +140,11 @@ process TRENDY {
       --max_treedepth ${params.max_treedepth} \\
       --seed ${params.seed} \\
       --backend ${params.stan_backend} \\
+      --baseline_start ${baselineStart} \\
+      --baseline_end ${baselineEnd} \\
+      --classification_rules ${quote(classificationRules)} \\
+      --serotype_source ${quote(params.serotype_source)} \\
+      --selected_serotypes ${quote(selectedSerotypes)} \\
       --travel_stratify ${params.travel_stratify} \\
       ${catchmentConfigArg} \\
       --debug FALSE

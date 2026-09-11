@@ -136,7 +136,7 @@ SAFE_WRITE <- function(data, file_path) {
 }
 
 # Aggregate case counts by year/state/pathogen and join census denominators
-PATH_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL) {
+PATH_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL, surveillance = NULL) {
   all_pathogens <- unique(mmwrdata$pathogen)
 
   if (length(all_pathogens) == 0) {
@@ -145,12 +145,15 @@ PATH_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL) {
 
   parasitic_pathogens <- c("CRYPTOSPORIDIUM", "CYCLOSPORA")
 
-  selectDf <- mmwrdata %>%
-    filter(pathogen %in% all_pathogens) %>%
+  counts <- mmwrdata %>%
     group_by(year, state, pathogen) %>%
-    summarise(count = n(), .groups = "drop") %>%
-    # complete() fills zero counts — FoodNet is active surveillance
-    complete(year, state, pathogen = unique(pathogen), fill = list(count = 0))
+    summarise(count = n(), .groups = "drop")
+  # A shared surveillance frame preserves zero-case cells across subgroups/strata.
+  # The caller restricts it to the input years and requested states before filtering cases.
+  if (is.null(surveillance)) surveillance <- distinct(census, year, state)
+  grid <- tidyr::crossing(distinct(surveillance, year, state), pathogen = all_pathogens)
+  selectDf <- left_join(grid, counts, by = c("year", "state", "pathogen")) %>%
+    mutate(count = coalesce(count, 0L))
 
   # Join bacterial and parasitic with their respective census denominators
   bacterial_data <- selectDf %>%
@@ -277,7 +280,11 @@ CHECK_CONVERGENCE <- function(model, pathogen_name, output_dir) {
 
   rhat_values <- brms::rhat(model)
   rhat_values <- rhat_values[!is.na(rhat_values)]
-  max_rhat <- max(rhat_values)
+  max_rhat <- if (length(rhat_values)) max(rhat_values) else NA_real_
+  if (!length(rhat_values)) {
+    diagnostics$converged <- FALSE
+    diagnostics$warnings <- c(diagnostics$warnings, "R-hat unavailable; convergence cannot be assessed")
+  }
   n_rhat_warn <- sum(rhat_values > 1.01)
   n_rhat_fail <- sum(rhat_values > 1.05)
 
@@ -295,7 +302,7 @@ CHECK_CONVERGENCE <- function(model, pathogen_name, output_dir) {
   neff_values <- brms::neff_ratio(model)
   neff_values <- neff_values[!is.na(neff_values)]
   total_draws <- nrow(as.matrix(model))
-  min_ess <- min(neff_values) * total_draws
+  min_ess <- if (length(neff_values)) min(neff_values) * total_draws else NA_real_
   n_low_ess <- sum(neff_values * total_draws < 400)
 
   if (n_low_ess > 0) {
@@ -515,6 +522,12 @@ PLOT_OVERALL_TREND <- function(catchir_data, pathogen, outDir, subgroup = "combi
 # Compare incidence rates between a baseline period and all other years
 IR_COMP_CATCH <- function(catch, start_year, end_year, output_file = NULL) {
 
+  if (length(start_year) != 1 || length(end_year) != 1 ||
+      anyNA(c(start_year, end_year)) || start_year > end_year ||
+      any(c(start_year, end_year) %% 1 != 0)) stop("Invalid baseline year range")
+  missing_years <- setdiff(seq.int(start_year, end_year), unique(catch$year))
+  if (length(missing_years)) stop("Baseline years unavailable: ", paste(missing_years, collapse = ", "))
+
   # Baseline IR: mean across baseline period per draw
   # IR = sum(cases) / sum(person-time), standard epidemiological definition
   period_data <- catch %>%
@@ -541,8 +554,14 @@ IR_COMP_CATCH <- function(catch, start_year, end_year, output_file = NULL) {
           percent_change= ((est_ir-baseline_ir)/baseline_ir)*100)%>%
    group_by(year)%>%
    summarise(
+     baseline_start = start_year,
+     baseline_end = end_year,
+     baseline_raw_ir = round(median(baseline_count / (baseline_pop / 100000)), 6),
+     baseline_median_ir = round(median(baseline_ir), 6),
+     baseline_lower_hdi_ir = round(log_hdi(baseline_ir)[1], 6),
+     baseline_upper_hdi_ir = round(log_hdi(baseline_ir)[2], 6),
      population=round(median(population),6),
-     population_check=round(sd(population),6),  # SD check — should be 0
+     population_check=round(sd(population),6),
      raw_count=round(median(count),6),
      raw_check=round(sd(count),6),
      raw_ir=round(raw_count/(population/100000),6),

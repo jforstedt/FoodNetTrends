@@ -1471,7 +1471,7 @@ analysisKeys.forEach(function(key) {
 
   pathogenOrder.forEach(function(pathogen) {
     var children = pathogenGroups[pathogen];
-    var hasSubgroups = isHierarchical(pathogen) && children.length > 1;
+    var hasSubgroups = children.length > 1;
     var color = getColor(analyses[children[0]]);
 
     if (hasSubgroups) {
@@ -1490,7 +1490,7 @@ analysisKeys.forEach(function(key) {
         link.dataset.section = 'analysis-' + key;
         var statusIcon = a.status === 'failed' ? '&#9888;' : '&#9675;';
         link.innerHTML = '<span class="nav-icon" style="color:' + getColor(a) + '">' + statusIcon + '</span> ' +
-          (a.subgroup || 'combined');
+          esc(a.subgroup || 'combined');
         subList.appendChild(link);
       });
 
@@ -1508,7 +1508,7 @@ analysisKeys.forEach(function(key) {
       link.dataset.section = 'analysis-' + children[0];
       var statusIcon = a.status === 'failed' ? '&#9888;' : '&#9679;';
       link.innerHTML = '<span class="nav-icon" style="color:' + color + '">' + statusIcon + '</span> ' +
-        titleCase(pathogen);
+        esc(getAnalysisLabel(a));
       nav.appendChild(link);
     }
   });
@@ -1550,7 +1550,7 @@ analysisKeys.forEach(function(key) {
     [m.n_states || 0, 'States'],
     [yearStr, 'Year Range'],
     [fmt(totalCases), 'Total Cases'],
-    [(m.n_success || 0) + '/' + (m.n_analyses || 0), 'Models Converged']
+    [(m.n_success || 0) + '/' + (m.n_analyses || 0), 'Models Completed']
   ];
   statsEl.innerHTML = statItems.map(function(s) {
     return '<div class="stat-card"><div class="stat-value" style="font-size:' + (String(s[0]).length > 8 ? '1.2rem' : '1.8rem') + '">' + s[0] + '</div><div class="stat-label">' + s[1] + '</div></div>';
@@ -1801,12 +1801,12 @@ analysisKeys.forEach(function(key) {
       '<div class="pathogen-icon" style="background:' + color + '">' + a.pathogen.charAt(0) + '</div>' +
       '<div><h1 class="section-title">' + esc(label) + '</h1>' +
       '<p class="section-subtitle">' + statesInData.length + ' states \u2022 ' + yearRangeStr + '</p></div>' +
-      '<span class="badge badge-success" style="margin-left:auto;font-size:.8rem;">Converged</span>' +
+      '<span class="badge ' + (a.convergence_status === 'Converged' ? 'badge-success' : 'badge-info') + '" style="margin-left:auto;font-size:.8rem;">' + esc(a.convergence_status || 'Not assessed') + '</span>' +
     '</div>' +
 
-    (D.has_travel_strat ?
+    ((a.domestic_ircatch && a.domestic_ircatch.length) || (a.travel_ircatch && a.travel_ircatch.length) ?
       '<div class="acq-toggle" id="acq-toggle-' + key + '">' +
-        '<button class="acq-btn active" data-acq="all">All Cases</button>' +
+        '<button class="acq-btn active" data-acq="all">All selected cases</button>' +
         '<button class="acq-btn" data-acq="domestic">Domestic</button>' +
         '<button class="acq-btn" data-acq="travel">Travel</button>' +
         '<button class="acq-btn" data-acq="comparison">Comparison</button>' +
@@ -1866,13 +1866,16 @@ analysisKeys.forEach(function(key) {
 
     // EST IRR TAB
     '<div class="sub-content" data-tab-content="estirr" data-analysis="' + key + '">' +
+      '<p>Relative risks below use the combined model and its configured travel filter.</p>' +
       '<div id="estirr-container-' + key + '"></div>' +
     '</div>' +
 
     // DIAGNOSTICS TAB
     '<div class="sub-content" data-tab-content="diagnostics" data-analysis="' + key + '">' +
+      '<pre style="white-space:pre-wrap;">' + esc(JSON.stringify(a.diagnostics || {}, null, 2)) + '</pre>' +
+      '<div class="card-header">Analysis settings</div><pre style="white-space:pre-wrap;">' + esc(JSON.stringify(a.settings || [], null, 2)) + '</pre>' +
       '<div class="card">' +
-        '<div class="card-header">Model Summary <span class="badge badge-info">' + esc(key) + '_summary.txt</span></div>' +
+        '<div class="card-header">Combined Model Summary <span class="badge badge-info">' + esc(key) + '_summary.txt</span></div>' +
         (a.summary_txt ?
           '<pre style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:4px;padding:12px;font-size:.78rem;overflow-x:auto;max-height:500px;overflow-y:auto;white-space:pre-wrap;">' + esc(a.summary_txt) + '</pre>' :
           '<p style="color:var(--gray-500);">No model summary available.</p>') +
@@ -1924,16 +1927,20 @@ analysisKeys.forEach(function(key) {
     var hasDomesticSite = a.domestic_irsite && a.domestic_irsite.length > 0;
     var hasTravelSite = a.travel_irsite && a.travel_irsite.length > 0;
 
+    toggleBar.querySelector('[data-acq="domestic"]').disabled = !hasDomesticCatch || !hasDomesticSite;
+    toggleBar.querySelector('[data-acq="travel"]').disabled = !hasTravelCatch || !hasTravelSite;
+    toggleBar.querySelector('[data-acq="comparison"]').disabled = !hasDomesticCatch || !hasTravelCatch;
+
     function getIrcatchData(mode) {
       if (mode === 'domestic' && hasDomesticCatch) return a.domestic_ircatch;
       if (mode === 'travel' && hasTravelCatch) return a.travel_ircatch;
-      return a.ircatch;
+      return mode === 'all' || mode === 'comparison' ? a.ircatch : [];
     }
 
     function getIrsiteData(mode) {
       if (mode === 'domestic' && hasDomesticSite) return a.domestic_irsite;
       if (mode === 'travel' && hasTravelSite) return a.travel_irsite;
-      return a.irsite;
+      return mode === 'all' || mode === 'comparison' ? a.irsite : [];
     }
 
     function getBadgeLabel(mode) {
@@ -1944,7 +1951,7 @@ analysisKeys.forEach(function(key) {
 
     toggleBar.addEventListener('click', function(e) {
       var btn = e.target.closest('.acq-btn');
-      if (!btn) return;
+      if (!btn || btn.disabled) return;
       var mode = btn.dataset.acq;
       if (mode === acqMode.current) return;
       acqMode.current = mode;
@@ -1959,7 +1966,7 @@ analysisKeys.forEach(function(key) {
       var trendPlotsCard = trendsContent ? trendsContent.querySelectorAll('.card')[1] : null;
       if (compEl) compEl.style.display = (mode === 'comparison') ? 'block' : 'none';
       if (overlayCard) overlayCard.style.display = (mode === 'comparison') ? 'none' : '';
-      if (trendPlotsCard) trendPlotsCard.style.display = (mode === 'comparison') ? 'none' : '';
+      if (trendPlotsCard) trendPlotsCard.style.display = mode === 'all' ? '' : 'none';
 
       // Rebuild overlay chart with appropriate irsite data
       if (mode !== 'comparison' && _overlayRebuild) {
@@ -1987,6 +1994,7 @@ analysisKeys.forEach(function(key) {
             });
             var siteFilter = section.querySelector('.irsite-state-filter[data-analysis="' + key + '"]');
             if (siteFilter) {
+              siteFilter.value = '';
               siteFilter.onchange = function() {
                 var sf = siteFilter.value;
                 var filtered = sf ? siteData.filter(function(r) { return r.state === sf; }) : siteData;
@@ -2457,11 +2465,11 @@ analysisKeys.forEach(function(key) {
       onRender: function(n) { siteCountEl.textContent = n + ' rows'; }
     });
 
-    siteStateFilter.addEventListener('change', function() {
+    siteStateFilter.onchange = function() {
       var sf = siteStateFilter.value;
       var filtered = sf ? a.irsite.filter(function(r) { return r.state === sf; }) : a.irsite;
       siteTableCtrl.render(filtered);
-    });
+    };
   }
 
   // Populate EstIRR tables (one per comparison period)
@@ -2486,6 +2494,10 @@ analysisKeys.forEach(function(key) {
       var irrCols = [
         { field: 'year', title: 'Year' },
         { field: 'median_ir', title: 'Median IR', formatter: function(v) { return round2(v); } },
+        { field: 'baseline_raw_ir', title: 'Baseline Crude IR', formatter: round2 },
+        { field: 'baseline_median_ir', title: 'Baseline Modeled IR', formatter: round2 },
+        { field: 'baseline_lower_hdi_ir', title: 'Baseline Lower HDI', formatter: round2 },
+        { field: 'baseline_upper_hdi_ir', title: 'Baseline Upper HDI', formatter: round2 },
         { field: 'relative_risk_est', title: 'RR Estimate', formatter: function(v, row) {
           var cls = getSignificanceClass(row);
           return '<span class="' + cls + '">' + round2(v) + '</span>';
@@ -3340,23 +3352,17 @@ registerSectionBuilder('pipeline-info', function buildPipelineInfo() {
   var rerunEl = document.getElementById('rerun-command');
   var copyBtn = document.getElementById('copy-rerun-btn');
   if (rerunEl) {
-    var p = m;
-    // Use String() instead of esc() because textContent handles display escaping;
-    // esc() would produce visible HTML entities like &amp; in the rendered text
-    var s = function(v) { return v == null ? '' : String(v); };
-    var cmd = 'nextflow run main.nf -profile singularity -entry SPLINE \\\n' +
-      '  --mmwrFile "' + s(p.mmwrFile || 'see nextflow.config') + '" \\\n' +
-      '  --censusFileB "' + s(p.censusFileB || 'see nextflow.config') + '" \\\n' +
-      '  --censusFileP "' + s(p.censusFileP || 'see nextflow.config') + '" \\\n' +
-      '  --pathogen "' + s(p.pathogen || 'AUTO_DISCOVER') + '" \\\n' +
-      '  --chains ' + (p.chains || 6) + ' \\\n' +
-      '  --iterations ' + (p.iterations || 10001) + ' \\\n' +
-      '  --adapt_delta ' + (p.adapt_delta || 0.99) + ' \\\n' +
-      '  --max_treedepth ' + (p.max_treedepth || 15) + ' \\\n' +
-      '  --seed ' + (p.seed || 123) + ' \\\n' +
-      '  --stan_backend "' + s(p.stan_backend || 'rstan') + '" \\\n' +
-      '  --outdir "' + s(p.output_dir || 'output') + '" \\\n' +
-      '  --projID "' + s(p.projID || '') + '"';
+    var shellQuote = function(v) { return "'" + String(v).replace(/'/g, "'\"'\"'") + "'"; };
+    var cmd = 'nextflow run main.nf -profile singularity';
+    var keys = ['mmwrFile','censusFileB','censusFileP','pathogen','pathogen_grouping',
+      'chains','iterations','adapt_delta','max_treedepth','seed','stan_backend',
+      'travel','cidt','states','travel_stratify','baseline_year','baseline_start','baseline_end',
+      'classification_rules','serotype_source','serotype_config','catchment_config','data_rules',
+      'matching_sensitivity','preprocessed','cleanFile','outdir'];
+    keys.forEach(function(k) {
+      if (m[k] !== null && m[k] !== undefined && m[k] !== '') cmd += ' --' + k + ' ' + shellQuote(m[k]);
+    });
+    // Let the pipeline assign a new project ID so a rerun does not overwrite this report.
     rerunEl.textContent = cmd;
   }
   if (copyBtn && rerunEl) {

@@ -4,12 +4,15 @@ A Nextflow pipeline for Bayesian hierarchical spline modeling of CDC FoodNet sur
 
 **Primary citation:** Weller DL, et al. Enhanced Bayesian Spline Regression Approach for Modelling Trends in Infections Caused by Pathogens Commonly Transmitted Through Food. *Zoonoses*. 2026;6:3. doi: [10.15212/ZOONOSES-2025-0030](https://doi.org/10.15212/ZOONOSES-2025-0030)
 
+See [FoodNet analysis options](docs/client_updates.md) for configurable baselines,
+Salmonella groups, STEC cleaning, editable classification rules, and launcher modes.
+
 ## Features
 
 1. Preprocesses raw MMWR surveillance data with configurable pathogen name standardization (case-insensitive matching at STRICT, MEDIUM, or RELAXED sensitivity)
 2. Automatic detection of available pathogens from input data (`AUTO_DISCOVER` mode)
 3. Flexible pathogen grouping for STEC (O157 / non-O157) and Salmonella (by serotype)
-4. Auto-preprocessing for serotype selection -- the interactive launcher triggers preprocessing automatically when serotype subgroups are requested
+4. Select serotypes/species from cleaned data, enter exact labels, or use the FoodNet Salmonella preset
 5. Bayesian hierarchical models with splines via `brms` (RStan or CmdStanR backend)
 6. Difficulty-based resource profiling: the RESOURCE_PROFILER module estimates data complexity per pathogen, and the TRENDY process dynamically allocates CPUs, memory, and wall time based on difficulty category (easy / moderate / hard / very_hard)
 7. Incidence rate estimates with uncertainty intervals per catchment site
@@ -151,7 +154,7 @@ Example configurations are in `analysis_configs/examples/`.
 ./run_workflow.sh
 ```
 
-The launcher walks you through selecting pathogens, configuring STEC/Salmonella groupings, setting model parameters, choosing the Stan backend, and selecting optional configuration files. When serotype subgroups are requested, preprocessing is triggered automatically. It submits the Nextflow command for you.
+The launcher walks you through selecting pathogens, configuring STEC/Salmonella groupings, setting model parameters, choosing the Stan backend, and selecting optional configuration files. For subgroup selection, it can list values from cleaned data or accept exact labels and presets. It submits the Nextflow command for you.
 
 ### Direct Nextflow Command
 
