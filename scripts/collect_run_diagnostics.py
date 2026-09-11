@@ -42,7 +42,10 @@ def main():
 
         def command(argv, timeout=10):
             try:
-                result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+                # HPC login nodes use Python 3.6; capture_output/text need 3.7.
+                result = subprocess.run(argv, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE,
+                                        universal_newlines=True, timeout=timeout)
                 return f'Exit: {result.returncode}\n{result.stdout}{result.stderr}'
             except (OSError, subprocess.TimeoutExpired) as exc:
                 return f'Unavailable: {exc}'
