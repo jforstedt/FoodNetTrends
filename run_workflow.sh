@@ -639,6 +639,12 @@ else
         valid_pathogens=("CAMPYLOBACTER" "CYCLOSPORA" "SALMONELLA" "SHIGELLA" "STEC" "VIBRIO" "YERSINIA")
 
         while true; do
+            if [[ -z "${pathogens//[[:space:],]/}" ]]; then
+                echo "Select at least one pathogen." >&2
+                read -r -p "Pathogens [CAMPYLOBACTER,CYCLOSPORA]: " pathogens || exit 1
+                pathogens=${pathogens:-CAMPYLOBACTER,CYCLOSPORA}
+                continue
+            fi
             IFS=',' read -ra pathogen_array <<< "$pathogens"
             normalized_pathogens=""
             invalid_found=false
@@ -668,7 +674,8 @@ else
 
             if [[ "$invalid_found" == true ]]; then
                 echo ""
-                read -r -p "Please re-enter pathogen names (comma-separated): " pathogens
+                read -r -p "Please re-enter pathogen names [CAMPYLOBACTER,CYCLOSPORA]: " pathogens || exit 1
+                pathogens=${pathogens:-CAMPYLOBACTER,CYCLOSPORA}
             else
                 pathogens="$normalized_pathogens"
                 break
@@ -1195,6 +1202,11 @@ fi
 # =============================================================================
 # BUILD THE NEXTFLOW COMMAND
 # =============================================================================
+
+if [[ "$flag" != "preprocess" && -z "${pathogens//[[:space:],]/}" ]]; then
+    echo "No pathogens selected. Cancelled before job submission; rerun and select pathogens." >&2
+    exit 1
+fi
 
 if [[ "$flag" == "preprocess" ]]; then
     cmd="nextflow run main.nf -profile singularity -entry PREPROCESS_ONLY \

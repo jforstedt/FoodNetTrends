@@ -47,3 +47,19 @@ for mode,label in [('test','Test'),('publication','Publication'),('max','Max'),(
                      text=True,capture_output=True,check=True)
     assert p.stdout.strip()==label
 print('Input-path correction/cancellation and all six mode labels passed.')
+
+# The invalid-entry retry used to accept an empty list and submit --pathogen "".
+start=script.index('    # Validate and normalize pathogen names')
+end=script.index('\nfi\n\nfi  # end pathogen selection',start)
+validation=script[start:end]
+for initial,answer,expected in [('INVALID','\n','CAMPYLOBACTER,CYCLOSPORA'),
+                                ('','SALMONELLA\n','SALMONELLA'),
+                                (',,,','STEC\n','STEC')]:
+    code='use_preprocessed=false\npathogens="$1"\n'+validation+'\nprintf "RESULT=%s\\n" "$pathogens"\n'
+    p=subprocess.run(['bash','-c',code,'selection-test',initial],input=answer,
+                     text=True,capture_output=True,check=True)
+    assert p.stdout.splitlines()[-1]=='RESULT='+expected,p.stdout+p.stderr
+p=subprocess.run(['bash','-c','use_preprocessed=false\npathogens=INVALID\n'+validation],
+                 input='',text=True,capture_output=True,timeout=5)
+assert p.returncode != 0
+print('Invalid, blank and comma-only pathogen retries and EOF cancellation passed.')

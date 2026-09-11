@@ -158,6 +158,15 @@ def buildGroupingWithMetrics = { pathogenGrouping, metricsChannel ->
 }
 
 workflow FOODNETTRENDS {
+    // An empty quoted CLI option may arrive as Boolean true in Nextflow.
+    // Reject that before invoking string methods or silently selecting a default.
+    if (params.pathogen != null &&
+        (!(params.pathogen instanceof CharSequence) || !params.pathogen.toString().replaceAll('[,\\s]', ''))) {
+        error "Invalid --pathogen: supply AUTO_DISCOVER or a comma-separated pathogen list; an empty value is not allowed"
+    }
+    if (params.pathogen_grouping != null && !(params.pathogen_grouping instanceof CharSequence)) {
+        error "Invalid --pathogen_grouping: supply a quoted PATHOGEN~subgroup list, or omit the option"
+    }
     def baselineStart = params.baseline_year != null ? params.baseline_year : params.baseline_start
     def baselineEnd = params.baseline_year != null ? params.baseline_year : params.baseline_end
     if (!baselineStart.toString().isInteger() || !baselineEnd.toString().isInteger() ||
