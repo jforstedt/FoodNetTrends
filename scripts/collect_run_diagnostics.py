@@ -57,12 +57,16 @@ def main():
         if override.exists():
             section(str(override), read(override))
         # Recover all attempts from project-specific logs, including rotated logs.
-        for log in sorted(Path('.').glob('.nextflow.log*')):
+        logs = set(Path('.').glob('.nextflow.log*'))
+        for run_root in roots:
+            logs.update((run_root/'validation_plan').glob('nextflow.log*'))
+        for log in sorted(logs):
             if not log.is_file():
                 continue
             content = read(log)
             launch = next((line for line in content.splitlines() if 'nextflow run ' in line), '')
-            if not any(re.search(r'--projID\s+[\"\x27]?' + re.escape(p) + r'(?=[\"\x27\s]|$)', launch) for p in projects):
+            owned_log = any(log.parent == run_root/'validation_plan' for run_root in roots)
+            if not owned_log and not any(re.search(r'--projID\s+[\"\x27]?' + re.escape(p) + r'(?=[\"\x27\s]|$)', launch) for p in projects):
                 continue
             lines = content.splitlines()
             selected = [line for line in lines if re.search(r'Launcher|Session UUID|Run name|Work-dir|submitted process|Submitted process|Re-submitted|Cached process|Task completed|Allocated CPUs|ERROR|WARN|exit status|Execution complete', line)]

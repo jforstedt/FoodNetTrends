@@ -33,6 +33,7 @@ params.stan_backend = 'rstan'
     for label,extra,expected in [
         ('default','', '12|52|48'),
         ('CPU-only override',"process { withName: 'FOODNETTRENDS:TRENDY' { cpus = 6 } }",'6|52|48'),
+        ('feature-run throttle',"process { withName: 'FOODNETTRENDS:TRENDY' { maxForks = 3 } }",'12|52|48'),
         ('cmdstan',"params.stan_backend = 'cmdstanr'",'8|16|48'),
         ('caps',"params.max_cpus=2\nparams.max_memory='2 GB'\nparams.max_time='1h'",'2|2|1'),
     ]:

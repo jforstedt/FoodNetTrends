@@ -244,3 +244,39 @@ The completed run's diagnostic flags remain: Shigella 12 divergent transitions,
 Cyclospora 2, STEC 2 and Yersinia 1. All reported R-hat and ESS checks passed.
 These warnings should accompany review of those estimates; this follow-up does
 not clear them or automatically refit the models.
+
+## Real-data feature validation run
+
+After the acceptance checks pass, launch the separate feature-model batch with:
+
+```bash
+python3 scripts/run_feature_models.py 20260911_140750
+```
+
+This launches **14 real Stan fits**: the three STEC groups; Hannah's five named
+Salmonella serotypes plus other and not serotyped; typhoidal, nontyphoidal and
+unclassified Salmonella; and Yersinia ENTEROCOLITICA, confirmed present in the
+saved audit. It verifies that the selected species exists in the authoritative
+source column before submitting anything. All fits use the example **2019**
+baseline, six chains, 10001 iterations, adapt_delta 0.99, max_treedepth 15,
+seed 123 and rstan. The biological classifications and historical coverage
+choices remain unchanged. This is validation, not a final FoodNet analysis specification.
+
+The launcher directly reuses the completed `preprocessed/clean_mmwr.csv`; it does
+not depend on Nextflow cache reuse to avoid preprocessing. Each invocation gets
+a new `feature_validation_<timestamp>` project ID and never overwrites the source
+run. At most three model tasks execute concurrently. Model selectors retain the
+12-CPU, 52-GB, 48-hour initial allocation; the temporary CPU-only resume override
+is not loaded.
+
+The new run's `validation_plan` directory contains the exact JSON parameters,
+copied classification rules, manifest, Nextflow log, and an explicit-session
+resume helper. `--prepare-only` writes this plan without submitting jobs.
+After Nextflow exits, the launcher automatically collects task traces, resources,
+logs and convergence reports into `validation_plan/run_diagnostics.txt`, including
+comparison with the source run. Scheduler accounting is skipped because those
+lookups timed out on the cluster. Keep the launch terminal open until completion.
+
+The serotype and typhoidal group sets overlap intentionally; do not add counts
+across the two sets. Rare groups may need further convergence review. A successful
+Nextflow exit alone does not clear sampler warnings.
