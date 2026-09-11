@@ -97,3 +97,21 @@ cat('Coverage controls, inactive CT geography, denominator failures and real STE
 # A recent-only case extract can still use earlier census rows to establish CO coverage.
 cc <- data.frame(year=2025,state='CO',county='ADAMS',siteid='CO',pathogen='SALMONELLA')
 stopifnot(nrow(prepare_analysis_inputs(cc,co,co,'SALMONELLA')$cases)==1)
+
+# Earlier Colorado surveillance footprints can differ from the last pre-expansion year.
+co_history <- expand.grid(year=2001:2025,cofip=c(1,3))
+co_history <- co_history[!(co_history$year<2004 & co_history$cofip==3),]
+co_history$state <- 'CO'; co_history$stfip <- 8
+co_history$county <- ifelse(co_history$cofip==1,'ADAMS','ARAPAHOE')
+co_history$population <- 1000
+co_cases <- data.frame(year=2001:2025,state='CO',county='ADAMS',siteid='CO',pathogen='LISTERIA')
+r <- prepare_analysis_inputs(co_cases,co_history,co_history,'LISTERIA')
+stopifnot(nrow(r$cases)==25, r$census$population[r$census$year==2001]==1000,
+          r$census$population[r$census$year==2025]==2000)
+# The new scope must still reject a changed footprint after the 2023 expansion.
+bad_history <- co_history[!(co_history$year==2025 & co_history$cofip==3),]
+stopifnot(inherits(try(prepare_analysis_inputs(co_cases,bad_history,bad_history,'LISTERIA'),silent=TRUE),'try-error'))
+# County matching remains year-specific, including the earlier catchment.
+bad_cases <- co_cases; bad_cases$county[bad_cases$year==2001] <- 'ARAPAHOE'
+stopifnot(inherits(try(prepare_analysis_inputs(bad_cases,co_history,co_history,'LISTERIA'),silent=TRUE),'try-error'))
+cat('Historical Colorado changes accepted; recent footprint and year-specific county checks retained.\n')

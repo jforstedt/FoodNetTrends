@@ -52,7 +52,7 @@ prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
     if (anyNA(historical)) stop('Missing Colorado county identifier')
     for (y in unique(co$year)) {
       ids <- co$cofip[co$year == y]
-      if (colorado_coverage == 'historical' && !setequal(ids,historical))
+      if (colorado_coverage == 'historical' && y >= 2023 && !setequal(ids,historical))
         stop('Historical Colorado coverage requires the historical county population footprint; mismatch in ',y)
       if (colorado_coverage == 'expanded' && y >= 2023 &&
           (!all(historical %in% ids) || length(unique(ids)) <= length(historical)))
