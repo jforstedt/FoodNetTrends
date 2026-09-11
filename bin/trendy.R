@@ -9,6 +9,7 @@ script_path <- commandArgs(trailingOnly = FALSE)
 script_path <- sub("--file=", "", script_path[grep("--file=", script_path)])
 script_dir <- dirname(script_path)
 source(file.path(script_dir, "classification.R"))
+source(file.path(script_dir, "input_validation.R"))
 
 tryCatch({
   source(file.path(script_dir, "functions.R"))
@@ -45,6 +46,8 @@ parser$add_argument("--baseline_start", type = "integer", default = 2016L)
 parser$add_argument("--baseline_end", type = "integer", default = 2018L)
 parser$add_argument("--classification_rules", default = file.path(dirname(script_dir), "analysis_configs", "classification_rules.csv"))
 parser$add_argument("--serotype_source", default = "auto")
+parser$add_argument("--colorado_coverage", default = "historical", choices = c("historical", "expanded"))
+parser$add_argument("--parasite_end_year", type = "integer", default = 2024L)
 parser$add_argument("--selected_serotypes", default = "",
                     help = "Pipe-separated individually selected Salmonella serotypes")
 
@@ -316,23 +319,27 @@ read_data_file <- function(path) {
   else haven::read_sas(path)
 }
 tryCatch({
-  census <- read_data_file(censusFileB) %>%
-    setNames(tolower(names(.))) %>%
-    group_by(year, state) %>%
-    dplyr::summarize(population = sum(population, na.rm=TRUE)) %>%
-    mutate(pathogentype = "Bacterial") %>%
-    bind_rows(
-      read_data_file(censusFileP) %>%
-        setNames(tolower(names(.))) %>%
-        group_by(year, state) %>%
-        dplyr::summarize(population = sum(population, na.rm=TRUE)) %>%
-        mutate(pathogentype = "Parasitic")
-    ) %>%
-    ungroup()
-
-  census <- as.data.frame(census)
-  surveillance <- census %>% filter(year %in% surveillance_years) %>% distinct(year, state)
-  if (!is.null(surveillance_states)) surveillance <- surveillance %>% filter(state %in% surveillance_states)
+  bacterial <- read_data_file(censusFileB)
+  parasitic <- read_data_file(censusFileP)
+  # Validate the selected states only; unselected sites do not define this run.
+  if (!is.null(surveillance_states)) {
+    names(bacterial) <- tolower(names(bacterial)); names(parasitic) <- tolower(names(parasitic))
+    bacterial <- bacterial[bacterial$state %in% surveillance_states, , drop = FALSE]
+    parasitic <- parasitic[parasitic$state %in% surveillance_states, , drop = FALSE]
+  }
+  if (is.null(opts$pathogen) || length(opts$pathogen) != 1) stop("One pathogen per model process is required")
+  inputs <- prepare_analysis_inputs(mmwrdata, bacterial, parasitic, opts$pathogen,
+                                    opts$colorado_coverage, opts$parasite_end_year, surveillance_years)
+  mmwrdata <- inputs$cases
+  census <- inputs$census
+  surveillance <- expand.grid(year=inputs$years, state=unique(census$state), stringsAsFactors=FALSE)
+  input_exclusions <- inputs$excluded
+  report_progress("INPUT_VALIDATION", message=paste("Colorado coverage:", opts$colorado_coverage,
+    "| parasite end year:", opts$parasite_end_year, "| population years:",
+    paste(range(census$year), collapse="-")))
+  if (nrow(input_exclusions)) for (i in seq_len(nrow(input_exclusions)))
+    report_progress("WARNING", message=paste(input_exclusions$reason[i],
+      "year", input_exclusions$year[i], "records", input_exclusions$records[i]))
   missing_baseline <- setdiff(seq.int(baseline_start, baseline_end), unique(surveillance$year))
   if (length(missing_baseline)) stop("Baseline years unavailable: ", paste(missing_baseline, collapse = ", "))
   report_progress("DATA", message=paste("Processed census data with",
@@ -475,9 +482,14 @@ for (pathogen_name in target_pathogens) {
     write.csv(classification_rules, file.path(outDir, paste0(output_prefix, "_classification_rules.csv")), row.names = FALSE)
     write.csv(data.frame(pathogen = pathogen_name, subgroup = opts$subgroup,
       baseline_start = baseline_start, baseline_end = baseline_end,
+      colorado_coverage = opts$colorado_coverage, parasite_end_year = opts$parasite_end_year,
+      analysis_start_year = min(as.numeric(as.character(current_data$year))), analysis_end_year = max(as.numeric(as.character(current_data$year))),
+      excluded_records = sum(input_exclusions$records),
       serotype_source = opts$serotype_source, selected_serotypes = opts$selected_serotypes,
       travel = opts$travel, cidt = opts$cidt, states = paste(surveillance_states, collapse = ",")),
       file.path(outDir, paste0(output_prefix, "_analysis_settings.csv")), row.names = FALSE)
+    write.csv(input_exclusions, file.path(outDir, paste0(output_prefix, "_input_exclusions.csv")), row.names = FALSE)
+    write.csv(census, file.path(outDir, paste0(output_prefix, "_population_used.csv")), row.names = FALSE)
     proposed <- PROPOSED_BM(
       current_data,
       cores = modelcores,

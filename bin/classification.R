@@ -61,8 +61,16 @@ classify_cases <- function(data, rules, source = "auto") {
   }
   stec <- canonical_value(data$pathogen) == "STEC"
   stec_class <- canonical_value(data$stec_class_original)
-  if ("dx0157" %in% names(data)) {
-    dx <- canonical_value(data$dx0157)
+  dx_fields <- intersect(c("dxo157", "dx0157"), names(data))
+  if (length(dx_fields)) {
+    dx <- canonical_value(data[[dx_fields[1]]])
+    if (length(dx_fields) == 2) {
+      alias <- canonical_value(data[[dx_fields[2]]])
+      conflict <- stec & dx %in% c("POSITIVE", "NEGATIVE") &
+        alias %in% c("POSITIVE", "NEGATIVE") & dx != alias
+      if (any(conflict)) stop("Conflicting DxO157 and dx0157 test results")
+      dx[dx == ""] <- alias[dx == ""]
+    }
     stec_class[stec & dx == "POSITIVE"] <- "STEC O157"
     stec_class[stec & dx == "NEGATIVE"] <- "STEC NONO157"
   }

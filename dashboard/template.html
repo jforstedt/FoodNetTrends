@@ -1778,6 +1778,7 @@ analysisKeys.forEach(function(key) {
   var hasCatch = a.ircatch && a.ircatch.length > 0;
   var hasSite = a.irsite && a.irsite.length > 0;
   var hasIRR = a.irr && Object.keys(a.irr).length > 0;
+  var analysisSettings = (a.settings || [])[0] || {};
 
   // Count rows
   var nCatch = hasCatch ? a.ircatch.length : 0;
@@ -1803,6 +1804,11 @@ analysisKeys.forEach(function(key) {
       '<p class="section-subtitle">' + statesInData.length + ' states \u2022 ' + yearRangeStr + '</p></div>' +
       '<span class="badge ' + (a.convergence_status === 'Converged' ? 'badge-success' : 'badge-info') + '" style="margin-left:auto;font-size:.8rem;">' + esc(a.convergence_status || 'Not assessed') + '</span>' +
     '</div>' +
+
+    (analysisSettings.colorado_coverage ?
+      '<p class="section-subtitle">Colorado coverage: ' + esc(analysisSettings.colorado_coverage) +
+      ' | Parasite year limit: ' + esc(String(analysisSettings.parasite_end_year)) +
+      ' | Records excluded by coverage/year controls before subgroup selection: ' + esc(String(analysisSettings.excluded_records)) + '</p>' : '') +
 
     ((a.domestic_ircatch && a.domestic_ircatch.length) || (a.travel_ircatch && a.travel_ircatch.length) ?
       '<div class="acq-toggle" id="acq-toggle-' + key + '">' +
@@ -3356,7 +3362,7 @@ registerSectionBuilder('pipeline-info', function buildPipelineInfo() {
     var cmd = 'nextflow run main.nf -profile singularity';
     var keys = ['mmwrFile','censusFileB','censusFileP','pathogen','pathogen_grouping',
       'chains','iterations','adapt_delta','max_treedepth','seed','stan_backend',
-      'travel','cidt','states','travel_stratify','baseline_year','baseline_start','baseline_end',
+      'travel','cidt','states','travel_stratify','baseline_year','baseline_start','baseline_end','colorado_coverage','parasite_end_year',
       'classification_rules','serotype_source','serotype_config','catchment_config','data_rules',
       'matching_sensitivity','preprocessed','cleanFile','outdir'];
     keys.forEach(function(k) {

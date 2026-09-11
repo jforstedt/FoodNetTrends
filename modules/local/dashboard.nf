@@ -18,7 +18,7 @@ process DASHBOARD {
     def keys = ['mmwrFile', 'censusFileB', 'censusFileP', 'pathogen', 'pathogen_grouping',
                 'chains', 'iterations', 'adapt_delta', 'max_treedepth', 'seed', 'stan_backend',
                 'travel', 'cidt', 'states', 'travel_stratify', 'baseline_year', 'baseline_start',
-                'baseline_end', 'classification_rules', 'serotype_source', 'serotype_config',
+                'baseline_end', 'colorado_coverage', 'parasite_end_year', 'classification_rules', 'serotype_source', 'serotype_config',
                 'catchment_config', 'data_rules', 'matching_sensitivity', 'preprocessed', 'cleanFile']
     def runParams = keys.collectEntries { key -> [(key): params[key]] }
     runParams['outdir'] = params.outdir

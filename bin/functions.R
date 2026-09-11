@@ -171,18 +171,6 @@ PATH_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL, surveillanc
     stop("No population data found after joining with census data. Check that census data contains 'Bacterial' pathogentype.")
   }
 
-  rows_before <- nrow(selectDf)
-  selectDf <- selectDf %>% filter(!is.na(population))
-  rows_after <- nrow(selectDf)
-
-  if (rows_before > rows_after) {
-    warning(paste("Removed", rows_before - rows_after, "rows with missing population data"))
-  }
-
-  if (nrow(selectDf) == 0) {
-    stop("No data remaining after removing rows with missing population")
-  }
-
   # Drop state-years before the state entered the FoodNet catchment
   if (is.null(catchment_config)) {
     catchment_config <- read_catchment_config()
@@ -194,6 +182,14 @@ PATH_ANALYSIS <- function(mmwrdata, census, catchment_config = NULL, surveillanc
   parasitic_subset <- apply_catchment_filter(parasitic_subset, catchment_config, "parasitic")
   selectDf <- bind_rows(bacterial_subset, parasitic_subset)
 
+  if (!nrow(selectDf)) stop("No data remaining within catchment coverage")
+  if (any(!is.finite(selectDf$population) | selectDf$population <= 0))
+    stop("Missing or invalid population for a modeled state/year; analysis stopped")
+  eligible_counts <- bind_rows(
+    apply_catchment_filter(filter(counts, !pathogen %in% parasitic_pathogens), catchment_config, "bacterial"),
+    apply_catchment_filter(filter(counts, pathogen %in% parasitic_pathogens), catchment_config, "parasitic"))
+  if (nrow(anti_join(eligible_counts, selectDf, by=c("year", "state", "pathogen"))))
+    stop("Case state/year missing from the surveillance population frame")
   return(selectDf)
 }
 

@@ -53,6 +53,20 @@
                     "fa_icon": "fas fa-envelope",
                     "help_text": "Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits.",
                     "pattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$"
+                },
+                "colorado_coverage": {
+                    "type": "string",
+                    "enum": [
+                        "historical",
+                        "expanded"
+                    ],
+                    "default": "historical",
+                    "description": "Colorado surveillance footprint. Historical excludes COEX; expanded requires expanded county denominators."
+                },
+                "parasite_end_year": {
+                    "type": "integer",
+                    "default": 2024,
+                    "description": "Last included year for parasite models; raise only with verified matching denominators."
                 }
             }
         },

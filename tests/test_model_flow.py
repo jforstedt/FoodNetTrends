@@ -51,4 +51,28 @@ with tempfile.TemporaryDirectory(prefix='foodnet-model-flow-') as temp:
     p=subprocess.run(base+['--subgroup','Enteritidis','--baseline_start','2025','--baseline_end','2025',
                           '--outDir',str(invalid)],capture_output=True,text=True)
     assert p.returncode!=0 and 'Baseline years unavailable' in p.stderr
+    # A 2025 parasite case must be explicitly excluded by default, not silently
+    # lost in a population join. Raising the limit without populations must fail.
+    parasite_cases = temp/'parasites.csv'
+    parasite_rows = []
+    for year in range(2010,2026):
+        row = dict(rows[0], pathogen='CYCLOSPORA', state='CA', county='ALAMEDA', year=str(year), cxcidt='PARASITIC')
+        parasite_rows.append(row)
+    with parasite_cases.open('w') as handle:
+        writer=csv.DictWriter(handle,fields); writer.writeheader(); writer.writerows(parasite_rows)
+    pop = temp/'parasite_pop.csv'
+    with pop.open('w') as handle:
+        writer=csv.DictWriter(handle,['year','state','population']); writer.writeheader()
+        writer.writerows(dict(year=y,state='CA',population=100000) for y in range(2010,2025))
+    pbase = base + ['--pathogen','CYCLOSPORA','--subgroup','combined','--states','CA',
+                    '--cleanFile',str(parasite_cases),'--censusFileP',str(pop)]
+    limited=temp/'limited'
+    p=subprocess.run(pbase+['--outDir',str(limited)],capture_output=True,text=True)
+    assert p.returncode==0 and not list(limited.glob('*_error.txt')),p.stdout+p.stderr
+    with (limited/'CYCLOSPORA_combined_IRCatch.csv').open() as handle:
+        assert max(int(r['year']) for r in csv.DictReader(handle))==2024
+    with (limited/'CYCLOSPORA_combined_input_exclusions.csv').open() as handle:
+        assert any(r['year']=='2025' and r['records']=='1' for r in csv.DictReader(handle))
+    p=subprocess.run(pbase+['--parasite_end_year','2025','--outDir',str(temp/'missing2025')],capture_output=True,text=True)
+    assert p.returncode!=0 and 'Missing Parasitic population years: 2025' in p.stderr,p.stdout+p.stderr
 print('Actual model flow: travel denominators, baseline exports, empty groups and unavailable baseline passed.')

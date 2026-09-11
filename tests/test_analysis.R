@@ -63,3 +63,37 @@ stopifnot(inherits(try(IR_COMP_CATCH(catch,2015,2017),silent=TRUE),'try-error'),
           inherits(try(IR_COMP_CATCH(catch,2018,2016),silent=TRUE),'try-error'),
           inherits(try(IR_COMP_CATCH(filter(catch,year!=2017),2016,2018),silent=TRUE),'try-error'))
 cat('Classification, subgroup membership, zero counts, denominators and baseline tests passed.\n')
+
+# Actual SAS spelling (letter O) and legacy email spelling (zero).
+x <- data.frame(pathogen='STEC', stec_class=c('STEC NONO157','STEC O157'), dxo157=c('POSITIVE','NEGATIVE'))
+stopifnot(identical(classify_cases(x,rules)$stec_group,c('O157','nonO157')))
+x$dx0157 <- c('NEGATIVE','NEGATIVE')
+stopifnot(inherits(try(classify_cases(x,rules),silent=TRUE),'try-error'))
+# Missing denominator cells cannot silently drop observed cases or zero-case cells.
+broken <- census[census$year != 2017,]
+stopifnot(inherits(try(PATH_ANALYSIS(cases,broken,surveillance=expand.grid(year=2016:2018,state=c('CA','OR'))),silent=TRUE),'try-error'))
+source('bin/input_validation.R')
+co <- expand.grid(year=2022:2025, cofip=c(1,3))
+co$state <- 'CO'; co$stfip <- 8; co$county <- ifelse(co$cofip==1,'ADAMS','ARAPAHOE'); co$population <- 1000
+cc <- data.frame(year=2022:2025,state='CO',county='ADAMS',siteid=c('CO','CO','COEX','COEX'),pathogen='SALMONELLA')
+r <- prepare_analysis_inputs(cc,co,co,'SALMONELLA')
+stopifnot(nrow(r$cases)==2,sum(r$excluded$records)==2,nrow(r$census)==4)
+stopifnot(inherits(try(prepare_analysis_inputs(cc,co,co,'SALMONELLA','expanded'),silent=TRUE),'try-error'))
+expanded <- rbind(co,transform(co[co$year>=2023 & co$cofip==1,],cofip=5,county='EXPANSION'))
+stopifnot(inherits(try(prepare_analysis_inputs(cc,expanded,co,'SALMONELLA'),silent=TRUE),'try-error'))
+stopifnot(nrow(prepare_analysis_inputs(cc,expanded,co,'SALMONELLA','expanded')$cases)==4)
+cc$pathogen <- 'CYCLOSPORA'
+r <- prepare_analysis_inputs(cc,co,co[co$year<=2024,],'CYCLOSPORA')
+stopifnot(max(r$census$year)==2024,all(r$cases$year<=2024))
+stopifnot(inherits(try(prepare_analysis_inputs(cc,co,co[co$year<=2024,],'CYCLOSPORA',parasite_end_year=2025),silent=TRUE),'try-error'))
+ct <- data.frame(year=2020,state='CT',stfip=9,cofip=c(seq(1,15,2),seq(110,190,10)),population=c(rep(NA_real_,8),rep(1000,9)))
+ct$county <- as.character(ct$cofip)
+cc <- data.frame(year=2020,state='CT',county='HARTFORD',pathogen='SALMONELLA')
+stopifnot(prepare_analysis_inputs(cc,ct,ct,'SALMONELLA')$census$population==9000)
+ct$population[9] <- NA_real_
+stopifnot(inherits(try(prepare_analysis_inputs(cc,ct,ct,'SALMONELLA'),silent=TRUE),'try-error'))
+cat('Coverage controls, inactive CT geography, denominator failures and real STEC field spelling passed.\n')
+
+# A recent-only case extract can still use earlier census rows to establish CO coverage.
+cc <- data.frame(year=2025,state='CO',county='ADAMS',siteid='CO',pathogen='SALMONELLA')
+stopifnot(nrow(prepare_analysis_inputs(cc,co,co,'SALMONELLA')$cases)==1)

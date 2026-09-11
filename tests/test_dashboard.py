@@ -16,6 +16,8 @@ assert any(a['status'] == 'success' for a in analyses.values())
 for a in analyses.values():
     if a['status'] == 'success':
         assert a['convergence_status'] == 'Not converged', a
+        assert a['settings'][0]['colorado_coverage']=='historical'
+        assert a['settings'][0]['parasite_end_year']==2024
         for rows in a['irr'].values():
             assert all(r['baseline_start'] == 2019 and r['baseline_end'] == 2019 for r in rows)
             assert all('baseline_raw_ir' in r and 'baseline_median_ir' in r for r in rows)

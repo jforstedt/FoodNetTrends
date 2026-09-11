@@ -54,6 +54,14 @@ skip_to_summary=false
 background=false
 stan_backend="rstan"
 TRAVEL_STRATIFY="false"
+colorado_coverage="${FNT_COLORADO_COVERAGE:-historical}"
+parasite_end_year="${FNT_PARASITE_END_YEAR:-2024}"
+if [[ "$colorado_coverage" != "historical" && "$colorado_coverage" != "expanded" ]]; then
+    echo "FNT_COLORADO_COVERAGE must be historical or expanded" >&2; exit 1
+fi
+if [[ ! "$parasite_end_year" =~ ^[0-9]{4}$ ]]; then
+    echo "FNT_PARASITE_END_YEAR must be a four-digit year" >&2; exit 1
+fi
 baseline_start=2016
 baseline_end=2018
 classification_rules="${FNT_CLASSIFICATION_RULES:-analysis_configs/classification_rules.csv}"
@@ -1249,7 +1257,7 @@ printf -v rules_arg '%q' "$classification_rules"
 printf -v source_arg '%q' "$serotype_source"
 cmd="$cmd --classification_rules $rules_arg --serotype_source $source_arg"
 if [[ "$flag" != "preprocess" ]]; then
-    cmd="$cmd --baseline_start $baseline_start --baseline_end $baseline_end"
+    cmd="$cmd --baseline_start $baseline_start --baseline_end $baseline_end --colorado_coverage $colorado_coverage --parasite_end_year $parasite_end_year"
 fi
 
 # Append optional parameters
@@ -1301,6 +1309,7 @@ fi
 echo ""
 echo -e "${BLUE}========= Analysis Summary ==========${NC}"
 echo "Baseline: $baseline_start-$baseline_end | Classification rules: $classification_rules | Source: $serotype_source"
+echo "Colorado coverage: $colorado_coverage | Parasite analysis ends: $parasite_end_year"
 echo -e "Mode: ${GREEN}$(run_mode_label "$flag")${NC}"
 if [[ "$pathogens" == "AUTO_DISCOVER" ]]; then
     echo -e "Pathogens: ${GREEN}All pathogens found in data (auto-discovery)${NC}"

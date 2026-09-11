@@ -141,3 +141,56 @@ filenames. If filenames have changed too, set `FNT_MMWR_FILE`,
 `FNT_CENSUS_FILE_B`, and `FNT_CENSUS_FILE_P` to the current full paths. These can
 be exported in your shell session or shell configuration, without editing the
 tracked launcher. Preprocessing-only mode requires just the MMWR file.
+
+## Input coverage controls (September 2026 HPC audit)
+
+The default analysis uses `--colorado_coverage historical` and
+`--parasite_end_year 2024`. These choices are printed by the launcher and recorded
+in each analysis settings CSV. They do not modify the source SAS or cleaned CSV.
+
+Historical Colorado coverage excludes the `COEX` submitting site. For analyses
+including 2023 or later, it requires the historical county footprint in the census
+file, checks Colorado case counties against that footprint, and requires usable
+site identifiers. `--colorado_coverage expanded` keeps expansion cases but requires
+expanded county denominators from 2023 onward. The audited `cen9625_CoExp` files
+end in 2024 and cannot support a full 2025 expanded analysis. A filename alone does
+not establish coverage. The footprint check compares against the latest supplied
+pre-2023 Colorado year; source population provenance must still be verified.
+
+Parasite models explicitly omit cases after the selected end year. Raising
+`--parasite_end_year 2025` requires actual matching parasite populations. The
+pipeline does not copy bacterial populations or extrapolate missing denominators.
+Parasite observation years begin no earlier than 1997. Baseline years must exist
+within each pathogen's resulting analysis window.
+
+For the launcher, defaults can be changed with `FNT_COLORADO_COVERAGE` and
+`FNT_PARASITE_END_YEAR`. For example, after supplying verified denominators:
+
+```bash
+export FNT_COLORADO_COVERAGE=expanded
+export FNT_PARASITE_END_YEAR=2025
+```
+
+Each fitted analysis writes `*_population_used.csv` (state/year totals) and
+`*_input_exclusions.csv` (reason, year, number of excluded records). Exclusions
+are counted after the user's state, travel, and diagnostic filters and before
+subgroup selection. These CSVs accompany the other model results. Analysis
+settings in the dashboard include the coverage choice and actual modeled years.
+
+Validation rejects duplicate geographic keys, invalid active populations,
+missing modeled state/year denominators, and cases absent from the surveillance
+population frame. The supplied Connecticut convention is handled explicitly:
+historical counties are active through 2019 and nine planning regions from 2020;
+zero or missing inactive rows are allowed, but overlapping populated geographies
+or incomplete active regions fail. This is state-level aggregation, not a spatial
+crosswalk. County-level modeling still requires geographic reconciliation.
+
+STEC classification recognizes `dxo157` (the lowercased SAS `DxO157` field) and
+retains `dx0157` as an alias. Positive/negative results override the original class;
+other values retain it. Contradictory positive/negative results across both fields
+fail explicitly. When both exist, the actual SAS spelling takes priority except
+for blank values.
+
+The completed HPC run predating these controls remains a computational test;
+rerun affected models and inspect convergence and denominator exports before
+interpreting their estimates.

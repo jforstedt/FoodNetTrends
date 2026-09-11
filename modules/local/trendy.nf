@@ -31,6 +31,8 @@ process TRENDY {
     path "*_classification_report.csv", emit: classificationReport, optional: true
     path "*_classification_rules.csv", emit: classificationRulesUsed, optional: true
     path "*_analysis_settings.csv", emit: settings, optional: true
+    path "*_input_exclusions.csv", emit: inputExclusions, optional: true
+    path "*_population_used.csv", emit: populationUsed, optional: true
     path "*_domestic_convergence_diagnostics.csv", emit: domesticDiagnostics, optional: true
     path "*_travel_convergence_diagnostics.csv", emit: travelDiagnostics, optional: true
 
@@ -140,6 +142,8 @@ process TRENDY {
       --max_treedepth ${params.max_treedepth} \\
       --seed ${params.seed} \\
       --backend ${params.stan_backend} \\
+      --colorado_coverage ${quote(params.colorado_coverage)} \\
+      --parasite_end_year ${params.parasite_end_year} \\
       --baseline_start ${baselineStart} \\
       --baseline_end ${baselineEnd} \\
       --classification_rules ${quote(classificationRules)} \\

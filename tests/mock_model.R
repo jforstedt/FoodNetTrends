@@ -8,8 +8,8 @@ root <- dirname(dirname(normalizePath(script)))
 model_env <- new.env(parent = globalenv())
 model_env$LOAD_PACKAGES <- function(...) invisible(NULL)
 model_env$source <- function(file, ...) {
-  if (basename(file) == 'classification.R') {
-    sys.source(file.path(root,'bin/classification.R'), envir=model_env)
+  if (basename(file) %in% c('classification.R','input_validation.R')) {
+    sys.source(file.path(root,'bin',basename(file)), envir=model_env)
   } else if (basename(file) == 'functions.R') {
     for (expr in parse(file.path(root,'bin/functions.R'))) {
       if (is.call(expr) && identical(expr[[1]], as.name('<-')) &&

@@ -171,6 +171,8 @@ workflow FOODNETTRENDS {
     def baselineEnd = params.baseline_year != null ? params.baseline_year : params.baseline_end
     if (!baselineStart.toString().isInteger() || !baselineEnd.toString().isInteger() ||
         (baselineStart as Integer) > (baselineEnd as Integer)) error "Baseline must be a single integer year or an ordered year range"
+    if (!(params.colorado_coverage in ['historical', 'expanded'])) error "colorado_coverage must be historical or expanded"
+    if (!params.parasite_end_year.toString().isInteger()) error "parasite_end_year must be an integer"
     // Define input channels
     if (params.pathogen && params.pathogen != 'AUTO_DISCOVER') {
         // Convert comma-separated string to a channel of pathogens
@@ -366,7 +368,7 @@ workflow FOODNETTRENDS {
             TRENDY.out.irr, TRENDY.out.summary, TRENDY.out.errors, TRENDY.out.diagnostics,
             TRENDY.out.domesticDiagnostics, TRENDY.out.travelDiagnostics,
             TRENDY.out.classificationReport, TRENDY.out.classificationRulesUsed,
-            TRENDY.out.settings).collect().ifEmpty([])
+            TRENDY.out.settings, TRENDY.out.inputExclusions, TRENDY.out.populationUsed).collect().ifEmpty([])
         dashboardMetadata = RESOURCE_PROFILER.out.profile.mix(RESOURCE_PROFILER.out.subgroup_profile,
             RESOURCE_PROFILER.out.states_metadata, RESOURCE_PROFILER.out.cidt_metadata,
             RESOURCE_PROFILER.out.travel_metadata)
