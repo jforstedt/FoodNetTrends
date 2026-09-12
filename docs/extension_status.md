@@ -159,3 +159,16 @@ In particular, the current bacterial SAS file has the same CT total for 2024 and
 
 Internal review artifacts are held locally under `.local/county_review_20260912`
 and are not committed as case-geography data to the repository.
+
+## Consistent Connecticut series and coverage evidence
+
+The Vintage 2025 Census town series now provides a validated candidate for all
+48 historical Connecticut county/year totals in 2020–2025. Both DPH crosswalks
+agree for all 169 towns; Census town identifiers/names/regions match and all six
+state totals reconcile exactly. `scripts/reconcile_ct_vintage2025.py` implements
+this check, with seven passing tests and a successful run on the public files.
+The mixed-vintage candidate above is superseded for future denominator selection,
+not applied to existing fits. See [coverage reconciliation](county_coverage_reconciliation.md)
+for the updated totals, source links, reproducible command, and unresolved early
+Connecticut/California coverage evidence. Real-data county eligibility and R-INLA
+model validation remain incomplete.
