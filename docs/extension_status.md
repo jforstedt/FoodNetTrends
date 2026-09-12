@@ -82,3 +82,28 @@ Plan sources: .local/plans/future_models/UNIFIED_PLAN_v2.md,
 spatial_and_inla.md, county_level_modeling.md, VALIDATION_REPORT.md and
 PUBLICATION_OUTPUTS.md. These are locally saved proposals. The validation report
 itself also contains unverified claims; it is not an external scientific review.
+
+## County preparation job
+
+`python3 scripts/launch_county_preparation.py` submits one SGE job using the
+existing FoodNet container. It reads only the geography/pathogen fields needed
+from raw MMWR data and county population fields from the two census files.
+Each invocation writes a separate `output/county_preparation_*` directory.
+
+Outputs include a match summary, internal geographic candidate/Connecticut
+exception tables, and bacterial/parasitic county-year coverage-review templates.
+No individual case identifiers are written. Case counts below five are suppressed;
+these internal diagnostic tables are not certified for public release.
+
+Direct FIPS matches are checked against state and available unique county-name
+matches. Blank FIPS may yield a unique state/year/normalized-name candidate;
+malformed or conflicting populated FIPS are never replaced automatically.
+Duplicate population keys, missing/nonpositive populations, and years before
+census EntryYear are flagged. Census EntryYear is a diagnostic constraint, not
+proof of full county surveillance eligibility. Connecticut 2020 onward is marked
+for boundary reconciliation. Every row retains unverified coverage and
+`model_ready=FALSE`; no county-year zero case rows or spatial fits are created.
+
+Local validation: geographic edge-case tests and a synthetic SAS-to-report test
+passed, including checksum verification that source inputs were unchanged.
+Real-data execution and adjudication of the candidate tables remain pending.
