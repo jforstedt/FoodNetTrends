@@ -291,3 +291,23 @@ its original concurrency settings, and collects a new diagnostic report after
 Nextflow exits. It does not create a new project. An active recovery lock prevents
 duplicate launches through this helper. Do not start it while another copy of
 that session is running or suspended; continue the existing process instead.
+
+### Complete published results without cache reuse
+
+If explicit-session resume resubmits completed models, stop that duplicate
+launcher before using the missing-result completion mode:
+
+```bash
+bash scripts/recover_feature_run.sh --finish-missing PROJECT_ID SESSION_UUID
+```
+
+This mode is narrowly scoped to the 2019 feature run with only typhoidal
+Salmonella unfinished. It requires shutdown recorded in the latest run log,
+checks that its SGE jobs are gone, and verifies nonempty published model objects,
+result tables, settings and diagnostics for the other groups. It submits only
+`SALMONELLA~TYPHOIDAL` with the saved model parameters, without `-resume` or any
+other group selections. Existing completed group files are not rewritten. After
+that task completes, it generates the dashboard from all published groups and
+collects diagnostics. If all groups are already complete, it only builds the
+dashboard. If another group is missing or has an error report, it stops for
+review rather than silently rerunning it.

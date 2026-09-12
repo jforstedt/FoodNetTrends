@@ -60,7 +60,7 @@ def main():
         # Recover all attempts from project-specific logs, including rotated logs.
         logs = set(Path('.').glob('.nextflow.log*'))
         for run_root in roots:
-            logs.update((run_root/'validation_plan').glob('nextflow.log*'))
+            logs.update((run_root/'validation_plan').glob('*nextflow.log*'))
         for log in sorted(logs):
             if not log.is_file():
                 continue

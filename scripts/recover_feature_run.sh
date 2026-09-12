@@ -3,6 +3,8 @@
 set -eo pipefail
 worker=false
 if [[ ${1:-} == --worker ]]; then worker=true; shift; fi
+finish_missing=false
+if [[ ${1:-} == --finish-missing ]]; then finish_missing=true; shift; fi
 project=${1:?Usage: bash scripts/recover_feature_run.sh PROJECT_ID SESSION_UUID}
 session=${2:?Supply the original Nextflow session UUID}
 [[ $project =~ ^[A-Za-z0-9_-]+$ && $session =~ ^[0-9a-f-]{36}$ ]] || { echo 'Invalid project or session ID' >&2; exit 1; }
@@ -12,7 +14,11 @@ plan="$PWD/output/$project/validation_plan"
 if [[ $worker == true ]]; then
   # FD 9 inherits the recovery lock held by the parent.
   set +e
-  bash "$plan/resume.sh" "$session"
+  if [[ $finish_missing == true ]]; then
+    python3 scripts/finish_feature_run.py "$project"
+  else
+    bash "$plan/resume.sh" "$session"
+  fi
   result=$?
   python3 scripts/collect_run_diagnostics.py "$project" --skip-accounting
   collection_result=$?
@@ -56,11 +62,14 @@ export NXF_VER="$version"
 export NXF_ANSI_LOG=false
 exec 9> "$plan/recovery.lock"
 flock -n 9 || { echo 'A recovery launcher is already active for this project' >&2; exit 1; }
+if [[ $finish_missing == true ]]; then python3 scripts/finish_feature_run.py "$project" --check-only; fi
 stamp=$(date +%Y%m%d_%H%M%S)
 log="$plan/recovery_${stamp}.log"
 echo "Checking Nextflow $NXF_VER before starting recovery..."
 nextflow -version
 singularity --version
-nohup setsid bash "$PWD/scripts/recover_feature_run.sh" --worker "$project" "$session" > "$log" 2>&1 < /dev/null &
+worker_args=(--worker)
+if [[ $finish_missing == true ]]; then worker_args+=(--finish-missing); fi
+nohup setsid bash "$PWD/scripts/recover_feature_run.sh" "${worker_args[@]}" "$project" "$session" > "$log" 2>&1 < /dev/null &
 echo "Recovery launcher PID: $!"
 echo "Progress and final report path: $log"
