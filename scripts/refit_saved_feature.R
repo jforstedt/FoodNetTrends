@@ -1,4 +1,10 @@
 #!/usr/bin/env Rscript
+same_refit_data <- function(before, after) {
+  # brms::update rewrites the descriptive data_name attribute. It is not data.
+  attr(before, "data_name") <- NULL
+  attr(after, "data_name") <- NULL
+  identical(before, after)
+}
 args <- commandArgs(TRUE)
 stopifnot(length(args)==3L)
 source_dir <- args[1]; destination <- args[2]; key <- args[3]
@@ -14,10 +20,26 @@ control <- old$fit@stan_args[[1]]$control
 stopifnot(sim$chains==6, sim$iter==10001, control$max_treedepth==15)
 control$adapt_delta <- 0.999
 cat('Refitting saved model:', key, '\nOnly requested sampler change: adapt_delta=0.999\n')
-new <- update(old, recompile=FALSE, chains=sim$chains, iter=sim$iter,
-              warmup=sim$warmup, thin=sim$thin, seed=123, cores=12, control=control)
-stopifnot(identical(old$data, new$data), identical(old$prior, new$prior),
-          identical(brms::stancode(old), brms::stancode(new)))
+checkpoint_dir <- file.path(destination, 'checkpoints')
+dir.create(checkpoint_dir, showWarnings=FALSE)
+checkpoint <- file.path(checkpoint_dir, paste0(key, '.rds'))
+if (file.exists(checkpoint)) {
+  cat('Using saved sampling checkpoint; no new sampling\n')
+  new <- readRDS(checkpoint)
+} else {
+  new <- update(old, recompile=FALSE, chains=sim$chains, iter=sim$iter,
+                warmup=sim$warmup, thin=sim$thin, seed=123, cores=12, control=control)
+  saveRDS(new, paste0(checkpoint, '.tmp'))
+  if (!file.rename(paste0(checkpoint, '.tmp'), checkpoint)) stop('Cannot finalize checkpoint')
+}
+checks <- c(same_data=same_refit_data(old$data,new$data),
+            same_priors=identical(old$prior,new$prior),
+            same_stan_code=identical(brms::stancode(old),brms::stancode(new)))
+writeLines(c(capture.output(print(checks)),
+             'Full data comparison (including descriptive attributes):',
+             capture.output(print(all.equal(old$data,new$data,tolerance=0)))),
+           file.path(destination,paste0(key,'_identity_check.txt')))
+if (!all(checks)) stop('Model identity check failed; completed sampling checkpoint preserved. See identity_check.txt')
 saveRDS(new, new_path)
 CHECK_CONVERGENCE(new, key, results)
 settings_path <- file.path(source_dir, 'spline_results', paste0(key, '_analysis_settings.csv'))

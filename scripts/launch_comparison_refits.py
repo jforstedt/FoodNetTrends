@@ -34,7 +34,9 @@ def prepare(root,project):
     review+='mkdir -p '+q(str(dest/'refit_metadata'))+'\n'
     review+='cp '+q(str(dest))+'/spline_results/*_refit_settings.csv '+q(str(dest/'refit_metadata'))+'/ 2>/dev/null || true\n'
     review+='echo "Comparison review exit status: $status"\n'
-    review+='tar -czf '+q(str(dest)+'.tar.gz')+' -C '+q(str(dest))+' diagnostic_review comparisons refit_metadata '+'\n'
+    review+='shopt -s nullglob\n'
+    review+='cd '+q(str(dest))+'\n'
+    review+='tar -czf '+q(str(dest)+'.tar.gz')+' -C '+q(str(dest))+' diagnostic_review comparisons refit_metadata *_identity_check.txt foodnet_comparison.o* foodnet_comparison_review.o* '+'\n'
     review+='echo '+q('Report and comparisons: '+str(dest)+'.tar.gz')+'\nexit "$status"\n'
     (dest/'review.sh').write_text(review)
     return dest
