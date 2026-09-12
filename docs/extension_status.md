@@ -107,3 +107,55 @@ for boundary reconciliation. Every row retains unverified coverage and
 Local validation: geographic edge-case tests and a synthetic SAS-to-report test
 passed, including checksum verification that source inputs were unchanged.
 Real-data execution and adjudication of the candidate tables remain pending.
+
+## Crosswalk and Connecticut follow-up — 12 September
+
+The completed county-preparation archive was analyzed locally, without another
+HPC run. All 477 unique candidate state/county-name mappings have a single FIPS
+across the audited years and agree with historical direct-FIPS records. The
+crosswalk remains a geographic candidate table, not a surveillance eligibility
+list. The reproducible builder is `scripts/build_county_crosswalk.py`.
+
+Exception tuples partition into 195 Colorado expansion groups outside the
+historical analysis scope, 144 parasite groups lacking a 2025 population year,
+76 Connecticut groups needing historical-county populations, 27 early California
+parasite coverage groups, and seven unresolved blank/unknown/out-of-state groups.
+These are counts of geographic tuples, not case counts. No exclusion was applied.
+
+Connecticut DPH publishes historical-county population estimates that offer a
+possible way to retain the geographic units used in the cases:
+https://portal.ct.gov/dph/resources-and-records/data-research/vital-statistics-and-population-data/population-statistics
+
+Downloaded public sources:
+- CTDPH_2022-2025_CountyASRH_w_Methods.7z (DPH link): 2022 county data, 2023/2024
+  town data with historical county identifiers, 2025 county data, and a methodology
+  PDF specifically describing the 2022 estimates.
+- State_CtyCEPR_ASR6H_2020-2024.zip (DPH link): historical-county data for 2020/2021
+  at vintage 2021, and planning-region data for later years.
+
+`scripts/extract_ct_county_candidates.py` validates duplicate demographic keys,
+nonnegative finite values, the eight historical counties, expected row counts,
+and the disjoint ethnicity/race combinations in the 2023+ files. It extracts 48
+candidate county/year totals without changing pipeline denominators. Package
+SHA-256 checksums accompany the local artifact. The original full census files
+were not downloaded or edited; only the user's aggregate audit and public DPH
+packages were used.
+
+| Year | DPH candidate county sum | Existing SAS CT sum | Difference |
+|---|---:|---:|---:|
+| 2020 | 3,600,260 | 3,579,918 | +20,342 |
+| 2021 | 3,605,597 | 3,606,607 | -1,010 |
+| 2022 | 3,626,205 | 3,617,925 | +8,280 |
+| 2023 | 3,617,176 | 3,643,023 | -25,847 |
+| 2024 | 3,675,069 | 3,675,069 | 0 |
+| 2025 | 3,688,496 | 3,675,069 | +13,427 |
+
+These sources mix vintages; the methodology PDF covers 2022, and later CSV files
+must not be assumed to share its vintage. Equal county boundaries do not make
+these population series equivalent. Selection of a consistent series and coverage
+validation remain required before applying these candidates to county analysis.
+In particular, the current bacterial SAS file has the same CT total for 2024 and
+2025; that observation does not by itself establish its source or intent.
+
+Internal review artifacts are held locally under `.local/county_review_20260912`
+and are not committed as case-geography data to the repository.
