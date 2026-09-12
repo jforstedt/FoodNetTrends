@@ -3,7 +3,7 @@ same_refit_data <- function(before, after) {
   # brms::update rewrites the descriptive data_name attribute. It is not data.
   attr(before, "data_name") <- NULL
   attr(after, "data_name") <- NULL
-  identical(before, after)
+  isTRUE(all.equal(before, after, tolerance=0, check.attributes=TRUE))
 }
 args <- commandArgs(TRUE)
 stopifnot(length(args)==3L)
@@ -27,6 +27,7 @@ if (file.exists(checkpoint)) {
   cat('Using saved sampling checkpoint; no new sampling\n')
   new <- readRDS(checkpoint)
 } else {
+  if (identical(Sys.getenv("FOODNET_CHECKPOINT_ONLY"), "1")) stop("Required checkpoint missing; sampling is disabled")
   new <- update(old, recompile=FALSE, chains=sim$chains, iter=sim$iter,
                 warmup=sim$warmup, thin=sim$thin, seed=123, cores=12, control=control)
   saveRDS(new, paste0(checkpoint, '.tmp'))

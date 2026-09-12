@@ -5,6 +5,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
+from unittest.mock import patch
 root=Path(__file__).resolve().parent.parent
 spec=importlib.util.spec_from_file_location('comparison',str(root/'scripts/launch_comparison_refits.py'))
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
@@ -25,6 +27,16 @@ with tempfile.TemporaryDirectory() as d:
     assert all(key in text for key in m.KEYS)
     assert 'SGE_TASK_ID' in text
     assert 'diagnostic_review' in (dest/'review.sh').read_text()
+    (dest/'checkpoints').mkdir()
+    for key in m.KEYS:(dest/'checkpoints'/(key+'.rds')).write_text('checkpoint')
+    (r/'foodnet.sif').write_text('fixture')
+    with patch.object(m,'__file__',str(r/'scripts/launch_comparison_refits.py')), patch.object(sys,'argv',['launch','fixture','--prepare-only','--from-checkpoints',str(dest)]), patch.object(m.shutil,'which',return_value='/fixture/tool'):
+        m.main()
+    recovered=[d for d in (r/'output/fixture').glob('comparison_refits_*') if d!=dest][0]
+    assert 'export FOODNET_CHECKPOINT_ONLY=1' in (recovered/'fit.sh').read_text()
+    for key in m.KEYS:
+        assert (recovered/'checkpoints'/(key+'.rds')).read_text()=='checkpoint'
+    assert 'sampling is disabled' in (recovered/'refit_saved_feature.R').read_text()
     (source/(m.KEYS[0]+'_brm.Rds')).unlink()
     try:m.prepare(r,'fixture');raise AssertionError('Missing fit accepted')
     except ValueError:pass

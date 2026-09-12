@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Submit six independent saved-fit comparisons and a dependent review to SGE."""
 import argparse
+import os
 from datetime import datetime
 from pathlib import Path
 import re
@@ -42,13 +43,29 @@ def prepare(root,project):
     return dest
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('project');p.add_argument('--prepare-only',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('project');p.add_argument('--prepare-only',action='store_true');p.add_argument('--from-checkpoints');a=p.parse_args()
     root=Path(__file__).resolve().parent.parent
     for tool in ['singularity','qsub']:
         if not shutil.which(tool): p.error('Missing '+tool+'; load the cluster modules first')
     if not (root/'foodnet.sif').is_file():p.error('foodnet.sif is missing')
+    checkpoint_source=None
+    if a.from_checkpoints:
+        checkpoint_source=Path(a.from_checkpoints).resolve()
+        if checkpoint_source.parent != (root/'output'/a.project).resolve():
+            p.error('Checkpoint directory must belong to this project')
+        for key in KEYS:
+            f=checkpoint_source/'checkpoints'/(key+'.rds')
+            if not f.is_file() or not f.stat().st_size:p.error('Missing checkpoint: '+str(f))
     try: dest=prepare(root,a.project)
     except ValueError as e:p.error(str(e))
+    if checkpoint_source:
+        (dest/'checkpoints').mkdir()
+        for key in KEYS:
+            # Same filesystem: link immutable checkpoints without duplicating large fits.
+            os.link(str(checkpoint_source/'checkpoints'/(key+'.rds')),str(dest/'checkpoints'/(key+'.rds')))
+        script=dest/'fit.sh'
+        script.write_text(script.read_text().replace('set -euo pipefail', 'set -euo pipefail\nexport FOODNET_CHECKPOINT_ONLY=1'))
+        print('Checkpoint recovery: sampling is DISABLED; only validation and comparisons will run.',flush=True)
     print('Separate comparison directory: '+str(dest),flush=True)
     if a.prepare_only:return
     def submit(extra,script):

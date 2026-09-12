@@ -13,3 +13,12 @@ b <- a;attr(b,'unrecognized_metadata') <- TRUE;stopifnot(!same_refit_data(a,b))
 text <- readLines('scripts/refit_saved_feature.R')
 stopifnot(grep('saveRDS(new, paste0',text,fixed=TRUE)<grep('checks <-',text,fixed=TRUE))
 cat('PASS data-name metadata accepted; changed values, row order and other attributes rejected; checkpoint precedes validation\n')
+
+b <- a;b$population[1] <- b$population[1]+1e-10
+stopifnot(!same_refit_data(a,b))
+# Formula environments may differ in identity while containing equivalent metadata.
+b <- a
+attr(a,'terms_fixture') <- as.formula('~year',env=new.env(parent=baseenv()))
+attr(b,'terms_fixture') <- as.formula('~year',env=new.env(parent=baseenv()))
+stopifnot(!identical(a,b),same_refit_data(a,b))
+cat('PASS zero tolerance rejects small numeric changes and accepts equivalent formula environments\n')
