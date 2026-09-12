@@ -265,7 +265,8 @@ choices remain unchanged. This is validation, not a final FoodNet analysis speci
 The launcher directly reuses the completed `preprocessed/clean_mmwr.csv`; it does
 not depend on Nextflow cache reuse to avoid preprocessing. Each invocation gets
 a new `feature_validation_<timestamp>` project ID and never overwrites the source
-run. At most three model tasks execute concurrently. Model selectors retain the
+run. SGE and the existing executor settings manage concurrency; the launcher no
+longer adds a three-task limit. Model selectors retain the
 12-CPU, 52-GB, 48-hour initial allocation; the temporary CPU-only resume override
 is not loaded.
 
@@ -280,3 +281,13 @@ lookups timed out on the cluster. Keep the launch terminal open until completion
 The serotype and typhoidal group sets overlap intentionally; do not add counts
 across the two sets. Rare groups may need further convergence review. A successful
 Nextflow exit alone does not clear sampler warnings.
+
+
+For recovery from a fresh login shell, `scripts/recover_feature_run.sh PROJECT_ID SESSION_UUID`
+loads missing Nextflow, Singularity and Java modules, verifies the original
+Nextflow version from the saved log, then detaches recovery with `nohup setsid`
+and disables ANSI terminal output. It resumes the existing saved plan, including
+its original concurrency settings, and collects a new diagnostic report after
+Nextflow exits. It does not create a new project. An active recovery lock prevents
+duplicate launches through this helper. Do not start it while another copy of
+that session is running or suspended; continue the existing process instead.

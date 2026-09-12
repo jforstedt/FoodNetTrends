@@ -45,7 +45,8 @@ with tempfile.TemporaryDirectory(prefix='foodnet-feature-launch-') as directory:
         assert params['chains']==6 and params['iterations']==10001 and params['baseline_year']==2019
         assert manifest['species_records_before_filters']==1 # no row-wise source fallback
         assert Path(params['classification_rules']).read_bytes()==(temp/'analysis_configs/classification_rules.csv').read_bytes()
-        assert 'maxForks = 3' in (plan/'execution.config').read_text()
+        assert 'maxForks' not in (plan/'execution.config').read_text()
+        assert manifest['maximum_simultaneous_models'] is None
         assert '-resume' not in manifest['command']
     assert sum((plan/'run_diagnostics.txt').exists() for plan in plans)==1
     assert clean.read_bytes()==before

@@ -56,7 +56,7 @@ def prepare(args):
                   stan_backend='rstan',matching_sensitivity='MEDIUM',skip_dashboard=False)
     (plan/'params.json').write_text(json.dumps(params,indent=2)+'\n')
     config = plan/'execution.config'
-    config.write_text("process { withName: 'FOODNETTRENDS:TRENDY' { maxForks = 3 } }\n")
+    config.write_text("// Concurrency is managed by the existing executor and SGE queue.\n")
     command = ['nextflow','-log',str(plan/'nextflow.log'),'run',str(root/'main.nf'),
                '-profile','singularity','-c',str(config),'-params-file',str(plan/'params.json')]
     version = subprocess.run(['git','rev-parse','HEAD'],cwd=str(root),stdout=subprocess.PIPE,
@@ -64,7 +64,7 @@ def prepare(args):
     summary = dict(source_project=args.source_project,project_id=project,git_revision=version.stdout.strip(),
                    baseline='2019 (validation example, not a final FoodNet specification)',
                    species=species,species_pathogen=args.species_pathogen,species_source=field,species_records_before_filters=counts[species],
-                   groups=groups,maximum_simultaneous_models=3,
+                   groups=groups,maximum_simultaneous_models=None,
                    note='Serotype groups and typhoidal categories overlap intentionally; do not sum across both partitions.',
                    command=command)
     (plan/'manifest.json').write_text(json.dumps(summary,indent=2)+'\n')
@@ -91,7 +91,7 @@ def main():
     except (OSError,ValueError) as error:
         parser.error(str(error))
     print('New project: '+project,flush=True)
-    print('14 real model fits; baseline 2019; at most three models concurrently.',flush=True)
+    print('14 real model fits; baseline 2019; concurrency managed by SGE.',flush=True)
     print('Species: {} ({} records before model filters)'.format(summary['species_pathogen']+' / '+summary['species'],summary['species_records_before_filters']),flush=True)
     print('Existing cleaned data reused directly; preprocessing will not run.',flush=True)
     print('Plan and Nextflow log: '+str(plan),flush=True)
