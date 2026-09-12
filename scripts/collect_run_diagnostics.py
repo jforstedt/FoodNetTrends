@@ -7,6 +7,7 @@ import getpass
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 
 
@@ -71,6 +72,7 @@ def main():
             lines = content.splitlines()
             selected = [line for line in lines if re.search(r'Launcher|Session UUID|Run name|Work-dir|submitted process|Submitted process|Re-submitted|Cached process|Task completed|Allocated CPUs|ERROR|WARN|exit status|Execution complete', line)]
             section(str(log) + ' selected events', '\n'.join(selected))
+            section(str(log) + ' last 40 lines', '\n'.join(lines[-40:]))
             for line in lines:
                 for job in re.findall(r'jobId[:=]\s*(\d+)', line):
                     jobs.add(job)
@@ -99,6 +101,20 @@ def main():
             for pattern in ('*convergence_diagnostics.csv', '*analysis_settings.csv', '*input_exclusions.csv', '*_error.txt'):
                 for file in sorted(root.rglob(pattern)):
                     section(str(file), read(file))
+        if shutil.which('qstat'):
+            status = command(['qstat', '-u', getpass.getuser()])
+            relevant = [line for line in status.splitlines()
+                        if not line.strip() or not line.split()[0].isdigit()
+                        or line.split()[0] in jobs]
+            section('Live SGE jobs for collected job IDs', '\n'.join(relevant))
+        else:
+            section('Live SGE jobs', 'qstat unavailable on this host.')
+        processes = command(['ps', '-u', getpass.getuser(), '-o', 'pid,ppid,etime,args'])
+        relevant = [line for line in processes.splitlines()
+                    if re.search(r'nextflow|run_feature_models[.]py', line, re.I)]
+        section('Nextflow-related processes on ' + socket.gethostname(),
+                '\n'.join(relevant) or 'No matching process observed. This does not check other login hosts.\n' +
+                '\n'.join(processes.splitlines()[:2]))
         for task in sorted(tasks):
             if not task.is_dir():
                 section('Task unavailable', str(task))
