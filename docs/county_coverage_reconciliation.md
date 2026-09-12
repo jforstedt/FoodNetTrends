@@ -1,5 +1,9 @@
 # County denominator and coverage reconciliation — 12 September 2026
 
+Follow-up: [primary-source research](county_coverage_research.md) resolves Fairfield's
+1997 bacterial entry and identifies an additional Oregon partial-year parasite
+issue. The table below preserves the questions as they stood before that research.
+
 This review prepares the county/R-INLA extension. It does not change Daniel's
 state-level model, existing denominators, fitted results, or dashboard.
 
@@ -78,8 +82,10 @@ Primary coverage sources:
 - [1997 surveillance MMWR](https://www.cdc.gov/mmwr/preview/mmwrhtml/00054940.htm)
 
 This is an evidence review, not a completed county-by-year eligibility ledger.
-The specific missing input is an authoritative county/pathogen coverage history,
-including start/end dates and the treatment of partial years for early CT and CA.
+The remaining missing input is the California parasite county/pathogen coverage
+history, including start/end dates, plus partial-year case/exposure conventions
+for California and Oregon. Connecticut's geographic entry sequence is now resolved
+in the linked follow-up; pathogen-specific start dates remain separate.
 Do not infer that history from case presence, census EntryYear, or a missing row.
 
 ## R-INLA status

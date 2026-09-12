@@ -13,7 +13,7 @@ run from that broader program.
 | CIDT filtering | Yes | Included-case selection; not an adjusted counterfactual model |
 | Proposed CIDT-adjusted stratification and counterfactual estimates | No | Requires a specified model, assumptions, implementation and validation |
 | Nowcasting | No | Requires reporting-delay data assessment and backtesting before interpreting estimates |
-| County-level R-INLA spatial/temporal models | No | Input reconnaissance partially complete; geographic reconciliation and surveillance coverage remain unresolved |
+| County-level R-INLA spatial/temporal models | Synthetic prototype only | Actual local INLA smoke fit passed; dedicated SIF and SGE execution pending; real county inputs/model remain unvalidated |
 | County maps, spatial dashboard and county-to-state comparisons | No | Depend on validated geographic inputs and county model outputs |
 
 ## Current state-level validation
@@ -35,7 +35,7 @@ historical pipeline versions or a complete assessment of model adequacy.
 The consolidation helper creates a separate final_dashboard directory containing
 eight original fits and six validated refits, regenerates affected plots and
 summaries, and writes a source manifest. Original outputs remain preserved.
-Cluster execution of this helper is pending. No additional sampling is needed.
+Cluster finalization completed on 12 September in final_dashboard_20260912_173916_851341. The downloaded dashboard was checked: all 14 analyses were present, all six replacement comparison outputs matched, and the 2019 reference rows were correct. No additional sampling was needed.
 
 ## Spatial input reconnaissance already completed
 
@@ -172,3 +172,16 @@ not applied to existing fits. See [coverage reconciliation](county_coverage_reco
 for the updated totals, source links, reproducible command, and unresolved early
 Connecticut/California coverage evidence. Real-data county eligibility and R-INLA
 model validation remain incomplete.
+
+## Parallel coverage research and INLA build
+
+Public DPH/CDC sources now resolve Fairfield bacterial entry in 1997. California's
+broader early parasite catchment is documented, but its full county/date history
+remains incomplete; Oregon's July 1997 parasite start adds a partial-year condition.
+See [research findings](county_coverage_research.md).
+
+The separate INLA smoke prototype passed actual local executable, analytic offset,
+and disconnected/isolated spatial graph checks. The dedicated container builder
+and SGE launcher are implemented and tested with stubs, but the SIF itself still
+requires a Singularity build/test. See [validation evidence](inla_smoke_validation.md).
+All work is isolated on `feature/rinla-county`; no real county fits were run.

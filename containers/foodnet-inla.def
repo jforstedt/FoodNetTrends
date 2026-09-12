@@ -1,0 +1,46 @@
+Bootstrap: docker
+From: rocker/r-ver@sha256:62a0fbe9896e02bf19b408a39518da1fa1bca0d6fb85b4076c8d0fd33e588123
+
+%labels
+    Description "Isolated synthetic county R-INLA test; not the FoodNet production model"
+    RVersion "4.5.2"
+    INLAVersion "26.08.07"
+    BaseTag "rocker/r-ver:4.5.2 (linux/amd64 digest pinned)"
+
+%files
+    scripts/inla_smoke.R /opt/foodnet-inla/inla_smoke.R
+
+%post
+    set -eu
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        build-essential gfortran cmake pkg-config curl ca-certificates \
+        libcurl4-openssl-dev libssl-dev libxml2-dev \
+        libgdal-dev libgeos-dev libproj-dev libudunits2-dev \
+        libgsl-dev libglpk-dev libgomp1 libnuma1
+    rm -rf /var/lib/apt/lists/*
+    export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=2
+    Rscript --vanilla -e 'options(repos=c(CRAN="https://cloud.r-project.org")); pkgs <- c("fmesher", "MatrixModels", "lifecycle", "rlang", "withr", "sf"); install.packages(pkgs, Ncpus=2); stopifnot(all(vapply(pkgs, requireNamespace, logical(1), quietly=TRUE)), packageVersion("fmesher") >= "0.5.0")'
+    curl --fail --location --retry 3 \
+        https://inla.r-inla-download.org/R/stable/src/contrib/INLA_26.08.07.tar.gz \
+        --output /tmp/foodnet-INLA.tar.gz
+    echo '9c0d94962b2be7e192ba8b5b9f7caa0be40574f79a0c18f8d861755dc55c5425  /tmp/foodnet-INLA.tar.gz' | sha256sum --check --strict
+    R CMD INSTALL /tmp/foodnet-INLA.tar.gz
+    rm /tmp/foodnet-INLA.tar.gz
+    Rscript --vanilla -e 'library(INLA); stopifnot(packageVersion("INLA") == package_version("26.08.07"), as.character(getRversion()) == "4.5.2"); write.csv(as.data.frame(installed.packages()[,c("Package","Version","Built")]), "/opt/foodnet-inla/installed_packages.csv", row.names=FALSE); capture.output(sessionInfo(), file="/opt/foodnet-inla/build_session.txt")'
+    chmod -R a+rX /opt/foodnet-inla
+
+%environment
+    export OPENBLAS_NUM_THREADS=1
+    export OMP_NUM_THREADS=2
+    export R_LIBS_USER=/opt/foodnet-inla/no-user-library
+
+%test
+    set -eu
+    smoke_dir=$(mktemp -d /tmp/foodnet-inla-build-test.XXXXXX)
+    trap 'rm -rf "$smoke_dir"' EXIT
+    Rscript --vanilla /opt/foodnet-inla/inla_smoke.R "$smoke_dir" 2
+
+%runscript
+    exec "$@"
