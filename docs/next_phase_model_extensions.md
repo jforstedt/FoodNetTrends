@@ -3,8 +3,9 @@
 Status: county forecast numerical screening and matched retrospective comparisons
 authorized on 13 September, after acceptance of the seven state corrections.
 See county_forecast_validation_protocol.md for the executable first batch.
-Diagnostic-method, seasonal and pathogen-prior extensions remain planned; they
-are not included in this forecast batch.
+The parallel extension input audit has completed. The user approved the next-phase
+comparison plan on 13 September. Model extensions remain separate from the current
+forecast batch; their implementation must preserve the gates below.
 
 ## Purpose and scope
 
@@ -58,10 +59,10 @@ accuracy. Set tolerances using simulation uncertainty before real comparisons.
 
 ## Planned county spline comparator
 
-Requested for a later comparison on 13 September: evaluate a county extension
+Approved for the next phase on 13 September: evaluate a county extension
 that retains the published temporal spline approach alongside the exploratory
-RW1 county model. This is a planned candidate, not an authorized immediate refit
-or a replacement for the accepted state results.
+RW1 county model. This is an approved candidate-development plan, not a replacement for accepted
+state results or an automatic launch of unvalidated full-scale fits.
 
 The paper already compared county-year and site-level versions, reporting similar
 catchment estimates with over an order of magnitude greater computation for the
@@ -79,6 +80,48 @@ compare spatial sharing within each temporal structure. Validate extrapolation,
 joint predictive uncertainty, and state-level aggregation as well as historical
 fit. Do not combine diagnostic-method, seasonal, and prior changes in the first
 comparison; their data audits can proceed independently.
+
+## Approved priorities and input-audit findings
+
+1. Start the county spline/RW1 comparison with Salmonella and Campylobacter,
+   retaining matched eligibility, counts, exposures and forecast targets. Audit the
+   paper's county specification before implementing shared splines with county
+   departures. Preserve the accepted state spline as a separate reference.
+2. Develop the monthly-data specification in parallel. The raw inventory contains
+   specimen collection, symptom onset, laboratory receipt, site entry and report
+   completion dates, plus a month field. Confirm date definitions, imputation and
+   month consistency; do not substitute administrative dates for onset or infer
+   a complete observation calendar from case presence. Use eligible person-time.
+3. Develop diagnostic-method specifications in parallel. The raw inventory contains
+   culture/PCR/antigen results, assay-name fields and laboratory names beyond cxcidt.
+   Confirm codes, repeated-test semantics, laboratory-name consistency and suitable
+   linkage before model adjustment. The initial narrow case/record-ID heuristic
+   did not evaluate all patient/specimen/result identifiers present in the full
+   inventory; absence of a confirmed key is not absence of identifier fields.
+4. Use pathogen-specific sparsity to design pooling and prior-predictive checks,
+   without selecting priors from evaluation outcomes. Keep zero-inflated/hurdle
+   models conditional on evidence beyond observed zero frequency. The raw census
+   inventory must not replace validated eligible denominators.
+5. Request the MMWR data dictionary and any date-imputation, laboratory testing or
+   monthly observation documentation needed to resolve the preceding points.
+   NHSN remains a possible separate complementary source; no counts are pooled.
+
+The current annual county recovery passed the complete 80-task numerical screen
+and both numerical prerequisites, but one real-data candidate crashed in INLA.
+Execution recovery and review remain separate from scientific acceptance. The
+completed Cyclospora forecasts also showed aggregate predictive failures across
+the inspected origins; resolving the process crash alone would not validate them.
+Some cell tail-density estimates have substantial Monte Carlo uncertainty. Complete
+candidate results and numerical sampling uncertainty must be reviewed before
+promoting county forecasts or claiming a benefit from spatial sharing.
+
+The existing historical-rate reference uses a Poisson/Gamma formulation, whereas
+county candidates use negative-binomial observation models. Gains over that
+reference do not isolate the benefit of time structure, geography or computation.
+Include a matched-dispersion reference where appropriate when defining the next
+controlled comparison. Keep exploratory score differences distinct from evidence
+of significance, especially for overlapping forecast origins and noisy tail
+probability estimates. Preserve failed candidates in the evaluation ledger.
 
 ## Parallel workstreams
 
