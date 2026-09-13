@@ -314,3 +314,11 @@ event-date and testing-field meanings using the 2016/2020/2024 variable lists.
 It narrows the remaining requirements to extract derivations, date handling,
 identifier relationships and monthly observation coverage. Public schema matches
 are not authorization to recode the current extract or replace accepted results.
+
+The [combined-extension protocol](extension_combination_protocol.md) specifies a
+matched four-candidate trend/seasonality matrix and a conditional eight-candidate
+matrix if independent testing information supports prospective use. It preserves
+weak standalone candidates for combination testing, forbids held-out diagnostic
+mix leakage, and separates exploratory reused origins from confirmatory evidence.
+Exact numerical priors and practical margins remain explicit pre-launch freeze
+points; no new HPC work is authorized by a readiness label alone.
