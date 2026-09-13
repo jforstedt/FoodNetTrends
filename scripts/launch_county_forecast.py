@@ -15,7 +15,7 @@ def prepare(root,audit,container,dest):
     for path in (root,audit,container,dest):
         if any(c in str(path) for c in ('\n','\r',':',',')):raise ValueError('Unsupported path character')
     dest.mkdir(parents=True,exist_ok=False);hashes={}
-    for name in ('county_forecast_check.R','county_sensitivity.R','fit_county_pilot.R','diagnose_saved_county_pilot.R','collect_county_forecast.py'):
+    for name in ('county_forecast_check.R','county_forecast_model.R','county_sensitivity.R','fit_county_pilot.R','diagnose_saved_county_pilot.R','collect_county_forecast.py'):
         source=root/'scripts'/name;shutil.copyfile(str(source),str(dest/name));hashes[name]=hashlib.sha256(source.read_bytes()).hexdigest()
     manifest=dict(audit=str(audit),container=str(container),models=NAMES,train_years=[2004,2016],test_years=[2017,2019],
         cpus_per_fit=8,posterior_draws=4000,forecast_origin=2016,updating_with_test_outcomes=False,

@@ -1,5 +1,10 @@
 # Retrospective county forecast check
 
+Implementation update (13 September): new runs use training-origin temporal scaling
+and centering through county_forecast_model.R. The original fixed-domain experiment
+described below remains a historical record, not the current forecast prior. Use
+county_forecast_validation_run.md for the new gated multi-origin batch.
+
 Run on Rosalind:
 
 ```bash
@@ -14,7 +19,7 @@ All models train on the audited Salmonella data for 2004–2016 and predict 2017
 
 The four specifications keep the original county SD bound at 1. Priors and hyperparameters are not initialized from full-data estimates. The two temporal variants add the same county RW1 component tested in the preceding experiment. Population offsets, the fixed graph, state effects and pathogen selections remain as documented for the county pilot. This does not extend validation to another pathogen, change Daniel's model or publish county dashboard estimates.
 
-Future census populations are treated as known, and the fixed 2004–2019 latent time domain/scaling is retained for every candidate. The test therefore conditions on known denominators and geography; it is not a test of forecasting population or future surveillance coverage. The historical full panel is validated for integrity, but later outcomes do not enter the fit likelihood.
+Future census populations are treated as known. New forecast fits define temporal prior scaling and centering on the training years only, then extend each RW1 into future years without including those years in its centering constraint. The earlier saved experiments used full-domain scaling/centering; their fits and reports are retained unchanged. See [the origin-specific prior specification](county_forecast_origin_prior.md) for this change to the county forecast model. The test conditions on known denominators and geography; it is not a test of forecasting population or future surveillance coverage. The historical full panel is validated for integrity before an optional explicit horizon restricts fitting and scoring, and later outcomes do not enter the likelihood.
 
 This is **retrospective**, not an untouched validation set: these years already informed the earlier model investigation and the choice of candidates. It is one forecast origin with three horizons, not rolling-origin validation or geographic holdout. The distinction between future prediction and same-data leave-one-out comparisons follows the [loo leave-future-out guidance](https://mc-stan.org/loo/articles/loo2-lfo.html).
 

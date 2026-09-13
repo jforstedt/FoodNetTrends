@@ -12,7 +12,7 @@ import subprocess
 PATHOGENS=('CAMPYLOBACTER','CRYPTOSPORIDIUM','CYCLOSPORA','LISTERIA','SHIGELLA','STEC','VIBRIO','YERSINIA')
 MODELS=('spatial_county_time','iid_county_time')
 SOURCES=('review_county_pathogen.R','fit_county_pilot.R','diagnose_saved_county_pilot.R',
-         'county_sensitivity.R','county_forecast_check.R','collect_county_pathogen_review.py')
+         'county_sensitivity.R','county_forecast_check.R','county_forecast_model.R','collect_county_pathogen_review.py')
 
 def prepare(root,original,audit,dest):
     dest.mkdir(parents=True,exist_ok=False)

@@ -1,7 +1,10 @@
 # Next phase: diagnostic methods, seasonality, and pathogen-specific models
 
-Status: planned, not implemented or authorized for immediate cluster execution.
-Start after the current surveillance corrections and targeted refits are reviewed.
+Status: county forecast numerical screening and matched retrospective comparisons
+authorized on 13 September, after acceptance of the seven state corrections.
+See county_forecast_validation_protocol.md for the executable first batch.
+Diagnostic-method, seasonal and pathogen-prior extensions remain planned; they
+are not included in this forecast batch.
 
 ## Purpose and scope
 

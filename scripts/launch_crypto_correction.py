@@ -13,7 +13,7 @@ NAMES=('full_spatial','full_iid','forecast_spatial','forecast_iid')
 def prepare(root,dest,state_run):
     dest.mkdir(parents=True,exist_ok=False)
     sources=('correct_crypto_coverage.R','county_matching.R','audit_county_pilot.R','reconcile_raw_county.R',
-        'fit_county_pilot.R','diagnose_saved_county_pilot.R','county_sensitivity.R','county_forecast_check.R',
+        'fit_county_pilot.R','diagnose_saved_county_pilot.R','county_sensitivity.R','county_forecast_check.R','county_forecast_model.R',
         'audit_crypto_state_outputs.py','collect_county_pathogen_review.py')
     for n in sources:shutil.copyfile(str(root/'scripts'/n),str(dest/n))
     shutil.copytree(str(root/'analysis_configs/county_pilot'),str(dest/'geography'))

@@ -71,7 +71,7 @@ def collect(dest):
         for name in NAMES:
             for f in (dest/name/'reports',dest/(name+'.log')):
                 if f.exists():archive.add(str(f),arcname=str(f.relative_to(dest)))
-        for name in ('summary.json','manifest.json','forecast_overview.csv','paired_forecast_comparison_INTERNAL.csv','county_forecast_check.R','county_sensitivity.R','fit_county_pilot.R','diagnose_saved_county_pilot.R','collect_county_forecast.py','fit.sh','collect.sh'):
+        for name in ('summary.json','manifest.json','forecast_overview.csv','paired_forecast_comparison_INTERNAL.csv','county_forecast_check.R','county_forecast_model.R','county_sensitivity.R','fit_county_pilot.R','diagnose_saved_county_pilot.R','collect_county_forecast.py','fit.sh','collect.sh'):
             f=dest/name
             if f.exists():archive.add(str(f),arcname=name)
     print((dest/'summary.json').read_text());print('Archive: '+str(dest)+'.tar.gz')

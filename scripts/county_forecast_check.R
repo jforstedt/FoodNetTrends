@@ -1,8 +1,24 @@
 #!/usr/bin/env Rscript
 # Retrospective time-block forecast evaluation; never train on held-out counts.
+.forecast_source<-tryCatch(sys.frame(1)$ofile,error=function(e)NULL)
+if (is.null(.forecast_source)) .forecast_source<-sub('^--file=','',grep('^--file=',commandArgs(),value=TRUE)[1])
+.forecast_helper<-file.path(dirname(.forecast_source),'county_forecast_model.R')
+if (!file.exists(.forecast_helper)) .forecast_helper<-file.path('scripts','county_forecast_model.R')
+if (!file.exists(.forecast_helper)) stop('Missing snapshotted county_forecast_model.R')
+source(.forecast_helper)
+rm(.forecast_source,.forecast_helper)
 training_panel <- function(d,cutoff) {
   if(length(cutoff)!=1||!is.finite(cutoff)||!any(d$year>cutoff)||length(unique(d$year[d$year<=cutoff]))<3)stop('Invalid training cutoff')
   d$count[d$year>cutoff]<-NA_real_;d
+}
+restrict_forecast_horizon <- function(obj,cutoff,horizon=NULL) {
+  if (is.null(horizon)) return(obj)
+  if (length(cutoff)!=1L || !is.finite(cutoff) || cutoff!=floor(cutoff) ||
+      length(horizon)!=1L || !is.finite(horizon) || horizon<1L || horizon!=floor(horizon) ||
+      cutoff+horizon>max(obj$data$year)) stop('Requested forecast horizon is invalid or exceeds audited observations')
+  obj$data<-obj$data[obj$data$year<=cutoff+horizon,,drop=FALSE]
+  rownames(obj$data)<-NULL;obj$years<-sort(unique(obj$data$year));obj$data$time<-match(obj$data$year,obj$years)
+  obj
 }
 forecast_groups <- function(d,heldout,cutoff) {
   groups<-zero_groups(d[heldout,])
@@ -19,25 +35,16 @@ forecast_diagnostics <- function(fit,d,out,cutoff=2016L,draws=4000L) {
   heldout<-which(d$year>cutoff);truth<-d$count[heldout];n<-length(heldout)
   if(n==0||anyNA(truth)||draws<100L)stop('Invalid evaluation inputs')
   groups<-forecast_groups(d,heldout,cutoff)
-  mu<-replicated<-log_density<-pzero<-lower_cdf<-upper_cdf<-matrix(NA_real_,n,draws)
-  for(start in seq.int(1L,draws,by=100L)) {
-    jj<-start:min(start+99L,draws)
-    samples<-INLA::inla.posterior.sample(length(jj),fit,selection=list(Predictor=heldout),
-      seed=as.integer(20260916L+start),num.threads='1:1',skew.corr=FALSE)
-    set.seed(20270916L+start)
-    for(k in seq_along(samples)) {
-      s<-samples[[k]];ids<-as.integer(sub('^Predictor:','',rownames(s$latent)))
-      if(anyNA(ids)||length(ids)!=n||anyDuplicated(ids)||!setequal(ids,heldout))stop('Unexpected forecast indexing')
-      m<-exp(as.numeric(s$latent[match(heldout,ids),1]));ix<-grep('size for',names(s$hyperpar),fixed=TRUE)
-      if(length(ix)!=1)stop('Missing NB size')
-      size<-as.numeric(s$hyperpar[ix]);if(any(!is.finite(m))||!is.finite(size)||size<=0)stop('Invalid forecast parameters')
-      j<-jj[k];mu[,j]<-m;replicated[,j]<-rnbinom(n,mu=m,size=size)
-      log_density[,j]<-dnbinom(truth,mu=m,size=size,log=TRUE)
-      pzero[,j]<-exp(-size*log1p(m/size))
-      lower_cdf[,j]<-pnbinom(truth-1,mu=m,size=size);upper_cdf[,j]<-pnbinom(truth,mu=m,size=size)
-    }
-    cat('Forecast draws:',max(jj),'of',draws,'\n')
+  sampled<-sample_county_forecast(fit,heldout,draws=draws)
+  mu<-sampled$mu;replicated<-sampled$replicated
+  log_density<-pzero<-lower_cdf<-upper_cdf<-matrix(NA_real_,n,draws)
+  for(j in seq_len(draws)) {
+    m<-mu[,j];size<-sampled$size[j]
+    log_density[,j]<-dnbinom(truth,mu=m,size=size,log=TRUE)
+    pzero[,j]<-exp(-size*log1p(m/size))
+    lower_cdf[,j]<-pnbinom(truth-1,mu=m,size=size);upper_cdf[,j]<-pnbinom(truth,mu=m,size=size)
   }
+  cat('Forecast draws:',draws,'of',draws,'\n')
   if(any(!is.finite(replicated))||any(!is.finite(pzero)))stop('Invalid predictive draws')
   q<-t(apply(replicated,1,quantile,probs=c(.025,.25,.5,.75,.975),names=FALSE))
   lp<-apply(log_density,1,log_average);if(any(!is.finite(lp)))stop('Nonfinite predictive log scores')
@@ -82,7 +89,7 @@ forecast_diagnostics <- function(fit,d,out,cutoff=2016L,draws=4000L) {
   invisible(cell)
 }
 
-run_forecast <- function(audit,dest,name,threads=8L,draws=4000L,cutoff=2016L,expected_production=TRUE) {
+run_forecast <- function(audit,dest,name,threads=8L,draws=4000L,cutoff=2016L,expected_production=TRUE,horizon=NULL) {
   if(!name%in%c('spatial_baseline','iid_baseline','spatial_county_time','iid_county_time'))stop('Invalid model')
   if(dir.exists(dest))stop('Existing destination; refusing overwrite')
   out<-file.path(dest,'reports');dir.create(out,recursive=TRUE);writeLines('RUNNING',file.path(out,'status.txt'))
@@ -91,23 +98,33 @@ run_forecast <- function(audit,dest,name,threads=8L,draws=4000L,cutoff=2016L,exp
     if(packageVersion('INLA')!=package_version('26.08.07'))stop('Expected pinned INLA')
     INLA::inla.setOption(num.threads=paste0(threads,':1'))
     panel<-file.path(audit,'county_panel_INTERNAL.rds');before<-tools::md5sum(panel)
-    obj<-validate_panel(audit,expected_production=expected_production);training<-obj;training$data<-training_panel(obj$data,cutoff)
+    obj<-validate_panel(audit,expected_production=expected_production)
+    source_end<-max(obj$data$year)
+    obj<-restrict_forecast_horizon(obj,cutoff,horizon)
+    training<-obj;training$data<-training_panel(obj$data,cutoff)
     heldout<-obj$data$year>cutoff
     stopifnot(all(is.na(training$data$count[heldout])),identical(training$data$count[!heldout],as.numeric(obj$data$count[!heldout])))
     variant<-if(startsWith(name,'spatial'))'spatial' else 'iid';time<-endsWith(name,'county_time')
     write.csv(data.frame(model=name,train_start=min(obj$data$year),train_end=cutoff,test_start=cutoff+1,test_end=max(obj$data$year),
-      training_cells=sum(!heldout),heldout_cells=sum(heldout),draws=draws,heldout_counts_masked=TRUE),file.path(out,'split.csv'),row.names=FALSE)
+      training_cells=sum(!heldout),heldout_cells=sum(heldout),draws=draws,heldout_counts_masked=TRUE,
+      evaluation_horizon=max(obj$data$year)-cutoff,audited_source_end=source_end),file.path(out,'split.csv'),row.names=FALSE)
     # No full-data fits or tuned hyperparameter estimates are supplied to this call.
-    fit<-sensitivity_fit(training,variant,county_sd=1,county_time=time,threads=threads,predictor_link=1)
+    fit<-fit_county_forecast(training,variant,cutoff,county_time=time,threads=threads)
     saveRDS(fit,file.path(dest,'fit_INTERNAL.rds'))
     write.csv(fit$summary.hyperpar,file.path(out,'hyperparameters.csv'));write.csv(fit$summary.fixed,file.path(out,'fixed_effects.csv'))
     writeLines(attr(fit,'sensitivity_formula'),file.path(out,'formula.txt'))
+    spec<-attr(fit,'forecast_specification')
+    write.csv(as.data.frame(spec[!names(spec)%in%'constraint']),file.path(out,'forecast_specification.csv'),row.names=FALSE)
+    write.csv(data.frame(year=sort(unique(obj$data$year)),centering_weight=as.numeric(spec$constraint$A)),
+      file.path(out,'temporal_constraint.csv'),row.names=FALSE)
     forecast_diagnostics(fit,obj$data,out,cutoff,draws)
     if(!identical(before,tools::md5sum(panel)))stop('Panel changed')
     write.csv(data.frame(file=panel,md5=unname(before)),file.path(out,'panel_checksum.csv'),row.names=FALSE)
     writeLines(c('FORECAST_CHECK_COMPLETE','Training outcomes stop at cutoff; later outcomes used only for scoring.',
       'Retrospective single-origin test; these years previously informed model exploration.',
-      'Known future population denominators and fixed graph/year domain are conditioned upon.',
+      'Known future population denominators and fixed geography are conditioned upon.',
+      'Temporal prior scale and centering use training years only; future years are RW1 continuations.',
+      'This changes the old full-domain county forecast prior, not historical fits or the published state spline.',
       'Cell log scores are marginal, not a joint multi-year sequence log score.',
       'No production model or dashboard changes.'),file.path(out,'status.txt'))
   },error=function(e){writeLines(c('FAIL',conditionMessage(e)),file.path(out,'status.txt'));stop(e)})
