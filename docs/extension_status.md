@@ -225,3 +225,7 @@ to underproduce zero-case county/years and material county-level sensitivity to
 spatial pooling. State-level agreement does not resolve those issues. County
 results remain outside the dashboard pending localized saved-fit diagnostics,
 sensitivity analysis, and predictive validation.
+
+### Saved county diagnostic follow-up
+
+The zero-count mismatch from the first county pilot now has a saved-fit diagnostic launcher: `scripts/launch_saved_county_diagnostics.py`. It uses the existing spatial/IID checkpoints and audited panel, produces grouped predictive checks and a paired pointwise comparison, and performs no refits. Local saved-fit tests passed; the real-data diagnostic archive remains pending. See [saved county diagnostics](saved_county_diagnostics.md). County dashboard integration remains pending statistical review.
