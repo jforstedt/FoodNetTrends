@@ -1,6 +1,7 @@
 # Explicit analysis coverage and denominator validation; no population imputation.
 prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
-                                    colorado_coverage = 'historical', parasite_end_year = 2024L, observation_years = NULL) {
+                                    colorado_coverage = 'historical', parasite_end_year = 2024L, observation_years = NULL,
+                                    subgroup = 'combined', analysis_end_year = NULL) {
   if (!colorado_coverage %in% c('historical', 'expanded')) stop('colorado_coverage must be historical or expanded')
   if (length(parasite_end_year) != 1 || is.na(parasite_end_year) || parasite_end_year != as.integer(parasite_end_year))
     stop('parasite_end_year must be an integer')
@@ -21,6 +22,13 @@ prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
     }
   }
   years <- if (is.null(observation_years)) seq.int(min(cases$year,na.rm=TRUE), max(cases$year,na.rm=TRUE)) else observation_years
+  if (!is.null(analysis_end_year)) {
+    if (length(analysis_end_year)!=1L || !is.numeric(analysis_end_year) ||
+        !is.finite(analysis_end_year) || analysis_end_year!=as.integer(analysis_end_year))
+      stop('analysis_end_year must be an integer')
+    years <- years[years <= analysis_end_year]
+    if (!length(years)) stop('No analysis years remain after analysis_end_year')
+  }
   if (para) {
     record_exclusion(selected[selected$year > parasite_end_year,,drop=FALSE], 'After parasite_end_year')
     selected <- selected[selected$year <= parasite_end_year,,drop=FALSE]
@@ -33,12 +41,50 @@ prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
     selected <- selected[selected$year <= 2017,,drop=FALSE]
     years <- years[years <= 2017]
   }
-  if (!length(years)) stop('No analysis years remain after the parasite year limit')
+  # Observation eligibility precedes zero-cell construction. These boundaries
+  # describe surveillance, not modifications to the spline or its priors.
+  scope_start <- if (para) 1997L else 1996L
+  scope_end <- if (para) as.integer(parasite_end_year) else Inf
+  scope_reason <- if (para) 'Parasite observation window' else 'Bacterial observation window'
+  if (pathogen == 'CRYPTOSPORIDIUM') {
+    scope_end <- min(scope_end, 2017L)
+    scope_reason <- 'Cryptosporidium surveillance ended in 2017'
+  }
+  if (pathogen == 'STEC' && identical(subgroup, 'nonO157')) {
+    scope_start <- 2000L
+    scope_reason <- 'Non-O157 STEC surveillance began in 2000'
+    record_exclusion(selected[selected$year < scope_start,,drop=FALSE], scope_reason)
+    selected <- selected[selected$year >= scope_start,,drop=FALSE]
+    years <- years[years >= scope_start]
+  }
+  if (pathogen == 'CAMPYLOBACTER') {
+    scope_end <- 2023L
+    scope_reason <- 'Campylobacter diagnosis reporting changed after 2023; later annual trends require a separate comparability review'
+    record_exclusion(selected[selected$year > scope_end,,drop=FALSE], scope_reason)
+    selected <- selected[selected$year <= scope_end,,drop=FALSE]
+    years <- years[years <= scope_end]
+  }
+  if (!length(years)) stop('No analysis years remain after surveillance eligibility limits')
+  if (!pathogen %in% c('SALMONELLA', 'STEC') && any(years >= 2025))
+    stop('FoodNet reporting became optional in July 2025 for ', pathogen,
+         '; site-specific reporting completeness is unverified. Explicitly restrict analysis years through 2024 or earlier. ',
+         'Optional reporting is not equivalent to zero cases.')
+  # Explicit observation windows also restrict cases; out-of-window cases cannot
+  # survive into a zero grid whose eligible years have already been restricted.
+  record_exclusion(selected[!selected$year %in% years,,drop=FALSE], 'Outside selected observation years')
+  selected <- selected[selected$year %in% years,,drop=FALSE]
+  coverage <- data.frame(pathogen=pathogen, subgroup=subgroup,
+    observation_start_year=min(years), observation_end_year=max(years),
+    surveillance_start_year=scope_start, surveillance_end_year=scope_end,
+    reason=scope_reason, stringsAsFactors=FALSE)
+
   co_reference <- raw[raw$state == 'CO' & raw$year < 2023,,drop=FALSE]
   raw <- raw[raw$year %in% years,,drop=FALSE]
   if (anyNA(raw$year) || anyNA(raw$state) || any(!nzchar(raw$state))) stop('Missing census year/state')
   # COEX is a surveillance-site indicator, not a state or a pathogen.
   has_co <- any(cases$state == 'CO') || any(raw$state == 'CO')
+  if (has_co && any(years >= 2023) && pathogen == 'YERSINIA' && colorado_coverage == 'expanded')
+    stop('Expanded Colorado coverage is not valid for Yersinia: surveillance remains in the seven historical counties. Use historical coverage with matching denominators.')
   if (has_co && any(years >= 2023) && colorado_coverage == 'historical') {
     if (!'siteid' %in% names(selected)) stop('Historical Colorado coverage requires siteid in the cleaned case data')
     is_co <- selected$state == 'CO'
@@ -98,5 +144,17 @@ prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
   missing_years <- setdiff(years,unique(census$year))
   if (length(missing_years)) stop('Missing ',kind,' population years: ',paste(missing_years,collapse=', '),
                                 '. Supply matching denominators or explicitly restrict the analysis years.')
-  list(cases=selected,census=census,years=years,excluded=excluded)
+  list(cases=selected,census=census,years=years,excluded=excluded,coverage=coverage)
+}
+
+# Call again after custom catchment filtering, before spending time on a fit.
+assert_baseline_available <- function(years, baseline_start, baseline_end) {
+  if (length(baseline_start)!=1L || length(baseline_end)!=1L ||
+      !is.finite(baseline_start) || !is.finite(baseline_end) ||
+      baseline_start!=as.integer(baseline_start) || baseline_end!=as.integer(baseline_end) ||
+      baseline_start>baseline_end) stop('Baseline must be an ordered pair of integer years')
+  missing <- setdiff(seq.int(baseline_start,baseline_end),unique(years))
+  if (length(missing)) stop('Baseline years unavailable after observation/catchment filtering: ',
+                           paste(missing,collapse=', '))
+  invisible(TRUE)
 }

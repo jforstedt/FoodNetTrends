@@ -191,11 +191,16 @@ apply_data_rules <- function(data, rules) {
           cond_val <- cond_parts[3]
           if (cond_col %in% names(data)) {
             n_before <- nrow(data)
-            data <- data[!(data[[col]] == val & data[[cond_col]] != cond_val), ]
+            target <- !is.na(data[[col]]) & data[[col]] == val
+            verified <- !is.na(data[[cond_col]]) & data[[cond_col]] == cond_val
+            data <- data[!target | verified, , drop = FALSE]
             n_removed <- n_before - nrow(data)
             cat("  pathogen_filter: removed ", n_removed, " ", val, " rows where ", cond_col, " != '", cond_val, "'\n", sep = "")
           } else {
-            cat("  Warning: condition column '", cond_col, "' not found. Including all ", val, " cases.\n", sep = "")
+            if (any(data[[col]] == val, na.rm = TRUE)) {
+              stop("Cannot apply reportability rule for ", val, ": required column '",
+                   cond_col, "' is missing. Restore the source field before preprocessing.")
+            }
           }
         } else {
           cat("  Warning: could not parse pathogen_filter condition '", cond, "'\n", sep = "")
@@ -204,6 +209,15 @@ apply_data_rules <- function(data, rules) {
     }
   }
   return(data)
+}
+
+# A missing reportability field cannot establish which Listeria records qualify.
+# Keep this check independent of optional custom rules, including an empty file.
+require_listeria_reportability <- function(data) {
+  if (any(data$pathogen == "LISTERIA", na.rm = TRUE) && !"cste" %in% names(data)) {
+    stop("LISTERIA requires the cste reportability column. Restore the source field before preprocessing.")
+  }
+  invisible(data)
 }
 
 # Known pathogen name patterns for standardization
@@ -449,6 +463,7 @@ if("STEC" %in% unique(mmwrdata$pathogen)) {
 }
 
 # --- Post-standardization Data Rules (pathogen_filter) ---
+require_listeria_reportability(mmwrdata)
 if (!is.null(data_rules)) {
   post_rules <- data_rules[data_rules$rule_type == "pathogen_filter", ]
   if (nrow(post_rules) > 0) {
@@ -463,7 +478,7 @@ if (!is.null(data_rules)) {
         filter(!(pathogen == "LISTERIA" & cste != "YES"))
       cat("Filtered Listeria cases to CSTE-reportable only.\n")
     } else {
-      cat("Warning: LISTERIA found but cste column not present. Including all LISTERIA cases.\n")
+      stop("LISTERIA requires the cste reportability column before preprocessing.")
     }
   }
 }

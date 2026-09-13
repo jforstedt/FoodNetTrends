@@ -2,7 +2,8 @@ state,start_year,end_year,pathogen_type,notes
 CA,1996,9999,both,Original FoodNet site
 CO,2001,9999,both,Joined 2001
 CT,1996,9999,both,Original FoodNet site
-GA,1996,9999,both,Original FoodNet site
+GA,1996,9999,bacterial,Original FoodNet bacterial site
+GA,1998,9999,parasitic,Parasite surveillance starts 1998
 MD,1998,9999,both,Joined 1998
 MN,1996,9999,both,Original FoodNet site
 NM,2004,9999,both,Joined 2004

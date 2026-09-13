@@ -173,6 +173,7 @@ workflow FOODNETTRENDS {
         (baselineStart as Integer) > (baselineEnd as Integer)) error "Baseline must be a single integer year or an ordered year range"
     if (!(params.colorado_coverage in ['historical', 'expanded'])) error "colorado_coverage must be historical or expanded"
     if (!params.parasite_end_year.toString().isInteger()) error "parasite_end_year must be an integer"
+    if (params.analysis_end_year != null && !params.analysis_end_year.toString().isInteger()) error "analysis_end_year must be an integer"
     // Define input channels
     if (params.pathogen && params.pathogen != 'AUTO_DISCOVER') {
         // Convert comma-separated string to a channel of pathogens

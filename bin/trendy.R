@@ -48,6 +48,8 @@ parser$add_argument("--classification_rules", default = file.path(dirname(script
 parser$add_argument("--serotype_source", default = "auto")
 parser$add_argument("--colorado_coverage", default = "historical", choices = c("historical", "expanded"))
 parser$add_argument("--parasite_end_year", type = "integer", default = 2024L)
+parser$add_argument("--analysis_end_year", type = "integer", default = NULL,
+                    help = "Explicit last observation year; cannot override surveillance limits")
 parser$add_argument("--selected_serotypes", default = "",
                     help = "Pipe-separated individually selected Salmonella serotypes")
 
@@ -329,11 +331,13 @@ tryCatch({
   }
   if (is.null(opts$pathogen) || length(opts$pathogen) != 1) stop("One pathogen per model process is required")
   inputs <- prepare_analysis_inputs(mmwrdata, bacterial, parasitic, opts$pathogen,
-                                    opts$colorado_coverage, opts$parasite_end_year, surveillance_years)
+                                    opts$colorado_coverage, opts$parasite_end_year, surveillance_years,
+                                    subgroup = opts$subgroup, analysis_end_year = opts$analysis_end_year)
   mmwrdata <- inputs$cases
   census <- inputs$census
   surveillance <- expand.grid(year=inputs$years, state=unique(census$state), stringsAsFactors=FALSE)
   input_exclusions <- inputs$excluded
+  observation_policy <- inputs$coverage
   report_progress("INPUT_VALIDATION", message=paste("Colorado coverage:", opts$colorado_coverage,
     "| parasite end year:", opts$parasite_end_year, "| population years:",
     paste(range(census$year), collapse="-")))
@@ -399,6 +403,7 @@ tryCatch({
   }
 
   pathDf <- PATH_ANALYSIS(mmwrdata_filtered, census, catchment_config, surveillance)%>%as.data.frame()
+  assert_baseline_available(pathDf$year, baseline_start, baseline_end)
   report_progress("ANALYSIS", message=paste("Processed",
                                             length(unique(pathDf$pathogen)),
                                             "pathogens"))
@@ -484,10 +489,14 @@ for (pathogen_name in target_pathogens) {
       baseline_start = baseline_start, baseline_end = baseline_end,
       colorado_coverage = opts$colorado_coverage, parasite_end_year = opts$parasite_end_year,
       analysis_start_year = min(as.numeric(as.character(current_data$year))), analysis_end_year = max(as.numeric(as.character(current_data$year))),
+      requested_analysis_end_year = if (is.null(opts$analysis_end_year)) NA_integer_ else opts$analysis_end_year,
+      travel_stratify = travel_stratify,
+      catchment_config = if (is.null(opts$catchment_config)) "" else opts$catchment_config,
       excluded_records = sum(input_exclusions$records),
       serotype_source = opts$serotype_source, selected_serotypes = opts$selected_serotypes,
       travel = opts$travel, cidt = opts$cidt, states = paste(surveillance_states, collapse = ",")),
       file.path(outDir, paste0(output_prefix, "_analysis_settings.csv")), row.names = FALSE)
+    write.csv(observation_policy, file.path(outDir, paste0(output_prefix, "_observation_policy.csv")), row.names = FALSE)
     write.csv(input_exclusions, file.path(outDir, paste0(output_prefix, "_input_exclusions.csv")), row.names = FALSE)
     write.csv(census, file.path(outDir, paste0(output_prefix, "_population_used.csv")), row.names = FALSE)
     proposed <- PROPOSED_BM(

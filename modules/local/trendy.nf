@@ -109,6 +109,7 @@ process TRENDY {
       --seed ${params.seed} \\
       --backend ${params.stan_backend} \\
       --colorado_coverage ${quote(params.colorado_coverage)} \\
+      ${params.analysis_end_year != null ? "--analysis_end_year ${params.analysis_end_year}" : ""} \\
       --parasite_end_year ${params.parasite_end_year} \\
       --baseline_start ${baselineStart} \\
       --baseline_end ${baselineEnd} \\

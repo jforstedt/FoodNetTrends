@@ -30,6 +30,7 @@ if (params.help) {
         --travel                Travel types (default: NO,UNKNOWN,YES)
         --cidt                  CIDT types (default: CIDT+,CX+,PARASITIC)
         --colorado_coverage     historical (default) or expanded; matching denominators required
+        --analysis_end_year    Explicit last observation year; surveillance limits still apply
         --parasite_end_year     Last modeled parasite year (default: 2024)
 
     Baseline:

@@ -51,8 +51,30 @@ with tempfile.TemporaryDirectory(prefix='foodnet-model-flow-') as temp:
     p=subprocess.run(base+['--subgroup','Enteritidis','--baseline_start','2025','--baseline_end','2025',
                           '--outDir',str(invalid)],capture_output=True,text=True)
     assert p.returncode!=0 and 'Baseline years unavailable' in p.stderr
+    # Explicit observation restriction changes the actual fitted count grid and
+    # publishes the policy without changing the statistical fit implementation.
+    end_limited = temp/'end_limited'
+    p=subprocess.run(base+['--subgroup','Enteritidis','--baseline_start','2016','--baseline_end','2018',
+                          '--analysis_end_year','2018','--outDir',str(end_limited)],capture_output=True,text=True)
+    assert p.returncode==0,p.stdout+p.stderr
+    with (end_limited/'SALMONELLA_Enteritidis_IRCatch.csv').open() as handle:
+        assert max(int(r['year']) for r in csv.DictReader(handle))==2018
+    with (end_limited/'SALMONELLA_Enteritidis_observation_policy.csv').open() as handle:
+        policy=list(csv.DictReader(handle))
+        assert len(policy)==1 and policy[0]['observation_end_year']=='2018'
+    with (end_limited/'SALMONELLA_Enteritidis_input_exclusions.csv').open() as handle:
+        assert any(r['year']=='2019' and int(r['records'])>0 for r in csv.DictReader(handle))
+    # A baseline removed by a custom catchment must fail before sampling begins.
+    catchment=temp/'late_catchment.csv'
+    catchment.write_text('state,start_year,end_year,pathogen_type\nCA,2017,9999,both\n')
+    p=subprocess.run(base+['--subgroup','Enteritidis','--states','CA',
+                          '--baseline_start','2016','--baseline_end','2018',
+                          '--catchment-config',str(catchment),'--outDir',str(temp/'bad_catchment')],
+                     capture_output=True,text=True)
+    assert p.returncode!=0 and 'Baseline years unavailable after observation/catchment filtering: 2016' in p.stderr,p.stdout+p.stderr
+    assert 'Fitting model for' not in p.stdout,p.stdout
     # A 2025 parasite case must be explicitly excluded by default, not silently
-    # lost in a population join. Raising the limit without populations must fail.
+    # lost in a population join. Raising the limit crosses optional-reporting coverage and must fail.
     parasite_cases = temp/'parasites.csv'
     parasite_rows = []
     for year in range(2010,2026):
@@ -74,5 +96,5 @@ with tempfile.TemporaryDirectory(prefix='foodnet-model-flow-') as temp:
     with (limited/'CYCLOSPORA_combined_input_exclusions.csv').open() as handle:
         assert any(r['year']=='2025' and r['records']=='1' for r in csv.DictReader(handle))
     p=subprocess.run(pbase+['--parasite_end_year','2025','--outDir',str(temp/'missing2025')],capture_output=True,text=True)
-    assert p.returncode!=0 and 'Missing Parasitic population years: 2025' in p.stderr,p.stdout+p.stderr
+    assert p.returncode!=0 and 'reporting became optional' in p.stderr,p.stdout+p.stderr
 print('Actual model flow: travel denominators, baseline exports, empty groups and unavailable baseline passed.')
