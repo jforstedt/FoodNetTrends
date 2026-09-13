@@ -48,7 +48,7 @@ sensitivity_prior <- function(obj,variant,out,county_sd=1,county_time=FALSE,n=10
 }
 
 
-sensitivity_fit <- function(obj,variant,county_sd=1,county_time=FALSE,threads=8L) {
+sensitivity_fit <- function(obj,variant,county_sd=1,county_time=FALSE,threads=8L,predictor_link=NULL) {
   d<-obj$data;d$county_time<-d$time;f<-INLA::f
   graph<-INLA::inla.read.graph(Matrix::Matrix(diag(rowSums(obj$adj))-obj$adj,sparse=TRUE))
   if(variant=='spatial') {
@@ -66,7 +66,7 @@ sensitivity_fit <- function(obj,variant,county_sd=1,county_time=FALSE,threads=8L
   fit<-INLA::inla(formula,data=d,family='nbinomial',num.threads=paste0(threads,':1'),
     control.fixed=list(mean=log(20/1e5),prec=1),
     control.family=list(variant=0,hyper=list(size=list(prior='normal',param=c(log(12),1),initial=log(12)))),
-    control.predictor=list(compute=TRUE),control.compute=list(config=TRUE,waic=TRUE,cpo=TRUE))
+    control.predictor=list(compute=TRUE,link=predictor_link),control.compute=list(config=TRUE,waic=TRUE,cpo=TRUE))
   attr(fit,'sensitivity_formula')<-deparse(formula)
   fit
 }
