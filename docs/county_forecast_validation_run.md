@@ -22,3 +22,11 @@ These are conditional hindcasts using realized future populations and historical
 The launcher prints each job ID immediately and records it in submission.json. After all six IDs appear, the jobs continue independently of the terminal. If submission is interrupted, preserve that directory and its ledger rather than launching a duplicate whole batch. `--prepare-only` produces an explicitly unverified plan; such a plan cannot execute real-data fits.
 
 Sources for the numerical changes: [INLA RW1 definition](https://inla.r-inla-download.org/r-inla.org/doc/latent/rw1.pdf), [IGMRF scaling](https://www.inla.r-inla-download.org/r-inla.org/doc/vignettes/scale-model.html), and [joint posterior sampling](https://www.r-inla.org/learnmore/docs/reference/posterior.sample.html). See the protocol and calibration documents for the fixed experiment and limitations.
+
+## Targeted recovery
+
+The first cluster batch completed 72 of 80 calibration tasks; eight spatial tasks and both numerical prerequisites had no completion record. The gate blocked all 54 real-data fits. Every completed task's archived hashes and required artifacts validated. Scheduler accounting queries timed out, so the termination cause is unresolved; no memory-failure diagnosis is established.
+
+`scripts/recover_county_forecast_validation.py RUN_ID` prepares a separate recovery directory, checks that original scheduler jobs are no longer live, validates original source/input fingerprints and completed artifacts, and reuses verified results with explicit provenance. Only unfinished prerequisite tasks are submitted again. The numerical gate is rerun unchanged before permitting unfinished real-data comparisons. Prior attempts are preserved. Additional memory headroom is an operational precaution, not a scientific change or an established explanation of the interruption.
+
+The read-only diagnostic collector now allows accounting queries 600 seconds by default, preserves partial output on timeout, and writes completed query responses incrementally. It remains separate from the scientific gate.

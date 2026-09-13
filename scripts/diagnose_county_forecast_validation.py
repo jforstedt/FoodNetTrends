@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect scheduler evidence for an existing validation batch without submitting jobs."""
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import getpass
 import json
@@ -11,16 +11,21 @@ import subprocess
 import tarfile
 
 
-def capture(argv):
+def capture(argv, accounting_timeout=600):
     try:
         result = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                universal_newlines=True, timeout=45)
+                                universal_newlines=True, timeout=accounting_timeout if argv[0] == 'qacct' else 45)
         return {'command': argv, 'exit_status': result.returncode, 'output': result.stdout}
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        partial = exc.output or ''
+        if isinstance(partial, bytes):
+            partial = partial.decode('utf-8', errors='replace')
+        return {'command': argv, 'exit_status': None, 'error': str(exc), 'output': partial}
+    except OSError as exc:
         return {'command': argv, 'exit_status': None, 'error': str(exc)}
 
 
-def collect(source):
+def collect(source, accounting_timeout=600):
     source = Path(source).resolve()
     plan = json.loads((source / 'manifest.json').read_text())
     submitted = json.loads((source / 'submission.json').read_text())
@@ -32,11 +37,12 @@ def collect(source):
             raise ValueError('Invalid scheduler job identity')
         commands.extend([(kind + '_accounting', ['qacct', '-j', str(job)]),
                          (kind + '_live', ['qstat', '-j', str(job)])])
-    # Independent read-only scheduler queries; bounded to avoid serial delays.
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        evidence = list(pool.map(capture, [argv for _, argv in commands]))
-    for (name, _), data in zip(commands, evidence):
-        (dest / (name + '.json')).write_text(json.dumps(data, indent=2) + '\n')
+    # Accounting scans may be slow on this cluster. Preserve each response immediately.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {pool.submit(capture, argv, accounting_timeout): name for name, argv in commands}
+        for future in as_completed(futures):
+            name = futures[future]
+            (dest / (name + '.json')).write_text(json.dumps(future.result(), indent=2) + '\n')
     inventory = []
     for task in plan['tasks']:
         name = task['id']
@@ -79,11 +85,14 @@ def collect(source):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('run', help='Existing run ID or output directory')
+    parser.add_argument('--accounting-timeout', type=int, default=600)
     args = parser.parse_args()
+    if args.accounting_timeout < 1:
+        parser.error('Accounting timeout must be positive')
     source = Path(args.run)
     if not source.is_dir():
         source = Path(__file__).resolve().parents[1] / 'output' / args.run
-    collect(source)
+    collect(source, args.accounting_timeout)
 
 
 if __name__ == '__main__':
