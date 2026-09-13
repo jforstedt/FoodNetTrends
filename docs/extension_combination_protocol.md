@@ -167,3 +167,12 @@ Deliver a candidate matrix, per-origin/horizon metrics, Monte Carlo diagnostics,
 interval and seasonal plots, input/definition limitations and a status table.
 Dashboard integration follows review and keeps an explicit experimental label
 where appropriate. This protocol requires no extra HPC submission today.
+
+## Recovery-review follow-up
+
+The current standalone spline specification is not promoted. A
+[read-only checkpoint inspection](saved_spline_inspection.md) compares the unstable
+spatial fit with its matched IID fit. Retain spline plus seasonality in the planned
+matrix, but require resolution or isolation of this numerical failure before
+running or interpreting that combination. Poor standalone performance does not
+by itself rule out a useful combination; numerical failure is a separate gate.
