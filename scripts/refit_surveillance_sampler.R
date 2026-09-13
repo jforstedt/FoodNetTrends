@@ -24,6 +24,14 @@ surveillance_sampler_plan <- function(sim,args) {
   list(chains=sim$chains,iter=sim$iter,warmup=sim$warmup,thin=sim$thin,seed=123L,cores=12L,control=control)
 }
 
+sampler_controls_match <- function(actual,expected) {
+  # Named lists can be reordered and integer controls stored as doubles by rstan.
+  if (!is.list(actual) || !is.list(expected) || anyDuplicated(names(actual)) ||
+      anyDuplicated(names(expected)) || !setequal(names(actual),names(expected))) return(FALSE)
+  all(vapply(names(expected),function(n) isTRUE(all.equal(actual[[n]],expected[[n]],
+    tolerance=0,check.attributes=TRUE)),logical(1)))
+}
+
 sampler_model_identity <- function(old,new,code_reader=function(x)brms::stancode(x)) {
   c(same_data=same_sampler_refit_data(old$data,new$data),
     same_priors=identical(old$prior,new$prior),
@@ -126,9 +134,10 @@ run_surveillance_sampler_refit <- function(source_task,dest_task,key) {
     checks<-c(checks,same_sampler_schedule=all(vapply(c('chains','iter','warmup','thin'),
       function(n)identical(as.numeric(old$fit@sim[[n]]),as.numeric(newsim[[n]])),logical(1))),
       requested_controls=length(newargs)==6L && all(vapply(newargs,function(a)
-        identical(a$control,plan$control) && isTRUE(as.numeric(a$seed)==plan$seed),logical(1))),
+        sampler_controls_match(a$control,plan$control) && isTRUE(as.numeric(a$seed)==plan$seed),logical(1))),
       source_fit_unchanged=identical(before,sha(old_path)))
-    identity<-list(status=if(all(checks))'IDENTITY_PASS' else 'REVIEW_REQUIRED',checks=as.list(checks),
+    identity<-list(expected_controls=plan$control,actual_chain_controls=lapply(newargs,function(a)a$control),
+      actual_chain_seeds=lapply(newargs,function(a)a$seed),control_differences=lapply(newargs,function(a)all.equal(a$control,plan$control,tolerance=0)),status=if(all(checks))'IDENTITY_PASS' else 'REVIEW_REQUIRED',checks=as.list(checks),
       source_fit_sha256=before,source_fit_sha256_after=sha(old_path),checkpoint_sha256=sha(checkpoint),
       functions_sha256=sha(file.path(dest_task,'functions.R')),adapt_delta=.9999,max_treedepth=15,
       chains=plan$chains,iterations=plan$iter,warmup=plan$warmup,thin=plan$thin,seed=plan$seed,cores=plan$cores,

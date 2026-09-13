@@ -66,17 +66,38 @@ def prepare(root,audit,dest):
     (dest/'collect.sh').write_text('#!/bin/bash\nset -euo pipefail\nexec python3 '+q(str(scripts/'collect_surveillance_refits.py'))+' '+q(str(dest))+'\n')
     return len(jobs)
 
+def recover(root,previous,dest):
+    previous=Path(previous).resolve();old=json.loads((previous/'manifest.json').read_text())
+    checkpoints={}
+    for j in old['jobs']:
+        work=previous/j['task'];f=work/'checkpoints'/(j['prefix']+'.rds')
+        identity=json.loads((work/(j['prefix']+'_identity_check.json')).read_text())
+        if sha256(f)!=identity['checkpoint_sha256']:raise ValueError('Checkpoint hash mismatch: '+j['prefix'])
+        checkpoints[j['prefix']]=f
+    n=prepare(root,Path(old['source_audit']),dest)
+    plan=json.loads((dest/'manifest.json').read_text())
+    if set(checkpoints)!={j['prefix'] for j in plan['jobs']}:raise ValueError('Recovery model set differs')
+    for j in plan['jobs']:
+        work=dest/j['task'];folder=work/'checkpoints';folder.mkdir()
+        target=folder/(j['prefix']+'.rds');shutil.copyfile(str(checkpoints[j['prefix']]),str(target))
+        script=work/'run.sh'
+        script.write_text(script.read_text().replace('MKL_NUM_THREADS=2','MKL_NUM_THREADS=2,FOODNET_CHECKPOINT_ONLY=1'))
+        with (work/'checksums.sha256').open('a') as f:f.write(sha256(target)+'  '+str(target)+'\n')
+    plan['recovery_source']=str(previous);plan['sampling_disabled']=True
+    (dest/'manifest.json').write_text(json.dumps(plan,indent=2)+'\n')
+    return n
+
 def main():
     root=Path(__file__).resolve().parents[1];p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--audit',type=Path,default=root/'output'/DEFAULT_AUDIT);p.add_argument('--prepare-only',action='store_true');a=p.parse_args()
+    p.add_argument('--recover',type=Path,help='Recover completed checkpoints; sampling is disabled');p.add_argument('--audit',type=Path,default=root/'output'/DEFAULT_AUDIT);p.add_argument('--prepare-only',action='store_true');a=p.parse_args()
     if not a.prepare_only:
         for tool in ('qsub','singularity'):
             if not shutil.which(tool):p.error('Load module for '+tool)
     dest=root/'output'/('surveillance_sampler_refits_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
     print('Checking audited checkpoints and container hashes before submission; large files may take a few minutes.',flush=True)
-    try:n=prepare(root,a.audit,dest)
+    try:n=recover(root,a.recover,dest) if a.recover else prepare(root,a.audit,dest)
     except (ValueError,KeyError,OSError) as e:p.error(str(e))
-    print('Output: '+str(dest)+'\nModels to refit: '+str(n),flush=True)
+    print('Output: '+str(dest)+'\nModels to process: '+str(n)+'\nSampling: '+('DISABLED (checkpoint recovery)' if a.recover else 'enabled'),flush=True)
     if a.prepare_only:return
     def submit(extra,script):
         answer=subprocess.check_output(['qsub','-terse','-V','-cwd','-S','/bin/bash','-j','y','-o',str(dest)]+extra+[str(dest/script)],universal_newlines=True).strip()

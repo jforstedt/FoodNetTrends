@@ -59,6 +59,24 @@ def fixture(base):
 
 
 class SamplerLauncherTests(unittest.TestCase):
+    def test_checkpoint_recovery_disables_sampling_and_verifies_hash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base=Path(temp);root,audit,source=fixture(base);previous=base/'previous'
+            launcher.prepare(root,audit,previous)
+            plan=json.loads((previous/'manifest.json').read_text())
+            for j in plan['jobs']:
+                work=previous/j['task'];(work/'checkpoints').mkdir()
+                f=work/'checkpoints'/(j['prefix']+'.rds');f.write_bytes(b'completed fake checkpoint')
+                (work/(j['prefix']+'_identity_check.json')).write_text(json.dumps(dict(checkpoint_sha256=sha256(f))))
+            dest=base/'recovery';self.assertEqual(launcher.recover(root,previous,dest),2)
+            for j in plan['jobs']:
+                work=dest/j['task']
+                self.assertIn('FOODNET_CHECKPOINT_ONLY=1',(work/'run.sh').read_text())
+                self.assertEqual((work/'checkpoints'/(j['prefix']+'.rds')).read_bytes(),b'completed fake checkpoint')
+                subprocess.check_call(['bash','-n',str(work/'run.sh')])
+            f.write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError,'Checkpoint hash'):launcher.recover(root,previous,base/'bad')
+
     def test_only_divergence_models_and_saved_model_commands(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp); root, audit, source = fixture(base); dest = base / 'new run'
