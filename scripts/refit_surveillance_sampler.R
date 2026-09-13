@@ -1,5 +1,26 @@
 #!/usr/bin/env Rscript
 # Refit an audited saved model with one sampler-control change. No new model/data.
+# Keep this hash-only helper self-contained: original scientific function snapshots
+# intentionally remain unchanged during sampler-only recovery.
+WRITE_STATE_EXPORT_MANIFEST <- function(fit_path, output_dir, prefix, baseline_start, baseline_end) {
+  if (!requireNamespace('digest',quietly=TRUE)) stop('digest required for fit-bound export hashes')
+  if (length(prefix)!=1L || !grepl('^[A-Za-z0-9_-]+$',prefix)) stop('Invalid export prefix')
+  suffixes<-c('_IRCatch.csv','_IRSite.csv',paste0('_EstIRRCatch_',baseline_start,'_',baseline_end,'.csv'),
+    '_analysis_settings.csv','_population_used.csv','_classification_rules.csv','_convergence_diagnostics.csv')
+  files<-file.path(output_dir,paste0(prefix,suffixes))
+  if (!file.exists(fit_path) || any(!file.exists(files))) stop('Required fit/export artifact missing')
+  sha<-function(p)digest::digest(file=p,algo='sha256')
+  fit_hash<-sha(fit_path)
+  manifest<-data.frame(schema_version=1L,fit_sha256=fit_hash,file=basename(files),
+    sha256=vapply(files,sha,character(1)),stringsAsFactors=FALSE)
+  if (!identical(fit_hash,sha(fit_path))) stop('Saved fit changed while binding exports')
+  target<-file.path(output_dir,paste0(prefix,'_fit_export_manifest.csv'))
+  temporary<-tempfile('.fit_export_',tmpdir=output_dir);on.exit(unlink(temporary),add=TRUE)
+  write.csv(manifest,temporary,row.names=FALSE)
+  if (!file.rename(temporary,target)) stop('Could not finalize fit-bound export manifest')
+  invisible(manifest)
+}
+
 same_sampler_refit_data <- function(before,after) {
   # update.brmsfit changes only this descriptive attribute when reusing data.
   attr(before,'data_name')<-NULL;attr(after,'data_name')<-NULL
@@ -187,6 +208,7 @@ run_surveillance_sampler_refit <- function(source_task,dest_task,key) {
       comparison<-compare_sampler_exports(old_csv,new_csv)
       write.csv(comparison,file.path(dest_task,'comparisons',paste0(key,suffix)),row.names=FALSE)
     }
+    WRITE_STATE_EXPORT_MANIFEST(new_path,results,key,bs,be)
     if (!identical(before,sha(old_path))) stop('Source fit changed during export')
     writeLines(c('SUCCESS','Saved model identity preserved; independent post-run diagnostics still required.'),status_path)
     cat('SAMPLER REFIT EXPORT COMPLETE:',key,'\n')

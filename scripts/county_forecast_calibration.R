@@ -9,6 +9,20 @@ calibration_specification <- function() list(version='county-forecast-calibratio
   reference='Known training latent effects and hyperparameters, with new joint RW innovations; not an exact posterior reference',
   approximation='INLA Gaussian joint latent sampling, skew.corr=FALSE; approximation-equivalence unverified')
 
+# Reserve separate deterministic RNG seed ranges for each density/variant/replicate.
+# This changes posterior Monte Carlo streams only; generated truth is unchanged.
+calibration_sampling_seed <- function(density,variant,replicate,draws) {
+  spec<-calibration_specification()
+  if(length(density)!=1L||!density%in%spec$densities||length(variant)!=1L||!variant%in%spec$variants||
+     length(replicate)!=1L||!is.finite(replicate)||replicate<1||replicate!=floor(replicate)||
+     length(draws)!=1L||!is.finite(draws)||draws<1||draws>10000||draws!=floor(draws))
+    stop('Invalid calibration sampling seed request; maximum 10000 draws')
+  task_index<-(replicate-1)*4+(match(density,spec$densities)-1)*2+match(variant,spec$variants)-1
+  seed<-100000000+task_index*100000
+  if(seed+60000>.Machine$integer.max)stop('Calibration seed namespace exhausted')
+  as.integer(seed)
+}
+
 calibration_truth <- function(density,variant,replicate,horizons=3L) {
   spec<-calibration_specification()
   if(!density%in%spec$densities||!variant%in%spec$variants||length(replicate)!=1||
@@ -135,12 +149,13 @@ run_calibration_task <- function(out,density,variant,replicate,draws=1000L,threa
   on.exit(writeLines(capture.output(sessionInfo()),file.path(out,'sessionInfo.txt')))
   tryCatch({
     if(packageVersion('INLA')!=package_version('26.08.07'))stop('Expected pinned INLA 26.08.07')
+    sampling_seed<-calibration_sampling_seed(density,variant,replicate,draws)
     sim<-calibration_truth(density,variant,replicate)
     engine_scale<-rw1_training_scale(spec$training_years)
     if(abs(sim$rw_scale-engine_scale)>1e-8)stop('Generator/engine training scale mismatch')
     fit<-fit_county_forecast(sim$obj,variant,sim$cutoff,county_time=TRUE,threads=threads)
     ix<-which(sim$truth$year>sim$cutoff);n<-length(ix)
-    sampled<-sample_county_forecast(fit,ix,draws=draws,seed=as.integer(sim$seed+50000L))
+    sampled<-sample_county_forecast(fit,ix,draws=draws,seed=sampling_seed)
     mu<-sampled$mu;predictive<-sampled$replicated
     oracle<-calibration_oracle(sim,draws)
     metrics<-rbind(calibration_metrics(sim$truth[ix,],predictive,mu,'INLA_GAUSSIAN',replicate,density,variant,sim$cutoff),
@@ -149,7 +164,7 @@ run_calibration_task <- function(out,density,variant,replicate,draws=1000L,threa
     write.csv(sim$truth,file.path(out,'simulation_truth.csv'),row.names=FALSE)
     saveRDS(fit,file.path(out,'fit_INTERNAL.rds'))
     summary<-list(status='TASK_COMPLETE',density=density,variant=variant,replicate=replicate,draws=draws,
-      seed=sim$seed,training_rw_scale=sim$rw_scale,training_center_only=TRUE,independent_future_rw_innovations=TRUE,
+      seed=sim$seed,posterior_sampling_seed=sampling_seed,posterior_seed_scheme="disjoint_task_ranges_v2",training_rw_scale=sim$rw_scale,training_center_only=TRUE,independent_future_rw_innovations=TRUE,
       specification=spec,scientific_status='REVIEW_REQUIRED',
       higher_accuracy_posterior_reference='UNAVAILABLE: oracle conditions on known latent training effects and parameters; it is not an exact posterior comparator')
     calibration_write_json(summary,file.path(out,'task_summary.json'))

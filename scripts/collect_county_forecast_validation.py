@@ -2,6 +2,7 @@
 """Collect a fixed forecast experiment ledger, retaining failures and paired targets."""
 import csv
 import json
+import hashlib
 import math
 from pathlib import Path
 import sys
@@ -37,18 +38,41 @@ def paired_scores(a,b):
 
 
 def collect(dest):
-    dest=Path(dest);plan=json.loads((dest/'manifest.json').read_text());results=[]
-    for task in plan['tasks']:
+    dest=Path(dest);manifest=dest/'manifest.json';plan=json.loads(manifest.read_text());results=[];provenance_issues=[]
+    tasks=plan.get('tasks',[])
+    ids=[t.get('id') for t in tasks]
+    if not tasks or len(set(ids))!=len(ids) or any(not isinstance(x,str) or not x or Path(x).name!=x or x in ('.','..') for x in ids):
+        provenance_issues.append('Missing, duplicate or unsafe task inventory')
+    if not plan.get('inputs_verified'):provenance_issues.append('Manifest inputs are unverified')
+    if not isinstance(plan.get('fingerprints'),dict) or not plan.get('fingerprints'):provenance_issues.append('Missing shared source fingerprints')
+    checked={}
+    def check(path,digest):
+        if path not in checked:checked[path]=sha(path)
+        if checked[path]!=digest:raise ValueError('Source/input fingerprint mismatch: '+path)
+    for task in tasks:
         p=dest/task['id'];status=p/'task_status.json'
-        r=json.loads(status.read_text()) if status.exists() else dict(status='MISSING',exit_status=None)
+        try:r=json.loads(status.read_text()) if status.exists() else dict(status='MISSING',exit_status=None)
+        except (OSError,ValueError):r=dict(status='INVALID_ARTIFACTS',exit_status=None,reason='Unreadable task status')
         if r.get('status')=='COMPLETE':
             try:
+                if provenance_issues:raise ValueError('; '.join(provenance_issues))
                 if r.get('exit_status')!=0:raise ValueError('Success status has nonzero exit code')
+                identity=hashlib.sha256(json.dumps(dict(task=task,fingerprints=plan['fingerprints']),sort_keys=True).encode()).hexdigest()
+                if r.get('task_sha256')!=identity:raise ValueError('Task execution identity mismatch')
+                for path,digest in dict(plan['fingerprints'],**task.get('input_fingerprints',{})).items():check(path,digest)
+                if task['kind']=='forecast':
+                    gate=json.loads((dest/'gate.json').read_text())
+                    if gate.get('status')!='PASS' or gate.get('manifest_sha256')!=sha(manifest):raise ValueError('Forecast prerequisite gate revoked or changed')
+                if any(Path(name).is_absolute() or '..' in Path(name).parts for name in r.get('outputs',{})):raise ValueError('Unsafe recorded output path')
+                for name,digest in r.get('checkpoint_sha256',{}).items():
+                    rel=Path(name)
+                    if rel.is_absolute() or '..' in rel.parts or rel.suffix.lower()!='.rds' or sha(p/rel)!=digest:raise ValueError('Checkpoint fingerprint mismatch')
+                r['checkpoint_integrity_verified']=bool(r.get('checkpoint_sha256'))
                 validate_task_outputs(p,task)
                 if not r.get('outputs') or any(sha(p/name)!=h for name,h in r['outputs'].items()):raise ValueError('Recorded output hash mismatch')
             except (OSError,ValueError,KeyError) as e:r.update(status='INVALID_ARTIFACTS',reason=str(e))
         results.append(dict(task=task['id'],kind=task['kind'],**r))
-    comparisons=[];issues=[]
+    comparisons=[];issues=[dict(issue=x) for x in provenance_issues]
     successful={r['task'] for r in results if r.get('status')=='COMPLETE'}
     for task in plan['tasks']:
         if task['kind']!='forecast' or task['id'] not in successful:continue
@@ -71,7 +95,7 @@ def collect(dest):
     if comparisons:
         with (dest/'paired_scores_INTERNAL.csv').open('w',newline='') as f:
             w=csv.DictWriter(f,fieldnames=list(comparisons[0]));w.writeheader();w.writerows(comparisons)
-    summary=dict(tasks=results,comparison_issues=issues,execution_complete=all(r.get('status')=='COMPLETE' for r in results),
+    summary=dict(tasks=results,comparison_issues=issues,execution_complete=bool(results) and all(r.get('status')=='COMPLETE' for r in results) and not issues,
                  scientific_status='REVIEW_REQUIRED',note='Retrospective conditional hindcasts; no untouched validation or automatic dashboard promotion. Paired state/year score sums are descriptive; no independent-cell significance test.')
     (dest/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
     with tarfile.open(str(dest)+'.tar.gz','w:gz') as t:

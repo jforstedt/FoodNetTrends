@@ -702,3 +702,24 @@ PLOT_TRAVEL_FRACTION <- function(domestic_catch, travel_catch, pathogen, outfile
   ggsave(outfile, plot = p, width = 10, height = 5, dpi = 300)
   return(p)
 }
+
+# Bind freshly computed primary posterior tables and their metadata to the saved fit.
+# Called only after posterior export, never as a retrofit stamp on existing tables.
+WRITE_STATE_EXPORT_MANIFEST <- function(fit_path, output_dir, prefix, baseline_start, baseline_end) {
+  if (!requireNamespace('digest',quietly=TRUE)) stop('digest required for fit-bound export hashes')
+  if (length(prefix)!=1L || !grepl('^[A-Za-z0-9_-]+$',prefix)) stop('Invalid export prefix')
+  suffixes<-c('_IRCatch.csv','_IRSite.csv',paste0('_EstIRRCatch_',baseline_start,'_',baseline_end,'.csv'),
+    '_analysis_settings.csv','_population_used.csv','_classification_rules.csv','_convergence_diagnostics.csv')
+  files<-file.path(output_dir,paste0(prefix,suffixes))
+  if (!file.exists(fit_path) || any(!file.exists(files))) stop('Required fit/export artifact missing')
+  sha<-function(p)digest::digest(file=p,algo='sha256')
+  fit_hash<-sha(fit_path)
+  manifest<-data.frame(schema_version=1L,fit_sha256=fit_hash,file=basename(files),
+    sha256=vapply(files,sha,character(1)),stringsAsFactors=FALSE)
+  if (!identical(fit_hash,sha(fit_path))) stop('Saved fit changed while binding exports')
+  target<-file.path(output_dir,paste0(prefix,'_fit_export_manifest.csv'))
+  temporary<-tempfile('.fit_export_',tmpdir=output_dir);on.exit(unlink(temporary),add=TRUE)
+  write.csv(manifest,temporary,row.names=FALSE)
+  if (!file.rename(temporary,target)) stop('Could not finalize fit-bound export manifest')
+  invisible(manifest)
+}

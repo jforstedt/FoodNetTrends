@@ -17,3 +17,17 @@ for(v in c('spatial','iid'))for(density in c('sparse','dense')) {
 z<-calibration_interval(rep(1,20));stopifnot(z['lower']<1,z['upper']==1)
 z<-calibration_interval(rep(c(.8,1),10));stopifnot(z['lower']<.9,z['upper']>.9)
 cat('PASS synthetic training-domain truth, horizon prefix, oracle correlation and clustered uncertainty\n')
+
+# Previously replicate stride100 collided with posterior batch stride100.
+# Check both posterior and predictive RNG seeds across all80 tasks.
+seen<-integer()
+for(r in 1:20)for(v in c('spatial','iid'))for(density in c('sparse','dense')) {
+ seed<-calibration_sampling_seed(density,v,r,10000L)
+ starts<-seq.int(1L,10000L,100L)
+ task_seeds<-c(seed+starts,seed+10000L+starts)
+ stopifnot(!anyDuplicated(task_seeds),!any(task_seeds%in%seen))
+ seen<-c(seen,task_seeds)
+}
+stopifnot(length(unique(seen))==80L*200L,
+ inherits(try(calibration_sampling_seed('sparse','iid',1,10001),silent=TRUE),'try-error'))
+cat('PASS disjoint posterior/predictive batch seed namespaces across80 tasks\n')

@@ -5,9 +5,16 @@ import tempfile
 import unittest
 import math
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
-from collect_next_phase_batch import spline_comparisons
+from collect_next_phase_batch import spline_comparisons,numerical_log_flags
 
 class ComparisonTests(unittest.TestCase):
+    def test_aborted_correction_cannot_be_silently_ranked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp);(d/'fit').mkdir()
+            (d/'fit/task.log').write_text('warning: vb.correction is aborted\nwarning: vb.correction is aborted\n')
+            self.assertIn('VB_CORRECTION_ABORTED:2',numerical_log_flags(d,dict(id='fit')))
+            self.assertEqual(numerical_log_flags(d,dict(id='missing')),'LOG_UNAVAILABLE')
+
     def test_pools_densities_before_log(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)

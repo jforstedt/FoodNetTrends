@@ -322,3 +322,8 @@ weak standalone candidates for combination testing, forbids held-out diagnostic
 mix leakage, and separates exploratory reused origins from confirmatory evidence.
 Exact numerical priors and practical margins remain explicit pre-launch freeze
 points; no new HPC work is authorized by a readiness label alone.
+
+The [13 September adversarial review](adversarial_review_20260913.md) records
+collector/export provenance fixes, simulation-seed qualifications and the limits
+of synthetic gates for real spline fits. Its legacy-artifact qualifications apply
+before any new acceptance claim; they do not authorize automatic refits.

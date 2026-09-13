@@ -2,17 +2,26 @@
 import csv
 import json
 import math
+import re
 from pathlib import Path
 import statistics
 import sys
 import tarfile
-from run_next_phase_task import rows,sha,validate,prerequisite
+from run_next_phase_task import rows,sha,validate,prerequisite,execution_provenance,verify_checkpoints
 
 
 def write(path,data):
     if data:
         with Path(path).open('w',newline='') as f:
             w=csv.DictWriter(f,fieldnames=list(data[0]));w.writeheader();w.writerows(data)
+
+
+def numerical_log_flags(dest, task):
+    path=Path(dest)/task['id']/'task.log'
+    if not path.is_file():return 'LOG_UNAVAILABLE'
+    log=path.read_text(errors='replace')
+    aborted=len(re.findall(r'vb[.]correction is aborted',log,re.I))
+    return 'VB_CORRECTION_ABORTED:%s; SAVED_FIT_REVIEW_REQUIRED'%aborted if aborted else 'NO_VB_ABORT_DETECTED_NOT_A_CONVERGENCE_CERTIFICATE'
 
 
 def spline_comparisons(dest, good):
@@ -36,8 +45,9 @@ def spline_comparisons(dest, good):
         spline=sum(float(r['log_predictive_density']) for r in candidate)
         comparisons.append(dict(pathogen=task['pathogen'],origin=task['origin'],variant=task['variant'],cells=len(candidate),
           spline_log_score=spline,rw1_pooled_log_score=pooled,spline_minus_rw1=spline-pooled,
+          numerical_review=numerical_log_flags(dest,task),
           spline_95_coverage=sum(float(r['lower95'])<=float(r['observed'])<=float(r['upper95']) for r in candidate)/len(candidate),
-          interpretation='Exploratory point comparison; spline 4000 draws versus RW1 4 x 4000 pooled draws; distinct priors; assess Monte Carlo error and overlapping origins before interpretation'))
+          interpretation='Do not rank candidates flagged for aborted correction before saved-fit review. Exploratory point comparison; spline 4000 draws versus RW1 4 x 4000 pooled draws; distinct priors; assess Monte Carlo error and overlapping origins before interpretation'))
     return comparisons
 
 
@@ -52,7 +62,10 @@ def collect(dest):
         try:
             work=dest/task['id'];r=json.loads((work/'task_status.json').read_text())
             if r['status']=='COMPLETE':
+                if not plan.get('verified'):raise ValueError('Unverified plan cannot claim completion')
                 if r.get('exit_status')!=0:raise ValueError('Nonzero completion code')
+                r.update(execution_provenance(dest,plan,task,r))
+                r['checkpoint_integrity_verified']=verify_checkpoints(work,r)
                 for dep in task.get('requires',[]):prerequisite(dest,plan,dep)
                 for path,digest in dict(plan['fingerprints'],**task.get('inputs',{})).items():
                     if checked_sha(path)!=digest:raise ValueError('Changed source/input')
@@ -87,7 +100,8 @@ def collect(dest):
     write(dest/'paired_sampling_stability_INTERNAL.csv',stability)
     try:write(dest/'spline_rw1_comparison_INTERNAL.csv',spline_comparisons(dest,good))
     except (OSError,ValueError,KeyError) as e:issues.append(str(e))
-    summary=dict(tasks=results,collection_issues=issues,execution_complete=bool(results) and all(r['status']=='COMPLETE' for r in results) and not issues,
+    summary=dict(tasks=results,collection_issues=issues,identity_verified=bool(results) and all(r.get('identity_verified',False) for r in results),
+      provenance_status='LEGACY_IDENTITY_UNVERIFIED' if any(r.get('provenance_status')=='LEGACY_IDENTITY_UNVERIFIED' for r in results) else 'SEE_TASK_PROVENANCE',execution_complete=bool(results) and all(r['status']=='COMPLETE' for r in results) and not issues,
       scientific_status='REVIEW_REQUIRED',note='Experimental county spline candidate, saved posterior sampling and targeted definitions. No state replacement or automatic dashboard promotion.')
     (dest/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
     with tarfile.open(str(dest)+'.tar.gz','w:gz') as t:

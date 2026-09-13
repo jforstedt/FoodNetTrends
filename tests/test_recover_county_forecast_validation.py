@@ -40,6 +40,16 @@ class RecoveryTests(unittest.TestCase):
             subprocess.check_call(['bash','-n',str(dest/'screen.sh')])
             self.assertNotIn('-tc',(dest/'screen.sh').read_text())
 
+    def test_new_checkpoint_hash_is_preserved_and_checked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old,_=self.fixture(Path(tmp));status=old/'done/task_status.json'
+            r=json.loads(status.read_text());r['checkpoint_sha256']={'result/fit.rds':m.sha(old/'done/result/fit.rds')};status.write_text(json.dumps(r))
+            dest=Path(tmp)/'new';m.prepare(old,dest,False)
+            self.assertEqual((dest/'done/result/fit.rds').read_bytes(),(old/'done/result/fit.rds').read_bytes())
+            self.assertEqual(json.loads((dest/'done/task_status.json').read_text())['checkpoint_sha256'],r['checkpoint_sha256'])
+            (old/'done/result/fit.rds').write_text('changed checkpoint')
+            with self.assertRaisesRegex(ValueError,'checkpoint'):m.prepare(old,Path(tmp)/'bad',False)
+
     def test_changed_complete_output_and_changed_source_block(self):
         with tempfile.TemporaryDirectory() as tmp:
             old,_=self.fixture(Path(tmp)); (old/'done/result/data.csv').write_text('changed')

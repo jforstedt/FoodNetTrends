@@ -22,6 +22,7 @@ def load(name):
 
 
 L = load('launch_surveillance_refits'); C = load('collect_surveillance_refits')
+RATE_POSTERIOR_FIELDS=tuple(k for k in C.RATE_FIELDS if k not in ('population','population_check','raw_count','raw_check','raw_ir'))
 
 
 def write(path, data):
@@ -87,6 +88,14 @@ def prepared(base, multiple=False):
             diagnostics=dict(diagnostic(), min_ess_bulk=5000, min_ess_tail=5000, n_treedepth_hits=0,
                 min_ebfmi=.8, chains=6, post_warmup_draws_per_chain=5001))
         (work / 'saved_fit_validation.json').write_text(json.dumps(proof))
+        # Synthetic fixture binding is created together with synthetic export generation.
+        population_rows=[dict(year=r['year'],state=r['state'],population=r['population']) for r in model]
+        write(output/(prefix+'_population_used.csv'),population_rows)
+        (output/(prefix+'_classification_rules.csv')).write_text('classification,match_type,value\n')
+        names=[prefix+suffix for suffix in ('_IRCatch.csv','_IRSite.csv','_EstIRRCatch_2019_2019.csv',
+            '_analysis_settings.csv','_population_used.csv','_classification_rules.csv','_convergence_diagnostics.csv')]
+        write(output/(prefix+'_fit_export_manifest.csv'),[dict(schema_version='1',fit_sha256=C.sha256(fit),
+            file=name,sha256=C.sha256(output/name)) for name in names])
         (work / 'exit_status.txt').write_text('0\n')
     return dest, manifest, command
 
@@ -172,6 +181,29 @@ class RefitTests(unittest.TestCase):
                 write(path, data)
                 self.assertEqual(collect(dest), 1)
 
+    def test_coherent_posterior_replacement_and_metadata_drift_rejected(self):
+        for variant in ('double_posterior','settings','missing_binding'):
+            with self.subTest(variant=variant),tempfile.TemporaryDirectory() as temp:
+                dest,manifest,_=prepared(Path(temp));job=manifest['jobs'][0]
+                output=dest/job['task']/'spline_results';prefix=job['prefix']
+                if variant=='missing_binding':
+                    (output/(prefix+'_fit_export_manifest.csv')).unlink()
+                elif variant=='settings':
+                    path=output/(prefix+'_analysis_settings.csv');data=C.rows(path)
+                    data[0]['baseline_start']='2018';write(path,data)
+                else:
+                    for suffix in ('_IRCatch.csv','_IRSite.csv','_EstIRRCatch_2019_2019.csv'):
+                        path=output/(prefix+suffix);data=C.rows(path)
+                        for row in data:
+                            for name in RATE_POSTERIOR_FIELDS:
+                                row[name]=str(float(row[name])*2)
+                            for name in ('baseline_median_ir','baseline_lower_hdi_ir','baseline_upper_hdi_ir'):
+                                if name in row:row[name]=str(float(row[name])*2)
+                        write(path,data)
+                self.assertEqual(collect(dest),1)
+                summary=json.loads((dest/'review_summary.json').read_text())
+                self.assertTrue(any('manifest' in x or 'Fit-bound' in x for x in summary['results'][0]['issues']))
+
     def test_saved_fit_proof_is_mandatory_and_bound_to_model(self):
         variants = ('missing', 'failed', 'bad_hash', 'omitted_model_site', 'duplicate_expected_key',
                     'failed_eligibility', 'bad_diagnostics', 'checkpoint_changed', 'treedepth', 'ebfmi', 'tail_ess')
@@ -203,6 +235,10 @@ class RefitTests(unittest.TestCase):
                 path = output / (job['prefix'] + suffix); data = C.rows(path)
                 for row in data: row['population_check'] = 'NA'
                 write(path, data)
+            binding=output/(job['prefix']+'_fit_export_manifest.csv')
+            evidence=C.rows(binding)
+            for row in evidence: row['sha256']=C.sha256(output/row['file'])
+            write(binding,evidence)  # Simulate a fresh export containing legacy redundant SDs.
             self.assertEqual(collect(dest), 0)
             path = output / (job['prefix'] + '_IRSite.csv'); data = C.rows(path)
             data[0]['population'] = 'NA'; write(path, data)

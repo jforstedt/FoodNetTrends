@@ -160,7 +160,28 @@ def validate_proof(proof_path, fit, first, last):
     return model
 
 
+def validate_export_binding(output, prefix, bs, be):
+    output = Path(output)
+    manifest_path = output / (prefix + '_fit_export_manifest.csv')
+    if not manifest_path.is_file():
+        raise ValueError('Missing fit-bound export manifest; legacy tables need saved-fit re-export without sampling')
+    manifest = rows(manifest_path)
+    required = {prefix + suffix for suffix in ('_IRCatch.csv', '_IRSite.csv',
+        '_EstIRRCatch_%s_%s.csv' % (bs, be), '_analysis_settings.csv',
+        '_population_used.csv', '_classification_rules.csv', '_convergence_diagnostics.csv')}
+    if len(manifest) != len(required) or {r.get('file') for r in manifest} != required:
+        raise ValueError('Fit export manifest has missing, extra or duplicate artifacts')
+    fit_hash = sha256(output / (prefix + '_brm.Rds'))
+    for record in manifest:
+        if record.get('schema_version') != '1' or record.get('fit_sha256') != fit_hash:
+            raise ValueError('Export manifest does not match saved fitted posterior')
+        if record.get('sha256') != sha256(output / record['file']):
+            raise ValueError('Fit-bound exported artifact changed: ' + record['file'])
+    return manifest
+
+
 def validate_outputs(output, prefix, model, first, last, bs, be):
+    validate_export_binding(output, prefix, bs, be)
     catch_rows = rows(output / (prefix + '_IRCatch.csv'))
     site_rows = rows(output / (prefix + '_IRSite.csv'))
     comparison_rows = rows(output / (prefix + '_EstIRRCatch_%s_%s.csv' % (bs, be)))

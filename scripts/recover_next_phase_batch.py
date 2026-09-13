@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from launch_next_phase_batch import write_scripts,submit
+from recover_county_forecast_validation import require_finished
 from run_next_phase_task import sha,validate
 
 DEFAULT_RUN='next_phase_parallel_20260913_151430_228763'
@@ -70,9 +71,7 @@ def main():
     source=Path(a.source);source=source if source.is_absolute() else root/'output'/source
     dest=root/'output'/('next_phase_recovery_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
     try:
-        submitted=json.loads((source/'submission.json').read_text())
-        active={n.text.strip() for n in ET.fromstring(subprocess.check_output(['qstat','-xml'],universal_newlines=True)).iter('JB_job_number') if n.text}
-        if active.intersection(str(v) for v in submitted.values()):raise ValueError('Source batch still active')
+        require_finished(source)
         claim=source/'recovery_submission.json'
         with claim.open('x') as f:json.dump(dict(destination=str(dest),status='PREPARING'),f)
         groups=prepare_recovery(source,dest)

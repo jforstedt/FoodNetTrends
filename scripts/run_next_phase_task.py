@@ -78,17 +78,54 @@ def validate(dest,task):
     return True
 
 
+def execution_identity(task, fingerprints):
+    return hashlib.sha256(json.dumps(dict(task=task,fingerprints=fingerprints),sort_keys=True).encode()).hexdigest()
+
+
+def execution_provenance(dest,plan,task,record):
+    """Legacy records remain usable but never acquire an invented identity."""
+    if not record.get('task_sha256'):
+        return dict(identity_verified=False,provenance_status='LEGACY_IDENTITY_UNVERIFIED')
+    current=execution_identity(task,plan['fingerprints'])
+    if record['task_sha256']==current and record.get('plan_sha256')==sha(Path(dest)/'plan.json'):
+        return dict(identity_verified=True,provenance_status='EXECUTION_IDENTITY_VERIFIED')
+    recovery=plan.get('recovery',{})
+    if recovery.get('source') and recovery.get('source_plan_sha256'):
+        source=Path(recovery['source']);original_path=source/'plan.json'
+        if sha(original_path)!=recovery['source_plan_sha256']:raise ValueError('Recovery source plan changed')
+        original=json.loads(original_path.read_text())
+        matches=[t for t in original['tasks'] if t['id']==task['id']]
+        def rebase(x):
+            if isinstance(x,str) and x.startswith(str(source)+'/'):return str(dest)+x[len(str(source)):]
+            if isinstance(x,list):return [rebase(y) for y in x]
+            if isinstance(x,dict):return {rebase(k):rebase(v) for k,v in x.items()}
+            return x
+        if len(matches)==1 and rebase(matches[0])==task and all(plan['fingerprints'].get(rebase(k))==v for k,v in original['fingerprints'].items()) and record['task_sha256']==execution_identity(matches[0],original['fingerprints']) and record.get('plan_sha256')==recovery['source_plan_sha256']:
+            return dict(identity_verified=True,provenance_status='RECOVERED_EXECUTION_IDENTITY_VERIFIED')
+    raise ValueError('Task execution identity or plan changed')
+
+
+def verify_checkpoints(work,record):
+    for name,digest in record.get('checkpoint_sha256',{}).items():
+        p=Path(name)
+        if p.is_absolute() or '..' in p.parts or p.suffix.lower()!='.rds':raise ValueError('Unsafe checkpoint identity')
+        if sha(Path(work)/p)!=digest:raise ValueError('Checkpoint fingerprint mismatch')
+    return bool(record.get('checkpoint_sha256'))
+
+
 def prerequisite(dest,plan,name):
     task=next(t for t in plan['tasks'] if t['id']==name);work=dest/name
     record=json.loads((work/'task_status.json').read_text())
     if record.get('status')!='COMPLETE' or record.get('exit_status')!=0:raise ValueError('Prerequisite did not complete: '+name)
+    execution_provenance(dest,plan,task,record)
+    verify_checkpoints(work,record)
     if not record.get('outputs') or any(sha(work/p)!=h for p,h in record['outputs'].items()):raise ValueError('Prerequisite output changed: '+name)
     validate(dest,task)
 
 
 def run(dest,name):
     dest=Path(dest);plan=json.loads((dest/'plan.json').read_text());task=next(t for t in plan['tasks'] if t['id']==name)
-    work=dest/name;work.mkdir(exist_ok=False);r=dict(task=name,kind=task['kind'],status='FAILED',exit_status=1)
+    work=dest/name;work.mkdir(exist_ok=False);r=dict(task=name,kind=task['kind'],status='FAILED',exit_status=1,task_sha256=execution_identity(task,plan['fingerprints']),plan_sha256=sha(dest/'plan.json'))
     inputs=dict(plan['fingerprints']);inputs.update(task.get('inputs',{}))
     try:
         if not plan['verified']:raise ValueError('Unverified plan cannot execute')
@@ -101,11 +138,12 @@ def run(dest,name):
                 code=subprocess.run(cmd,cwd=str(dest),stdout=log,stderr=subprocess.STDOUT).returncode
                 if code:raise ValueError('Command exit status '+str(code))
         validate(dest,task)
+        if sha(dest/'plan.json')!=r['plan_sha256']:raise ValueError('Plan changed during execution')
         for p,h in inputs.items():
             if sha(p)!=h:raise ValueError('Input changed during work: '+p)
         for dep in task.get('requires',[]):prerequisite(dest,plan,dep)
         if task.get('source'):validate_source(task['pathogen'],task['source'])
-        r.update(status='COMPLETE',exit_status=0,outputs={str(p.relative_to(work)):sha(p) for p in (work/'result').rglob('*') if p.is_file() and (p.suffix.lower() in ('.csv','.txt','.json') or task['kind']=='basis')})
+        r.update(status='COMPLETE',exit_status=0,checkpoint_sha256={str(p.relative_to(work)):sha(p) for p in (work/'result').rglob('*.rds') if p.is_file()},outputs={str(p.relative_to(work)):sha(p) for p in (work/'result').rglob('*') if p.is_file() and (p.suffix.lower() in ('.csv','.txt','.json') or task['kind']=='basis')})
     except (OSError,ValueError,KeyError,subprocess.SubprocessError) as e:r['reason']=str(e)
     (work/'task_status.json').write_text(json.dumps(r,indent=2)+'\n');return r['exit_status']
 

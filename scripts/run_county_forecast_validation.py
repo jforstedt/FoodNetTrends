@@ -31,6 +31,9 @@ def _run_locked(dest,task_id):
                     gate=json.loads((dest/'gate.json').read_text())
                     if gate.get('manifest_sha256')!=sha(manifest_path) or gate.get('status')!='PASS':
                         raise ValueError('Completed task cannot bypass a revoked or changed prerequisite gate')
+                for name,digest in old.get('checkpoint_sha256',{}).items():
+                    rel=Path(name)
+                    if rel.is_absolute() or '..' in rel.parts or rel.suffix.lower()!='.rds' or sha(work/rel)!=digest:raise ValueError('Checkpoint fingerprint mismatch')
                 validate_task_outputs(work,task)
                 return 0
         raise ValueError('Existing task attempt is incomplete/changed; retain it and prepare a fresh recovery attempt')
@@ -55,6 +58,7 @@ def _run_locked(dest,task_id):
             for path,h in plan['fingerprints'].items():
                 if sha(path)!=h:raise ValueError('Shared source/container changed during execution: '+path)
             result['artifact_validation']=validate_task_outputs(work,task)
+            result['checkpoint_sha256']={str(p.relative_to(work)):sha(p) for p in work.rglob('*.rds') if p.is_file()}
             result['outputs']={str(p.relative_to(work)):sha(p) for p in work.rglob('*') if p.is_file() and p.suffix.lower() in ('.csv','.json','.txt','.pdf') and p!=status_path}
             if not result['outputs']:raise ValueError('Task returned success without validation artifacts')
         return code

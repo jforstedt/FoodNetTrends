@@ -4,7 +4,7 @@ This gate checks the new forecast implementation before running exploratory real
 
 ## Fixed experiment
 
-The predeclared first batch contains 80 independent fitted datasets: 20 replicates for each of two count-density scenarios and two county-effect structures. Within each scenario, the synthetic panel has 12 counties, two disconnected six-county chain graphs, eight training years, and three future years. Each fit uses at least 1,000 joint posterior draws.
+The predeclared first batch contains 80 fitted datasets: 20 independent data-generating replicates for each of two count-density scenarios and two county-effect structures. Within each scenario, the synthetic panel has 12 counties, two disconnected six-county chain graphs, eight training years, and three future years. Each fit uses at least 1,000 joint posterior draws.
 
 The sparse and dense scenarios share the incidence scale and differ through exposure: base populations of 500 and 50,000, with fixed modest variation between counties. The generating log rate is log(20/100,000), negative-binomial size is 8, county SD is 0.35, state temporal SD is 0.12, and county temporal SD is 0.08. The spatial version uses BYM2 mixing 0.5; the comparator uses independent county effects. These fixed truths are representative stress tests, not draws from the fitting prior or a survey of all plausible disease processes.
 
@@ -35,3 +35,22 @@ python3 scripts/collect_county_forecast_calibration.py ROOT --replicates 20
 ```
 
 The collector writes `ROOT/calibration_summary.json` and exits zero only for `NUMERICAL_SCREEN_PASS`. Existing task destinations are never overwritten. The R task requires the pinned INLA environment; the collector uses Python's standard library and supports Python 3.6.
+
+
+## Posterior sampling seed correction
+
+Future tasks record `posterior_seed_scheme=disjoint_task_ranges_v2` and a separate
+posterior sampling seed. Each density/variant/replicate reserves its own seed range,
+including posterior batches and predictive-count draws. The task accepts at most
+10,000 draws per fit so those two ranges do not overlap within a task. The generated datasets,
+model formulas, priors and empirical screening threshold remain unchanged.
+
+Older task snapshots spaced replicate base seeds by100 and posterior batches by100;
+adjacent replicates therefore reused most batch seeds. Their data-generating
+replicates remain distinct, but Monte Carlo approximation errors can be correlated.
+The old screen's reported replicate MCSE and independence-based Hoeffding bounds
+must consequently be treated as descriptive rather than guaranteed independent-
+replicate uncertainty bounds. A passed empirical screen remains recorded evidence,
+not a certification of nominal predictive coverage. This correction does not
+retroactively rerun or change existing jobs, checkpoints or accepted state results;
+immutable worker snapshots continue to use their recorded implementation.

@@ -101,6 +101,10 @@ def prepare(old, dest, verify_jobs=True):
             rel = Path(name)
             if rel.is_absolute() or '..' in rel.parts or rel.suffix.lower() == '.rds': raise ValueError('Unsafe reusable artifact: ' + name)
             if sha(old / task['id'] / rel) != digest: raise ValueError('Changed completed artifact: ' + name)
+        for name, digest in record.get('checkpoint_sha256', {}).items():
+            rel = Path(name)
+            if rel.is_absolute() or '..' in rel.parts or rel.suffix.lower() != '.rds': raise ValueError('Unsafe checkpoint artifact: ' + name)
+            if sha(old / task['id'] / rel) != digest: raise ValueError('Changed completed checkpoint: ' + name)
         if task['kind'] == 'forecast':
             gate = json.loads((old / 'gate.json').read_text())
             if gate.get('status') != 'PASS' or gate.get('manifest_sha256') != sha(old / 'manifest.json'): raise ValueError('Completed forecast has no valid original gate')
@@ -131,6 +135,10 @@ def prepare(old, dest, verify_jobs=True):
             target = work / artifact; target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(str(old / name / artifact), str(target))
             if sha(target) != digest: raise ValueError('Reused copy fingerprint mismatch')
+        for checkpoint, digest in original.get('checkpoint_sha256', {}).items():
+            target = work / checkpoint; target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(str(old / name / checkpoint), str(target))
+            if sha(target) != digest: raise ValueError('Reused checkpoint fingerprint mismatch')
         module.validate_task_outputs(work, task)
         (provenance / (name + '.json')).write_text(json.dumps(original, indent=2) + '\n')
         record = dict(original, task_sha256=identity(task, new['fingerprints']))

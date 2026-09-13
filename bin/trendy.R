@@ -579,6 +579,8 @@ for (pathogen_name in target_pathogens) {
     baseline_comparison <- IR_COMP_CATCH(catch, baseline_start, baseline_end,
       paste0(outDir, "/", output_prefix, "_EstIRRCatch_", baseline_start, "_", baseline_end, ".csv"))
 
+    WRITE_STATE_EXPORT_MANIFEST(saveFile,outDir,output_prefix,baseline_start,baseline_end)
+
     if (requireNamespace("ggplot2", quietly = TRUE)) {
       stable_yr <- get_catchment_stable_year(catchment_config)
       tryCatch({
