@@ -79,15 +79,25 @@ def prepare(root,dest,source,raw,verified=True):
     (dest/'plan.json').write_text(json.dumps(plan,indent=2)+'\n');q=shlex.quote
     groups={'sampling':[t['id'] for t in tasks if t['kind']=='sampling'],'definitions':['definitions'],'cyclospora_serial':['cyclospora_threads_1'],
       'cyclospora_parallel':['cyclospora_threads_8'],'basis':['basis'],'gate':['gate'],'spline':[t['id'] for t in tasks if t['kind']=='spline']}
+    write_scripts(dest,groups)
+    return plan,groups
+
+
+def write_scripts(dest,groups):
+    q=shlex.quote;scripts=dest/'scripts'
     for kind,ids in groups.items():
-        lines=['#!/bin/bash','set -euo pipefail','ulimit -c 0','case "${SGE_TASK_ID:-1}" in']
-        lines+=['%d) task=%s;;'%(i,q(name)) for i,name in enumerate(ids,1)]
-        lines+=['*) exit 2;;','esac','exec > '+q(str(dest))+'/"${task}_shell.log" 2>&1','date -u','hostname','ulimit -a',
+        lines=['#!/bin/bash','set -euo pipefail','ulimit -c 0']
+        if len(ids)==1:lines+=['task='+q(ids[0])]
+        else:
+            lines+=['case "${SGE_TASK_ID:-undefined}" in']
+            lines+=['%d) task=%s;;'%(i,q(name)) for i,name in enumerate(ids,1)]
+            lines+=['*) echo "Invalid array task ID: ${SGE_TASK_ID:-unset}" >&2; exit 2;;','esac']
+        lines+=['exec > '+q(str(dest))+'/"${task}_shell.log" 2>&1','date -u','hostname','ulimit -a',
           'trap \'code=$?; printf "Shell exit status: %s\\n" "$code"\' EXIT','trap \'exit 140\' USR2',
           'python3 '+q(str(scripts/'run_next_phase_task.py'))+' '+q(str(dest))+' "$task"']
         (dest/(kind+'.sh')).write_text('\n'.join(lines)+'\n')
     (dest/'collect.sh').write_text('#!/bin/bash\nset -euo pipefail\nexec python3 '+q(str(scripts/'collect_next_phase_batch.py'))+' '+q(str(dest))+'\n')
-    return plan,groups
+
 
 
 def main():
@@ -102,8 +112,12 @@ def main():
     except (OSError,ValueError,KeyError) as e:p.error(str(e))
     print('Output: '+str(dest)+'\nSaved fits to sample: '+str(len(groups['sampling']))+'; gated spline fits: 12; separate Cyclospora diagnostic fits: 2',flush=True)
     if a.prepare_only:print('Unverified preparation only; no jobs submitted.');return
+    submit(dest,groups)
+
+
+def submit(dest,groups):
     jobs={}
-    for kind in ['sampling','definitions','cyclospora_serial','cyclospora_parallel','basis','gate','spline','collect']:
+    for kind in [k for k in ('sampling','definitions','cyclospora_serial','cyclospora_parallel','basis','gate','spline') if k in groups]+['collect']:
         cpus=8 if kind in ('spline','cyclospora_parallel') else 1 if kind in ('cyclospora_serial','collect') else 2
         resource='h_rt=24:00:00,h_rss=32768M,mem_free=32768M,h_vmem=64G' if kind in ('spline','cyclospora_parallel','cyclospora_serial','sampling') else 'h_rt=04:00:00,h_rss=16384M,mem_free=16384M,h_vmem=32G'
         cmd=['qsub','-terse','-V','-cwd','-S','/bin/bash','-N','foodnet_phase_'+kind,'-pe','smp',str(cpus),'-l',resource,'-j','y','-o',str(dest/(kind+'.log'))]
@@ -113,7 +127,7 @@ def main():
         value=subprocess.check_output(cmd+[str(dest/(kind+'.sh'))],universal_newlines=True).strip();match=re.match(r'^(\d+)(?:[.\s]|$)',value)
         if not match:raise ValueError('Unexpected scheduler response; inspect before retry: '+value)
         jobs[kind]=match.group(1);(dest/'submission.json').write_text(json.dumps(jobs,indent=2)+'\n');print(kind+' job: '+value,flush=True)
-    print('After all eight IDs appear you can disconnect.\nFinal log: '+str(dest/'collect.log')+'\nArchive: '+str(dest)+'.tar.gz')
+    print('After all '+str(len(jobs))+' IDs appear you can disconnect.\nFinal log: '+str(dest/'collect.log')+'\nArchive: '+str(dest)+'.tar.gz')
 
 
 if __name__=='__main__':main()

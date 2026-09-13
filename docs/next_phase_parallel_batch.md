@@ -77,3 +77,33 @@ internal county results and raw-code aggregates; it must not be committed public
 A failed or partial submission is recorded in `submission.json`; inspect that ledger
 before launching again to avoid duplicating successful submissions. The launcher
 never silently refits a missing saved checkpoint.
+
+## Non-array dispatch correction and targeted recovery
+
+The first cluster batch completed all 53 sampling tasks. Five single-task jobs
+produced no worker status, and all twelve spline tasks stopped at their prerequisite
+checks before fitting. The original dispatch used `${SGE_TASK_ID:-1}` for every job.
+SGE supplies the literal `undefined` for non-array jobs, so that expression does not
+fall back to 1 and the shell exits before worker logging. This behavior is documented
+in the [Grid Engine qsub manual](https://gridscheduler.sourceforge.net/htmlman/htmlman1/qsub.html).
+The archive pattern is consistent with that fault; it does not itself record the
+failed jobs' environment variables.
+
+Single-task jobs now receive an explicit task name; only arrays inspect the task
+index. An executed shell regression covers `undefined` and valid array indices.
+Recovery uses the original scientific worker snapshots, verifies the 53 completed
+sampling artifacts and inputs, copies their report directories, and submits only
+the other 17 tasks. It retains the basis/gate dependencies and never retries the
+sampling array. The original run remains intact. A submission claim prevents
+accidental duplicate recovery; inspect its destination ledger after an interrupted
+submission before attempting any further recovery.
+
+```bash
+git pull --ff-only personal feature/rinla-county && module load singularity && python3 scripts/recover_next_phase_batch.py
+```
+
+Wait for all **seven** recovery job IDs. The new directory and final archive use
+`next_phase_recovery_...`; the report combines reused sampling and new task results.
+Local tests verify dispatch, copied fingerprints, rejection of changed sampling
+outputs, unchanged model commands and omission of sampling submissions. No model
+formulas, priors or accepted state outputs are changed by this correction.
