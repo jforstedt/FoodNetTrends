@@ -28,7 +28,7 @@ stopifnot(sum(r$excluded$records)==1,max(r$cases$year)==2023)
 x$cxcidt <- 'CX+'
 stopifnot(max(prepare_analysis_inputs(x,p,p,'CAMPYLOBACTER')$years)==2023)
 for (path in c('LISTERIA','SHIGELLA','VIBRIO','YERSINIA','CYCLOSPORA')) {
-  x <- data.frame(year=2024:2025,state='CA',pathogen=path)
+  x <- data.frame(year=2024:2025,state='CA',pathogen=path,cste='YES')
   expect_error(prepare_analysis_inputs(x,p,p,path,parasite_end_year=2025),
                'reporting became optional')
   r <- prepare_analysis_inputs(x,p,p,path,parasite_end_year=2025,observation_years=2024L)
@@ -53,7 +53,7 @@ r <- prepare_analysis_inputs(x,co,co,'YERSINIA','historical')
 stopifnot(nrow(r$cases)==3,all(r$census$population==200))
 # Historical 2004-2019 scopes common to the paper/pilots retain all eligible years.
 for (path in c('SALMONELLA','STEC','CAMPYLOBACTER','CYCLOSPORA','LISTERIA','SHIGELLA','VIBRIO','YERSINIA')) {
-  x <- data.frame(year=2004:2019,state='CA',pathogen=path)
+  x <- data.frame(year=2004:2019,state='CA',pathogen=path,cste='YES')
   r <- prepare_analysis_inputs(x,p,p,path)
   stopifnot(identical(r$years,2004:2019),nrow(r$cases)==16,nrow(r$excluded)==0)
 }
@@ -64,7 +64,7 @@ expect_error(assert_baseline_available(c(2017,2018),2016,2018),'2016')
 expect_error(assert_baseline_available(c(2016,2018),2016,2018),'2017')
 expect_error(assert_baseline_available(integer(),2016,2018),'2016, 2017, 2018')
 expect_error(assert_baseline_available(2016:2018,2018,2016),'ordered pair')
-x <- data.frame(year=2023:2025,state='CA',pathogen='LISTERIA')
+x <- data.frame(year=2023:2025,state='CA',pathogen='LISTERIA',cste='YES')
 r <- prepare_analysis_inputs(x,p,p,'LISTERIA',analysis_end_year=2024L)
 stopifnot(identical(r$years,2023:2024),max(r$cases$year)==2024,
           max(r$census$year)==2024,sum(r$excluded$records)==1)
@@ -76,3 +76,19 @@ expect_error(prepare_analysis_inputs(x,p,p,'LISTERIA',analysis_end_year=2022),
 x$pathogen <- 'CAMPYLOBACTER'
 r <- prepare_analysis_inputs(x,p,p,'CAMPYLOBACTER',analysis_end_year=2024L)
 stopifnot(identical(r$years,2023L),max(r$cases$year)==2023)
+# Expanded coverage requires every statewide county, even if only one has cases.
+historical_codes <- c(1L,5L,13L,14L,31L,35L,59L)
+statewide_codes <- c(seq.int(1L,125L,2L),14L)
+make_co <- function(year,codes) data.frame(year=year,state='CO',stfip=8L,cofip=codes,
+ county=paste0('COUNTY',codes),population=1000)
+full <- rbind(make_co(2022L,historical_codes),make_co(2023L,statewide_codes))
+co_cases <- data.frame(year=2023L,state='CO',county='COUNTY1',siteid='CO',pathogen='SALMONELLA')
+r <- prepare_analysis_inputs(co_cases,full,full,'SALMONELLA',colorado_coverage='expanded')
+stopifnot(r$census$population==64000,nrow(r$cases)==1L)
+partial <- rbind(make_co(2022L,historical_codes),make_co(2023L,c(historical_codes,3L)))
+expect_error(prepare_analysis_inputs(co_cases,partial,partial,'SALMONELLA',colorado_coverage='expanded'),'all 64 county denominators')
+missing_broomfield <- full[!(full$year==2023L & full$cofip==14L),]
+expect_error(prepare_analysis_inputs(co_cases,missing_broomfield,missing_broomfield,'SALMONELLA',colorado_coverage='expanded'),'all 64 county denominators')
+wrong <- full;wrong$cofip[wrong$year==2023L & wrong$cofip==125L]<-127L
+expect_error(prepare_analysis_inputs(co_cases,wrong,wrong,'SALMONELLA',colorado_coverage='expanded'),'all 64 county denominators')
+cat('Exact expanded Colorado footprint, missing county and wrong identifier checks passed.\n')

@@ -17,7 +17,7 @@ def prepare(root,dest,data):
     shutil.copyfile(str(root/'analysis_configs/classification_rules.csv'),str(scripts/'classification_rules.csv'))
     shutil.copyfile(str(root/'scripts/collect_crypto_state_refit.py'),str(dest/'collect.py'))
     clean=root/'output/20260911_140750/preprocessed/clean_mmwr.csv'
-    command=['singularity','exec','--cleanenv','--bind','/scicomp',str(root/'foodnet.sif'),'Rscript','--vanilla',str(scripts/'trendy.R'),
+    command=['singularity','exec','--cleanenv','--env','OPENBLAS_NUM_THREADS=2,OMP_NUM_THREADS=2,MKL_NUM_THREADS=2','--bind','/scicomp',str(root/'foodnet.sif'),'Rscript','--vanilla',str(scripts/'trendy.R'),
        '--mmwrFile',str(data/'mmwr9625.sas7bdat'),'--censusFileB',str(data/'cen9625.sas7bdat'),
        '--censusFileP',str(data/'cen9625_para.sas7bdat'),'--preprocessed','TRUE','--cleanFile',str(clean),
        '--pathogen','CRYPTOSPORIDIUM','--subgroup','combined','--outDir',str(results),'--projID',dest.name,

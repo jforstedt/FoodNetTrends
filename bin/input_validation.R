@@ -73,6 +73,14 @@ prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
   # survive into a zero grid whose eligible years have already been restricted.
   record_exclusion(selected[!selected$year %in% years,,drop=FALSE], 'Outside selected observation years')
   selected <- selected[selected$year %in% years,,drop=FALSE]
+  # Enforce reportability even for a reused or externally preprocessed CSV.
+  if (pathogen == 'LISTERIA' && nrow(selected)) {
+    if (!'cste' %in% names(selected))
+      stop('LISTERIA requires the cste reportability column in selected preprocessed cases')
+    eligible <- !is.na(selected$cste) & selected$cste == 'YES'
+    record_exclusion(selected[!eligible,,drop=FALSE], 'Listeria not verified CSTE-reportable (requires YES)')
+    selected <- selected[eligible,,drop=FALSE]
+  }
   coverage <- data.frame(pathogen=pathogen, subgroup=subgroup,
     observation_start_year=min(years), observation_end_year=max(years),
     surveillance_start_year=scope_start, surveillance_end_year=scope_end,
@@ -107,9 +115,11 @@ prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
       ids <- co$cofip[co$year == y]
       if (colorado_coverage == 'historical' && y >= 2023 && !setequal(ids,historical))
         stop('Historical Colorado coverage requires the historical county population footprint; mismatch in ',y)
+      # Colorado statewide coverage contains 64 counties: odd codes 001-125
+      # plus Broomfield (014). Case presence cannot certify denominator coverage.
       if (colorado_coverage == 'expanded' && y >= 2023 &&
-          (!all(historical %in% ids) || length(unique(ids)) <= length(historical)))
-        stop('Expanded Colorado coverage requires expanded county denominators in ',y)
+          !setequal(ids, c(seq.int(1L,125L,2L),14L)))
+        stop('Expanded Colorado coverage requires all 64 county denominators in ',y)
     }
     # Name check catches cases outside the selected county footprint without relying on missing recent FIPS.
     key <- function(v) gsub('[^A-Z0-9]','',toupper(trimws(as.character(v))))

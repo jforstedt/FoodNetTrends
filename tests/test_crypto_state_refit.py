@@ -17,6 +17,7 @@ class StateRefitTest(unittest.TestCase):
    for flag,value in [('--pathogen','CRYPTOSPORIDIUM'),('--baseline_start','2015'),('--baseline_end','2017'),('--parasite_end_year','2017'),('--chains','6'),('--iterations','10001')]:self.assertEqual(c[c.index(flag)+1],value)
    self.assertEqual((dest/'scripts/functions.R').read_bytes(),(ROOT/'bin/functions.R').read_bytes())
    self.assertNotIn('nextflow',c)
+   self.assertEqual(c[c.index('--env')+1], 'OPENBLAS_NUM_THREADS=2,OMP_NUM_THREADS=2,MKL_NUM_THREADS=2')
    prefix=dest/'spline_results/CRYPTOSPORIDIUM_combined'
    for suffix in ('_IRCatch.csv','_IRSite.csv','_EstIRRCatch_2015_2017.csv'):Path(str(prefix)+suffix).write_text('year,value\n2015,1\n2016,1\n2017,1\n')
    for suffix in ('_analysis_settings.csv','_convergence_diagnostics.csv','_brm.Rds'):Path(str(prefix)+suffix).write_text('placeholder')

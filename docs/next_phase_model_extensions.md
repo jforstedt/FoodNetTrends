@@ -21,17 +21,37 @@ purposes; we will evaluate historical trends and future prediction separately.
 ## Gate before starting
 
 1. Review the current replacement archive: observation windows, baseline values,
-   reportability, population alignment, and sampler diagnostics.
+   reportability, population alignment, and sampler diagnostics. Successful
+   execution alone is insufficient: check table schemas, finite estimates, ordered
+   intervals, unique eligible state-time keys, reconciled totals, and readable
+   saved fits. Require regression tests for every supported input path, including
+   missing Listeria reportability and incomplete expanded county footprints.
 2. Record unresolved early-year geography and completeness questions. A candidate
    may proceed only on a verified subset; unresolved periods are not zero counts.
 3. Freeze reference data, case definitions, denominators, model code, and outputs.
-   Record which reviewed correction replaces each earlier fit.
+   Record which reviewed correction replaces each earlier fit. All workstreams
+   must consume one versioned, executable eligibility/exposure contract; do not
+   maintain separate hardcoded observation rules in each model launcher.
 4. Fix the scientific target for each experiment: reported infection incidence,
    diagnostic-category incidence, standardized estimates, or future observations.
    Agree on metrics and practical acceptance margins before examining test scores.
 
 The entry gate can be satisfied for one pathogen while another remains under
 review. Neither success nor failure transfers automatically across pathogens.
+
+## Numerical gates before new county forecasts
+
+Freeze temporal prior scaling and centering for each training origin. Appending
+unused future prediction rows must preserve earlier predictive distributions
+within predeclared numerical tolerance; resolve the current scaled-RW1 domain
+dependence before multi-horizon comparisons. This is a county-model requirement,
+not a reason to alter the published state spline.
+
+Calibrate joint posterior uncertainty for the actual sparse and dense county-time
+models, including the approximation used when skew correction is disabled. Use
+known-truth simulations and a small matched higher-accuracy or MCMC reference.
+Successful smoke tests, finite summaries, and CPO flags do not establish tail
+accuracy. Set tolerances using simulation uncertainty before real comparisons.
 
 ## Parallel workstreams
 
@@ -47,7 +67,10 @@ review. Neither success nor failure transfers automatically across pathogens.
 Audit culture, CIDT, confirmatory culture, method-unknown, dates, and available
 laboratory identifiers or adoption information. Determine whether categories
 represent mutually exclusive case outcomes or overlapping tests on the same case.
-One illness must not be counted twice. Report missingness by site and period.
+One illness must not be counted twice. Mutually exclusive categories, including
+unknown methods, must reconcile exactly to eligible case totals. Report missingness
+by site and period; do not confuse the mix of diagnoses among detected cases with
+the proportion of the population tested by each method.
 Confirm that numerator eligibility and any population denominator are meaningful
 for the chosen target; diagnostic categories do not automatically represent
 separate population groups.
@@ -62,18 +85,28 @@ its reference mix, assumptions, and uncertainty. Do not label it true incidence
 or a causal correction: observed testing categories alone may not distinguish
 changes in testing, care seeking, ascertainment, and underlying infections. If the
 available data do not identify that scenario, deliver stratified trends and a
-specific data requirement instead.
+specific data requirement instead. Specify what independent testing/adoption
+information identifies the proposed standardization weights, check support across
+sites and periods, and document sensitivity to ascertainment assumptions. Failure
+of that identifiability check stops standardized/counterfactual output; descriptive
+category-specific trends may still proceed.
 
 ### B. Seasonality and finer time resolution
 
 Inventory onset, specimen, and reporting dates. Choose and document the time axis;
 measure missing dates and reporting changes before aggregation. Use monthly data
-as the first candidate, with weekly resolution deferred unless supported.
+as the first candidate, with weekly resolution deferred unless supported. Freeze
+a date-precedence rule, missing-date handling, reporting-lag treatment, and data
+vintage before fitting. Do not silently substitute reporting date for onset date.
 
 Build the observation calendar before counting cases. Represent partial periods
 and exposure duration explicitly. Use population and time-at-risk consistently;
 annual population cannot simply become twelve full-year exposures. Do not infer
-zero incidence from a missing monthly report.
+zero incidence from a missing monthly report. State the rate unit, month-length
+and leap-year treatment, and population interpolation convention. Preserve total
+person-time and baseline definitions when aggregating to years. Recalibrate
+dispersion and prior assumptions for monthly counts; an annual negative-binomial
+shape parameter is not automatically transferable to monthly observations.
 
 Start with a shared cyclic seasonal effect plus the long-term trend. Constrain
 components so the seasonal effect does not absorb the long-term trend. Add
@@ -104,17 +137,33 @@ more flexible models must not win solely through in-sample fit.
 
 ### D. Shared forecast and comparison framework
 
+Define a common scoring target before comparisons: state versus county models
+can be compared on shared state-year outcomes after aggregating joint predictive
+draws; monthly candidates need the same treatment for annual comparisons. Do not
+compare scores calculated at different resolutions or sum interval endpoints.
+Specify whether weighting targets counties, people, or surveillance-wide totals.
+Coherent aggregation does not require different models to yield identical rates.
+
 Use rolling temporal origins with the same eligible training and evaluation
 observations for each paired comparison. Evaluate annual one-, two-, and
 three-year horizons where available; evaluate monthly short horizons separately
 when the seasonal workstream is ready. Do not extend evaluation beyond a
 pathogen's observation window or across an unresolved reporting break.
 
+Maintain an evaluation-use registry documenting which outcomes have already been
+inspected or used to choose candidates. More rolling origins or nested fitting
+cannot erase prior human selection. Reserve genuinely unexamined or prospective
+evidence where possible; otherwise keep conclusions explicitly exploratory.
+
 Fit transformations, model selection, diagnostic-mix scenarios, and prior tuning
 using training data only. Reserve final evaluation windows from repeated tuning;
 use inner temporal validation when selecting candidates. Specify how future
 population and diagnostic covariates would be known at prediction time. Tests
 using subsequently observed populations must be labelled conditional hindcasts.
+Keep an as-of ledger for outcomes and covariates, including release dates,
+revisions, reporting completeness, and unavailable future diagnostic covariates.
+Use training-selected scenarios or forecasts for unavailable covariates and
+propagate their uncertainty rather than substituting later observations.
 
 Report point accuracy, proper predictive scores, interval coverage and width,
 zero-count calibration, and aggregate totals. Distinguish uncertainty in expected
@@ -134,15 +183,26 @@ vintages; without those inputs, do not claim that capability.
   work in parallel. Build small synthetic examples before expensive real fits.
 - Run independent pathogen, candidate, and forecast-origin fits concurrently.
   There is no arbitrary three-task cap. Size CPU and memory requests from measured
-  pilot usage; avoid oversubscribing threads within each fit.
+  pilot usage, including difficult cases and memory headroom. Pass thread limits
+  explicitly into containers and verify the resulting environment there; ordinary
+  host exports can be removed by a clean container environment.
 - Preserve dependencies: an audit must pass before its fit, training-only tuning
   before final evaluation, and result review before dashboard promotion.
 - Begin with a small representative pathogen panel chosen for data completeness,
   diagnostic changes, seasonality, and sparsity. Scale successful experiments to
-  remaining pathogens; avoid an unbounded combination of every model option.
+  remaining pathogens; predeclare the complete candidate/origin/seed matrix and
+  total fit count. Bound unnecessary experiment combinations, not scientifically
+  independent concurrency. Report failed candidates rather than dropping them
+  from comparisons or selecting a lucky seed.
 - Snapshot commands, code, inputs, seeds, package versions, and resource requests.
   Reuse identical completed tasks and saved draws where valid. Changed inputs or
-  specifications require new fits. Retry only failed tasks with a diagnosed cause.
+  specifications require new fits. Define task identity from content hashes, not
+  directory names; verify input/container/source fingerprints at worker start.
+  Reuse only complete validated artifacts through an atomic completion record.
+  Workers must verify prerequisite success and matching identities even when the
+  scheduler dependency has completed. Maintain a complete task ledger and collect
+  partial failures into the report. Recovery must be idempotent and retry only
+  failed tasks with a diagnosed cause, preserving previous attempts.
 - Produce one consolidated internal review archive per experiment batch, keeping
   large fit checkpoints on the cluster. Container changes are built on the build
   host, then smoke-tested on compute nodes before array submission.
@@ -151,7 +211,10 @@ vintages; without those inputs, do not claim that capability.
 
 Deliver a concise per-pathogen comparison report, machine-readable metrics,
 provenance manifest, and candidate-status table. Classify each candidate as
-accepted for a stated use, exploratory, or unsupported by available data. A
+accepted for a stated use, exploratory, or unsupported by available data. Record
+execution status, artifact validity, and scientific acceptance separately, with
+explicit evidence for each gate and the frozen protocol defining acceptance
+metrics, margins, and dependency-aware uncertainty across overlapping origins. A
 stable sampler alone is insufficient. Require coherent inputs, synthetic checks,
 reasonable prior and posterior predictions, and performance within the predeclared
 practical margins for the intended use.

@@ -37,3 +37,27 @@ for (kind in c('bacterial','parasitic')) {
                       apply_catchment_filter(grid, example, kind)))
 }
 cat('Reportability and example catchment safeguards passed.\n')
+# Empty/custom optional rules cannot bypass the mandatory final filter.
+empty_rules <- rules[FALSE,]
+stopifnot(identical(filter_listeria_reportability(apply_data_rules(data,empty_rules))$id,c(1L,4L,5L)))
+permissive_rules <- rules; permissive_rules$condition <- "cste == 'NO'"
+stopifnot(!any(filter_listeria_reportability(apply_data_rules(data,permissive_rules))$pathogen=='LISTERIA'))
+must_fail(filter_listeria_reportability(missing),'requires the cste')
+stopifnot(identical(filter_listeria_reportability(other),other))
+# Reused clean files must pass the same eligibility requirement at model entry.
+source('bin/input_validation.R')
+pop <- data.frame(year=2019L,state='CA',population=10000)
+cases <- transform(data,year=2019L,state='CA')
+r <- prepare_analysis_inputs(cases,pop,pop,'LISTERIA')
+stopifnot(identical(r$cases$id,1L),sum(r$excluded$records)==2L,
+          all(grepl('CSTE-reportable',r$excluded$reason)))
+must_fail(prepare_analysis_inputs(cases[,setdiff(names(cases),'cste')],pop,pop,'LISTERIA'),'requires the cste')
+# No reportability field is needed for another pathogen or excluded Listeria years.
+stopifnot(nrow(prepare_analysis_inputs(cases[,setdiff(names(cases),'cste')],pop,pop,'SALMONELLA')$cases)==2)
+old <- cases[,setdiff(names(cases),'cste')];old$year<-2018L
+stopifnot(nrow(prepare_analysis_inputs(old,pop,pop,'LISTERIA',observation_years=2019L)$cases)==0)
+# Confirm the zero grid counts only the single eligible case.
+suppressPackageStartupMessages({library(dplyr);library(tidyr)})
+model_data <- PATH_ANALYSIS(r$cases,r$census,surveillance=data.frame(year=2019L,state='CA'))
+stopifnot(model_data$count==1L)
+cat('Mandatory custom-rule and preprocessed Listeria eligibility passed.\n')

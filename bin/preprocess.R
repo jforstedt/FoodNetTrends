@@ -220,6 +220,17 @@ require_listeria_reportability <- function(data) {
   invisible(data)
 }
 
+# Mandatory eligibility is independent of optional custom cleaning rules.
+filter_listeria_reportability <- function(data) {
+  require_listeria_reportability(data)
+  target <- !is.na(data$pathogen) & data$pathogen == 'LISTERIA'
+  if (!any(target)) return(data)
+  eligible <- !is.na(data$cste) & data$cste == 'YES'
+  removed <- sum(target & !eligible)
+  if (removed) cat('Mandatory CSTE eligibility: removed', removed, 'unverified Listeria records.\n')
+  data[!target | eligible, , drop = FALSE]
+}
+
 # Known pathogen name patterns for standardization
 get_pathogen_patterns <- function() {
   list(
@@ -482,6 +493,10 @@ if (!is.null(data_rules)) {
     }
   }
 }
+
+# Apply after optional rules too: an empty or permissive rules file cannot
+# admit nonreportable Listeria, including when reusing a custom rule set.
+mmwrdata <- filter_listeria_reportability(mmwrdata)
 
 # --- Derived Columns ---
 # CRYPTOSPORIDIUM and CYCLOSPORA are parasitic; all others bacterial

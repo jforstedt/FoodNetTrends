@@ -67,6 +67,9 @@ def prepare(root,dest,data,sources,clean=None):
     dest.mkdir(parents=True,exist_ok=False);scripts=dest/'scripts';scripts.mkdir();hashes={}
     for name in ('trendy.R','functions.R','classification.R','input_validation.R'):
         src=root/'bin'/name;shutil.copyfile(str(src),str(scripts/name));hashes[name]=hashlib.sha256(src.read_bytes()).hexdigest()
+    auditor=root/'scripts/audit_saved_state_fit.R'
+    shutil.copyfile(str(auditor),str(scripts/auditor.name))
+    hashes[auditor.name]=hashlib.sha256(auditor.read_bytes()).hexdigest()
     shutil.copyfile(str(root/'scripts/collect_surveillance_refits.py'),str(dest/'collect.py'))
     clean=clean or root/'output/20260911_140750/preprocessed/clean_mmwr.csv'
     q=shlex.quote
@@ -75,7 +78,7 @@ def prepare(root,dest,data,sources,clean=None):
         shutil.copyfile(job['rules'],str(work/'classification_rules.csv'))
         job['classification_sha256']=hashlib.sha256((work/'classification_rules.csv').read_bytes()).hexdigest()
         shutil.copyfile(str(Path(job['source'])/(job['prefix']+'_analysis_settings.csv')),str(work/'source_settings.csv'))
-        command=['singularity','exec','--cleanenv','--bind','/scicomp',str(root/'foodnet.sif'),'Rscript','--vanilla',str(scripts/'trendy.R')]
+        command=['singularity','exec','--cleanenv','--env','OPENBLAS_NUM_THREADS=2,OMP_NUM_THREADS=2,MKL_NUM_THREADS=2','--bind','/scicomp',str(root/'foodnet.sif'),'Rscript','--vanilla',str(scripts/'trendy.R')]
         options={'mmwrFile':str(data/'mmwr9625.sas7bdat'),'censusFileB':str(data/'cen9625.sas7bdat'),'censusFileP':str(data/'cen9625_para.sas7bdat'),
           'preprocessed':'TRUE','cleanFile':str(clean),'pathogen':s['pathogen'],'subgroup':s['subgroup'],'outDir':str(work/'spline_results'),'projID':dest.name,
           'cores':'12','chains':'6','iterations':'10001','adapt_delta':job['adapt_delta'],'max_treedepth':'15','seed':'123','backend':'rstan',
@@ -84,8 +87,20 @@ def prepare(root,dest,data,sources,clean=None):
             options[key]=s[key]
         if s['states'].strip(): options['states']=s['states']
         for key,value in options.items(): command+=['--'+key,str(value)]
-        job['command']=command;job['task']=work.name
-        (work/'run.sh').write_text('#!/bin/bash\nset -uo pipefail\nexport OPENBLAS_NUM_THREADS=2\nstatus=0\n'+' '.join(q(v) for v in command)+' > '+q(str(work/'fit.log'))+' 2>&1 || status=$?\nprintf "%s\\n" "$status" > '+q(str(work/'exit_status.txt'))+'\nexit "$status"\n')
+        audit_command=['singularity','exec','--cleanenv','--env','OPENBLAS_NUM_THREADS=2,OMP_NUM_THREADS=2,MKL_NUM_THREADS=2',
+                       '--bind','/scicomp',str(root/'foodnet.sif'),'Rscript','--vanilla',str(scripts/auditor.name),
+                       str(work),str(work/'saved_fit_validation.json')]
+        job['command']=command;job['audit_command']=audit_command;job['task']=work.name
+        script='#!/bin/bash\nset -uo pipefail\nstatus=0\n'
+        script+=' '.join(q(v) for v in command)+' > '+q(str(work/'fit.log'))+' 2>&1 || status=$?\n'
+        script+='printf "%s\\n" "$status" > '+q(str(work/'exit_status.txt'))+'\n'
+        script+='if [ "$status" -eq 0 ]; then\n  audit_status=0\n'
+        script+='  rm -f '+q(str(work/'saved_fit_validation.json'))+'\n'
+        script+='  '+' '.join(q(v) for v in audit_command)+' > '+q(str(work/'audit.log'))+' 2>&1 || audit_status=$?\n'
+        script+='  printf "%s\\n" "$audit_status" > '+q(str(work/'audit_exit_status.txt'))+'\n'
+        script+='else\n  printf "%s\\n" "NOT_RUN_FIT_FAILED" > '+q(str(work/'audit_exit_status.txt'))+'\nfi\n'
+        script+='exit "$status"\n'
+        (work/'run.sh').write_text(script)
     (dest/'manifest.json').write_text(json.dumps(dict(jobs=jobs,source_sha256=hashes,original_outputs_preserved=True,
        pending_review=['Early-year parasite catchment/exposure conventions','Statistical review before dashboard replacement'],
        sampler_tuning='Feature-source corrections use adapt_delta=0.999 for every selected fit, including any original feature fit previously run at 0.99; six chains, 10001 iterations and the state formula/priors are retained. Original combined-source fits use 0.99.',

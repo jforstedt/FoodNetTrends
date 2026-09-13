@@ -81,7 +81,7 @@ stopifnot(nrow(r$cases)==2,sum(r$excluded$records)==2,nrow(r$census)==4)
 stopifnot(inherits(try(prepare_analysis_inputs(cc,co,co,'SALMONELLA','expanded'),silent=TRUE),'try-error'))
 expanded <- rbind(co,transform(co[co$year>=2023 & co$cofip==1,],cofip=5,county='EXPANSION'))
 stopifnot(inherits(try(prepare_analysis_inputs(cc,expanded,co,'SALMONELLA'),silent=TRUE),'try-error'))
-stopifnot(nrow(prepare_analysis_inputs(cc,expanded,co,'SALMONELLA','expanded')$cases)==4)
+stopifnot(inherits(try(prepare_analysis_inputs(cc,expanded,co,'SALMONELLA','expanded'),silent=TRUE),'try-error'))
 cc$pathogen <- 'CYCLOSPORA'
 r <- prepare_analysis_inputs(cc,co,co[co$year<=2024,],'CYCLOSPORA')
 stopifnot(max(r$census$year)==2024,all(r$cases$year<=2024))
