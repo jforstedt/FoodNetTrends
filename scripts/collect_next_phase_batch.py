@@ -20,7 +20,7 @@ def numerical_log_flags(dest, task):
     path=Path(dest)/task['id']/'task.log'
     if not path.is_file():return 'LOG_UNAVAILABLE'
     log=path.read_text(errors='replace')
-    aborted=len(re.findall(r'vb[.]correction is aborted',log,re.I))
+    aborted=len(re.findall(r"vb[.]correction[\x27\x22]?\s+is\s+aborted",log,re.I))
     return 'VB_CORRECTION_ABORTED:%s; SAVED_FIT_REVIEW_REQUIRED'%aborted if aborted else 'NO_VB_ABORT_DETECTED_NOT_A_CONVERGENCE_CERTIFICATE'
 
 

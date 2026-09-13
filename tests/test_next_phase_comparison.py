@@ -11,7 +11,7 @@ class ComparisonTests(unittest.TestCase):
     def test_aborted_correction_cannot_be_silently_ranked(self):
         with tempfile.TemporaryDirectory() as tmp:
             d=Path(tmp);(d/'fit').mkdir()
-            (d/'fit/task.log').write_text('warning: vb.correction is aborted\nwarning: vb.correction is aborted\n')
+            (d/'fit/task.log').write_text("warning: vb.correction is aborted\nwarning: 'vb.correction' is aborted\n")
             self.assertIn('VB_CORRECTION_ABORTED:2',numerical_log_flags(d,dict(id='fit')))
             self.assertEqual(numerical_log_flags(d,dict(id='missing')),'LOG_UNAVAILABLE')
 

@@ -36,3 +36,18 @@ Spline plus seasonality remains a planned controlled comparison under the
 the numerical failure and pass appropriate checks for the revised candidate.
 Adding seasonality must not be used to conceal unresolved approximation errors.
 No new smoothing prior or model combination is selected by this inspection.
+
+## Inspection disposition
+
+The paired read-only inspection completed and its report hashes verified. Nominal
+optimizer success flags coexist with aborted approximation corrections in the
+problematic fit; success flags alone must not authorize use of its predictions.
+The fit remains excluded from promotion. The inspection supports numerical
+unreliability but does not isolate its precise mechanism or establish that splines
+are intrinsically unsuitable. Keep the combination experiment conditional on
+resolving that numerical issue.
+
+The warning detector now accepts INLA's quoted `'vb.correction'` message as well
+as an unquoted spelling, tested against the original logs. Intermediate NaN/Inf
+rescues without an aborted correction are not automatically classified as failed
+fits. Detailed parameter values remain in the private local review.
