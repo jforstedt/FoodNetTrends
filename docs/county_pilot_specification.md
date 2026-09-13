@@ -109,3 +109,8 @@ reconciliation, population audit, graph nodes/components/edges, source checksums
 and INPUT_AUDIT_PASS/REVIEW_REQUIRED/FAIL. The exact-count panel is kept separately
 on HPC as `county_panel_INTERNAL.rds` and is omitted from the archive. Reports are
 for internal review, not certified public-release tables.
+
+Execution update: [the implemented pilot and prior review](county_pilot_fit.md)
+revises the draft state-intercept SD from 2 to 1 following prior-predictive checks
+on the audited exposures. It adds a same-data IID county comparison. Both remain
+exploratory, and no dashboard publication is performed.

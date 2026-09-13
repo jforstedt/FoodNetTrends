@@ -206,3 +206,14 @@ The real Salmonella pilot audit completed successfully (job 17818284). Local
 components include a joined GA–TN component and two NY groups; there are no
 isolated counties. No input-audit rerun is indicated. Prior-predictive checks,
 real-data fitting, and statistical validation remain next.
+
+## Exploratory county fit implementation
+
+[The fit implementation and prior review](county_pilot_fit.md) now prepare spatial
+BYM2 and IID county variants for concurrent execution on the reviewed panel. Both
+include state intercepts and state-specific RW1 paths. Prior-predictive checks on
+the audited exposures motivated revising the new pilot's intercept SD from 2 to 1;
+that decision and remaining prior sensitivity are recorded explicitly. Actual
+synthetic fits, joint-draw aggregation/reference checks, input-change rejection,
+and launcher/collector tests passed locally. Real-data execution is pending.
+The launcher uses the existing repaired image; no container rebuild is required.
