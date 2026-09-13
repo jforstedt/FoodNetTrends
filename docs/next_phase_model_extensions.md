@@ -308,3 +308,9 @@ execution diagnostics and a numerically gated spline pilot. Its explicit candida
 priors and unequal posterior sample sizes are documented. These are exploratory
 comparisons; monthly seasonality, testing adjustment and model promotion still
 require the definition and validation gates above.
+
+The [public dictionary review](foodnet_dictionary_review.md) now resolves several
+event-date and testing-field meanings using the 2016/2020/2024 variable lists.
+It narrows the remaining requirements to extract derivations, date handling,
+identifier relationships and monthly observation coverage. Public schema matches
+are not authorization to recode the current extract or replace accepted results.
