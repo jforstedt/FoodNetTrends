@@ -1,0 +1,13 @@
+{
+  "adjacency_url": "https://www2.census.gov/geo/docs/reference/county_adjacency/county_adjacency2010.txt",
+  "gazetteer_url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2019_Gazetteer/2019_Gaz_counties_national.zip",
+  "gazetteer_sha256": "882b867703f73d325368bde097ec812cc5d60bfe250710693faa38d1edd573c1",
+  "source_sha256": "b6df774db9ad5b94c47036379e207dd4622e46ef22c01ca2b7603453a4901014",
+  "coverage_source": "https://www.cdc.gov/mmwr/volumes/73/wr/mm7326a1.htm",
+  "county_detail_source": "https://stacks.cdc.gov/view/cdc/152214/cdc_152214_DS1.pdf",
+  "source_label_conflicts": 6,
+  "graph_vintage": 2010,
+  "water_neighbors_included": true,
+  "cross_state_edges_included": true,
+  "status": "candidate pilot geography; not a model validation"
+}

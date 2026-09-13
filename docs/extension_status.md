@@ -185,3 +185,17 @@ and disconnected/isolated spatial graph checks. The dedicated container builder
 and SGE launcher are implemented and tested with stubs, but the SIF itself still
 requires a Singularity build/test. See [validation evidence](inla_smoke_validation.md).
 All work is isolated on `feature/rinla-county`; no real county fits were run.
+
+## First real-data county pilot preparation
+
+The repaired INLA image passed both synthetic fits through SGE (job 17818089,
+`inla_smoke_20260912_204019_204221`, exit 0). Installation and ordinary-user cluster
+execution are verified; real-data statistical validation remains separate.
+
+Prepared a Salmonella 2004–2019 historical-catchment audit and
+[proposed model specification](county_pilot_specification.md). The public roster
+contains 486 counties, checked against an independent Census gazetteer; candidate
+adjacency preserves components, isolated counties, and cross-state edges. The
+read-only launcher reuses the existing cleaned CSV and bacterial census file and
+writes one report archive. It does not fit the draft model. Local synthetic audit
+and launcher tests passed. Real-data audit execution and review remain pending.
