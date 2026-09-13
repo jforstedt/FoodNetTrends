@@ -178,3 +178,5 @@ running or interpreting that combination. Poor standalone performance does not
 by itself rule out a useful combination; numerical failure is a separate gate.
 
 Monthly preparation is implemented in [the preparation launcher](monthly_preparation.md), with a separate [public coverage evidence review](monthly_coverage_evidence.md). Completion creates a reconciled candidate inventory; it does not certify monthly observation eligibility or authorize automatic zero filling.
+
+The [synthetic monthly prototype](monthly_seasonal_prototype.md) implements the IID-county monthly RW1 reference and shared cyclic-seasonal addition for local engineering checks. It has no production entry point, does not implement the spline pair, and does not satisfy the monthly observation or production prior gates by itself.
