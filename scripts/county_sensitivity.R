@@ -48,7 +48,7 @@ sensitivity_prior <- function(obj,variant,out,county_sd=1,county_time=FALSE,n=10
 }
 
 
-sensitivity_fit <- function(obj,variant,county_sd=1,county_time=FALSE,threads=8L,predictor_link=NULL) {
+sensitivity_fit <- function(obj,variant,county_sd=1,county_time=FALSE,threads=8L,predictor_link=NULL,verbose=FALSE) {
   d<-obj$data;d$county_time<-d$time;f<-INLA::f
   graph<-INLA::inla.read.graph(Matrix::Matrix(diag(rowSums(obj$adj))-obj$adj,sparse=TRUE))
   if(variant=='spatial') {
@@ -66,7 +66,7 @@ sensitivity_fit <- function(obj,variant,county_sd=1,county_time=FALSE,threads=8L
   fit<-INLA::inla(formula,data=d,family='nbinomial',num.threads=paste0(threads,':1'),
     control.fixed=list(mean=log(20/1e5),prec=1),
     control.family=list(variant=0,hyper=list(size=list(prior='normal',param=c(log(12),1),initial=log(12)))),
-    control.predictor=list(compute=TRUE,link=predictor_link),control.compute=list(config=TRUE,waic=TRUE,cpo=TRUE))
+    verbose=verbose,control.predictor=list(compute=TRUE,link=predictor_link),control.compute=list(config=TRUE,waic=TRUE,cpo=TRUE))
   attr(fit,'sensitivity_formula')<-deparse(formula)
   fit
 }
@@ -82,7 +82,7 @@ fitted_report <- function(fit,d,out) {
   if(!is.null(attr(fit,'sensitivity_formula')))writeLines(attr(fit,'sensitivity_formula'),file.path(out,'formula.txt'))
 }
 
-run_sensitivity <- function(audit,dest,name,threads=8L,draws=2000L,expected_production=TRUE) {
+run_sensitivity <- function(audit,dest,name,threads=8L,draws=2000L,expected_production=TRUE,verbose=FALSE) {
   valid<-c('spatial_county_sd2','iid_county_sd2','spatial_county_time','iid_county_time')
   if(!name%in%valid)stop('Invalid sensitivity name')
   if(dir.exists(dest))stop('Existing destination; refusing to overwrite')
@@ -96,7 +96,7 @@ run_sensitivity <- function(audit,dest,name,threads=8L,draws=2000L,expected_prod
     time<-endsWith(name,'county_time');sd<-if(time)1 else 2
     write.csv(data.frame(name=name,variant=variant,county_sd_upper=sd,county_time=time,county_time_sd_upper=if(time).5 else NA),file.path(out,'specification.csv'),row.names=FALSE)
     sensitivity_prior(obj,variant,out,county_sd=sd,county_time=time)
-    fit<-sensitivity_fit(obj,variant,sd,time,threads)
+    fit<-sensitivity_fit(obj,variant,sd,time,threads,verbose=verbose)
     saveRDS(fit,file.path(dest,'fit_INTERNAL.rds'))
     fitted_report(fit,obj$data,out)
     saved_diagnostics(fit,obj$data,out,draws=draws)

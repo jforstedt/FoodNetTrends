@@ -82,7 +82,7 @@ forecast_diagnostics <- function(fit,d,out,cutoff=2016L,draws=4000L) {
   invisible(cell)
 }
 
-run_forecast <- function(audit,dest,name,threads=8L,draws=4000L,cutoff=2016L) {
+run_forecast <- function(audit,dest,name,threads=8L,draws=4000L,cutoff=2016L,expected_production=TRUE) {
   if(!name%in%c('spatial_baseline','iid_baseline','spatial_county_time','iid_county_time'))stop('Invalid model')
   if(dir.exists(dest))stop('Existing destination; refusing overwrite')
   out<-file.path(dest,'reports');dir.create(out,recursive=TRUE);writeLines('RUNNING',file.path(out,'status.txt'))
@@ -91,7 +91,7 @@ run_forecast <- function(audit,dest,name,threads=8L,draws=4000L,cutoff=2016L) {
     if(packageVersion('INLA')!=package_version('26.08.07'))stop('Expected pinned INLA')
     INLA::inla.setOption(num.threads=paste0(threads,':1'))
     panel<-file.path(audit,'county_panel_INTERNAL.rds');before<-tools::md5sum(panel)
-    obj<-validate_panel(audit);training<-obj;training$data<-training_panel(obj$data,cutoff)
+    obj<-validate_panel(audit,expected_production=expected_production);training<-obj;training$data<-training_panel(obj$data,cutoff)
     heldout<-obj$data$year>cutoff
     stopifnot(all(is.na(training$data$count[heldout])),identical(training$data$count[!heldout],as.numeric(obj$data$count[!heldout])))
     variant<-if(startsWith(name,'spatial'))'spatial' else 'iid';time<-endsWith(name,'county_time')
