@@ -18,6 +18,7 @@ if(mode=='reconcile' && length(a)==7) {
  checks<-read.csv(file.path(reconciliation,'input_checksums.csv'),stringsAsFactors=FALSE)
  if(anyNA(tools::md5sum(checks$file))||any(unname(tools::md5sum(checks$file))!=checks$md5))stop('Reconciled inputs changed')
  d<-readRDS(file.path(audit,'county_panel_INTERNAL.rds'))
- if(nrow(d)!=7776||length(unique(d$fips))!=486||!setequal(d$year,2004:2019)||sum(d$count)<=0)stop('Unexpected extension scope')
+ end_year<-if(pathogen=='CRYPTOSPORIDIUM')2017L else 2019L
+ if(nrow(d)!=486*(end_year-2004+1)||length(unique(d$fips))!=486||!setequal(d$year,2004:end_year)||sum(d$count)<=0)stop('Unexpected extension scope')
  run_sensitivity(audit,out,name,threads=8L,draws=2000L,expected_production=FALSE)
 } else stop('Invalid task arguments')

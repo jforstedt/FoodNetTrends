@@ -52,7 +52,7 @@ audit_pathogens <- function(clean,bacterial,parasitic,geography,rules_path,out) 
     }
     writeLines(c(status,rule_error,classification_error),file.path(dest,'status.txt'))
     summary[[pathogen]]<-data.frame(pathogen=pathogen,subgroup='combined',start_year=2004,
-      end_year=2019,census=kind,input_status=status,rule_issue=rule_error,
+      end_year=if(pathogen=='CRYPTOSPORIDIUM')2017 else 2019,census=kind,input_status=status,rule_issue=rule_error,
       classification_issue=classification_error,raw_reconciliation='PENDING',
       model_validation='NOT_PERFORMED')
     write(do.call(rbind,summary),file.path(out,'summary.csv'))

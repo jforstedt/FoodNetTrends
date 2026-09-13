@@ -3,6 +3,12 @@
 validate_panel <- function(audit, expected_production=TRUE) {
   if(readLines(file.path(audit,'reports/status.txt'))[1]!='INPUT_AUDIT_PASS')stop('Input audit has not passed')
   d<-readRDS(file.path(audit,'county_panel_INTERNAL.rds'))
+  flowpath<-file.path(audit,'reports/case_flow.csv')
+  if(file.exists(flowpath)) {
+    flow<-read.csv(flowpath,stringsAsFactors=FALSE)
+    if(any(grepl('CRYPTOSPORIDIUM',flow$stage,fixed=TRUE))&&any(d$year>2017))
+      stop('Stale Cryptosporidium panel includes unobserved years after 2017; rebuild inputs')
+  }
   nodes<-read.csv(file.path(audit,'reports/graph_nodes.csv'),colClasses='character')
   edges<-read.csv(file.path(audit,'reports/graph_edges.csv'),colClasses='character')
   pop<-read.csv(file.path(audit,'reports/population_audit.csv'),colClasses='character')

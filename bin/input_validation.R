@@ -26,6 +26,13 @@ prepare_analysis_inputs <- function(cases, bacterial, parasitic, pathogen,
     selected <- selected[selected$year <= parasite_end_year,,drop=FALSE]
     years <- years[years >= 1997 & years <= parasite_end_year]
   }
+  # FoodNet Cryptosporidium surveillance ended after 2017 (CDC FoodNet timeline).
+  # Census availability and the Cyclospora end-year option cannot extend observation.
+  if (pathogen == 'CRYPTOSPORIDIUM') {
+    record_exclusion(selected[selected$year > 2017,,drop=FALSE], 'After Cryptosporidium surveillance ended (2017)')
+    selected <- selected[selected$year <= 2017,,drop=FALSE]
+    years <- years[years <= 2017]
+  }
   if (!length(years)) stop('No analysis years remain after the parasite year limit')
   co_reference <- raw[raw$state == 'CO' & raw$year < 2023,,drop=FALSE]
   raw <- raw[raw$year %in% years,,drop=FALSE]

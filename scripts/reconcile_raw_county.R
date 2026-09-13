@@ -15,6 +15,7 @@ classify_removals <- function(d) {
     ifelse(d$county=='UNKNOWN','county_UNKNOWN',ifelse(d$siteid=='COEX'&d$year<2023,'site_COEX_pre2023','retained_candidate')))
 }
 raw_review <- function(rawpath,cleanpath,reportpath,audit,out,pathogen="SALMONELLA") {
+  end_year<-if(pathogen=='CRYPTOSPORIDIUM')2017L else 2019L
   if(dir.exists(out))stop('Refusing existing report directory')
   dir.create(out,recursive=TRUE)
   w<-function(d,n)write.csv(d,file.path(out,n),row.names=FALSE,na='')
@@ -41,13 +42,13 @@ raw_review <- function(rawpath,cleanpath,reportpath,audit,out,pathogen="SALMONEL
     w(mapping[mapping$original%in%aliases,],'recorded_salmonella_mappings.csv')
     raw$year<-suppressWarnings(as.integer(raw$year));clean$year<-suppressWarnings(as.integer(clean$year))
     if(anyNA(raw$year[as.character(raw$pathogen)%in%aliases])||anyNA(clean$year[norm(clean$pathogen)==pathogen]))stop('Invalid relevant year')
-    period<-!is.na(raw$year)&raw$year>=2004&raw$year<=2019
+    period<-!is.na(raw$year)&raw$year>=2004&raw$year<=end_year
     inventory<-raw[period,c('pathogen'),drop=FALSE];inventory$pathogen<-as.character(inventory$pathogen);inventory$pathogen[is.na(inventory$pathogen)]<-'<MISSING>'
     inventory<-aggregate_keys(inventory,'pathogen','records');inventory$mapped_to_salmonella<-inventory$pathogen%in%aliases
     inventory$present_in_recorded_mapping<-inventory$pathogen%in%mapping$original
     w(inventory,'raw_pathogen_inventory.csv')
     raw<-raw[period&as.character(raw$pathogen)%in%aliases,,drop=FALSE]
-    clean<-clean[!is.na(clean$year)&clean$year>=2004&clean$year<=2019&norm(clean$pathogen)==pathogen,,drop=FALSE]
+    clean<-clean[!is.na(clean$year)&clean$year>=2004&clean$year<=end_year&norm(clean$pathogen)==pathogen,,drop=FALSE]
     # Preserve source labels for default-rule matching; normalize only reconciliation keys.
     raw$county<-as.character(raw$county);raw$county[is.na(raw$county)]<-''
     raw$siteid<-as.character(raw$siteid);raw$siteid[is.na(raw$siteid)]<-''
@@ -69,7 +70,7 @@ raw_review <- function(rawpath,cleanpath,reportpath,audit,out,pathogen="SALMONEL
     panel<-readRDS(files[4]);selected<-clean[clean$travelint%in%c('NO','UNKNOWN','YES')&clean$cxcidt%in%c('CIDT+','CX+','PARASITIC')&!clean$county%in%c('UNKNOWN','OUT OF STATE','99997'),]
     counts<-aggregate_keys(selected,c('year','fips'),'clean_records')
     z<-merge(panel[c('year','fips','count')],counts,by=c('year','fips'),all=TRUE);z$clean_records[is.na(z$clean_records)]<-0L
-    if(nrow(z)!=7776||anyNA(z$count)||any(z$count!=z$clean_records))stop('Clean-to-panel reconciliation failed')
+    if(nrow(z)!=486*(end_year-2004+1)||anyNA(z$count)||any(z$count!=z$clean_records))stop('Clean-to-panel reconciliation failed')
     if(!identical(before,tools::md5sum(files)))stop('Inputs changed during review')
     w(data.frame(file=files,md5=unname(before),unchanged=TRUE),'input_checksums.csv')
     w(data.frame(raw_mapped_records=nrow(raw),clean_records=nrow(clean),candidate_retained=nrow(candidate),

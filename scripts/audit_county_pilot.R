@@ -1,8 +1,10 @@
 #!/usr/bin/env Rscript
 # Read-only preparation of the Salmonella 2004–2019 pilot. No model fitting.
 audit_pilot <- function(clean, census_path, geography, out, pathogen = "SALMONELLA") {
+  end_year<-if(pathogen=='CRYPTOSPORIDIUM')2017L else 2019L
   if(dir.exists(out))stop('Output directory already exists')
   dir.create(out,recursive=TRUE)
+  write.csv(data.frame(pathogen=pathogen,start_year=2004,end_year=end_year),file.path(out,'observation_scope.csv'),row.names=FALSE)
   writeLines('RUNNING',file.path(out,'status.txt'))
   write <- function(x,name)write.csv(x,file.path(out,name),row.names=FALSE,na='')
   norm <- function(x) {x<-toupper(trimws(as.character(x)));x[is.na(x)]<-'';x}
@@ -14,26 +16,26 @@ audit_pilot <- function(clean, census_path, geography, out, pathogen = "SALMONEL
   x <- x[x$pathogen==pathogen,]
   y<-suppressWarnings(as.integer(x$year))
   if(anyNA(y))stop(pathogen, ': records with invalid year')
-  x<-x[y>=2004&y<=2019,];x$year<-as.integer(x$year)
+  x<-x[y>=2004&y<=end_year,];x$year<-as.integer(x$year)
   x$state<-norm(x$state); x$county<-norm(x$county)
   categories<-as.data.frame(table(travel=norm(x$travelint),diagnosis=norm(x$cxcidt)))
   categories<-categories[categories$Freq>0,];categories$Freq<-ifelse(categories$Freq<5,'<5',as.character(categories$Freq))
   write(categories,'travel_diagnosis_inventory.csv')
   selected <- norm(x$travelint)%in%c('NO','UNKNOWN','YES') & norm(x$cxcidt)%in%c('CIDT+','CX+','PARASITIC') &
     !x$county%in%c('OUT OF STATE','UNKNOWN','99997')
-  flow<-data.frame(stage=c(paste(pathogen,'2004-2019'),'Excluded by existing travel/CIDT/county filters','Selected'),
+  flow<-data.frame(stage=c(paste0(pathogen,' 2004-',end_year),'Excluded by existing travel/CIDT/county filters','Selected'),
                    records=c(nrow(x),sum(!selected),sum(selected)))
   write(flow,'case_flow.csv');x<-x[selected,]
   if(!nrow(x))stop('No selected pilot cases')
   p<-as.data.frame(haven::read_sas(census_path));names(p)<-tolower(names(p))
   stopifnot(all(c('year','state','county','population','stfip','cofip')%in%names(p)))
-  p<-p[p$year>=2004&p$year<=2019,];p$state<-norm(p$state)
+  p<-p[p$year>=2004&p$year<=end_year,];p$state<-norm(p$state)
   p$fips<-ifelse(is.na(p$stfip)|is.na(p$cofip),'',sprintf('%02d%03d',as.integer(p$stfip),as.integer(p$cofip)))
   cty<-read.csv(file.path(geography,'counties.csv'),colClasses='character')
   edge<-read.csv(file.path(geography,'edges.csv'),colClasses='character')
   if(anyDuplicated(cty$fips)||any(!edge$fips_a%in%cty$fips)|any(!edge$fips_b%in%cty$fips))stop('Invalid graph identifiers')
   if(any(edge$fips_a>=edge$fips_b)||anyDuplicated(edge))stop('Invalid/duplicate edges')
-  grid<-merge(cty,data.frame(year=2004:2019),by=NULL)
+  grid<-merge(cty,data.frame(year=2004:end_year),by=NULL)
   key<-function(d)paste(d$year,d$fips,sep='|')
   ix<-match(key(grid),key(p));dup<-duplicated(key(p))|duplicated(key(p),fromLast=TRUE)
   grid$population<-p$population[ix]
