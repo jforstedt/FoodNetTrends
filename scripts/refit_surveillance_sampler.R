@@ -25,10 +25,19 @@ surveillance_sampler_plan <- function(sim,args) {
 }
 
 sampler_controls_match <- function(actual,expected) {
-  # Named lists can be reordered and integer controls stored as doubles by rstan.
-  if (!is.list(actual) || !is.list(expected) || anyDuplicated(names(actual)) ||
-      anyDuplicated(names(expected)) || !setequal(names(actual),names(expected))) return(FALSE)
-  all(vapply(names(expected),function(n) isTRUE(all.equal(actual[[n]],expected[[n]],
+  # RStan expands omitted controls in saved stan_args. Only known defaults may
+  # be added; explicit controls and nondefault/unknown additions remain strict.
+  # https://mc-stan.org/rstan/reference/stan.html
+  defaults<-list(adapt_engaged=TRUE,adapt_gamma=.05,adapt_init_buffer=75,
+    adapt_kappa=.75,adapt_t0=10,adapt_term_buffer=50,adapt_window=25,
+    metric='diag_e',stepsize=1,stepsize_jitter=0)
+  if (!is.list(actual) || !is.list(expected) || is.null(names(actual)) ||
+      is.null(names(expected)) || anyDuplicated(names(actual)) ||
+      anyDuplicated(names(expected)) || !all(names(expected) %in% names(actual))) return(FALSE)
+  extra<-setdiff(names(actual),names(expected))
+  if (!all(extra %in% names(defaults))) return(FALSE)
+  target<-c(expected,defaults[extra])
+  all(vapply(names(target),function(n) isTRUE(all.equal(actual[[n]],target[[n]],
     tolerance=0,check.attributes=TRUE)),logical(1)))
 }
 

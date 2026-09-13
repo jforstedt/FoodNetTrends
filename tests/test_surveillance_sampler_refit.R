@@ -41,3 +41,16 @@ stopifnot(sampler_controls_match(list(max_treedepth=15,adapt_delta=.9999),list(a
 stopifnot(!sampler_controls_match(list(max_treedepth=15,adapt_delta=.999),list(adapt_delta=.9999,max_treedepth=15L)))
 stopifnot(!sampler_controls_match(list(adapt_delta=.9999),list(adapt_delta=.9999,max_treedepth=15L)))
 cat('PASS reordered/equivalent controls accepted; changed/missing controls rejected\n')
+# Saved RStan control expansion reproduced from the failed recovery report.
+expanded<-list(adapt_delta=.9999,max_treedepth=15,adapt_engaged=TRUE,
+  adapt_gamma=.05,adapt_init_buffer=75,adapt_kappa=.75,adapt_t0=10,
+  adapt_term_buffer=50,adapt_window=25,metric='diag_e',stepsize=1,stepsize_jitter=0)
+requested<-list(adapt_delta=.9999,max_treedepth=15)
+stopifnot(sampler_controls_match(expanded,requested))
+for(n in setdiff(names(expanded),names(requested))) {
+  changed<-expanded
+  changed[[n]]<-if(is.logical(changed[[n]]))FALSE else if(is.character(changed[[n]]))'dense_e' else changed[[n]]+1
+  stopifnot(!sampler_controls_match(changed,requested))
+}
+stopifnot(!sampler_controls_match(c(expanded,list(unknown_control=1)),requested))
+cat('PASS RStan default expansion accepted; each changed default and unknown control rejected\n')
