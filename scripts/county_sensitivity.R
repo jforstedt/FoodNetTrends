@@ -82,7 +82,7 @@ fitted_report <- function(fit,d,out) {
   if(!is.null(attr(fit,'sensitivity_formula')))writeLines(attr(fit,'sensitivity_formula'),file.path(out,'formula.txt'))
 }
 
-run_sensitivity <- function(audit,dest,name,threads=8L,draws=2000L) {
+run_sensitivity <- function(audit,dest,name,threads=8L,draws=2000L,expected_production=TRUE) {
   valid<-c('spatial_county_sd2','iid_county_sd2','spatial_county_time','iid_county_time')
   if(!name%in%valid)stop('Invalid sensitivity name')
   if(dir.exists(dest))stop('Existing destination; refusing to overwrite')
@@ -92,7 +92,7 @@ run_sensitivity <- function(audit,dest,name,threads=8L,draws=2000L) {
     if(packageVersion('INLA')!=package_version('26.08.07'))stop('Expected pinned INLA')
     INLA::inla.setOption(num.threads=paste0(threads,':1'))
     panel<-file.path(audit,'county_panel_INTERNAL.rds');before<-tools::md5sum(panel)
-    obj<-validate_panel(audit);variant<-if(startsWith(name,'spatial'))'spatial' else 'iid'
+    obj<-validate_panel(audit,expected_production=expected_production);variant<-if(startsWith(name,'spatial'))'spatial' else 'iid'
     time<-endsWith(name,'county_time');sd<-if(time)1 else 2
     write.csv(data.frame(name=name,variant=variant,county_sd_upper=sd,county_time=time,county_time_sd_upper=if(time).5 else NA),file.path(out,'specification.csv'),row.names=FALSE)
     sensitivity_prior(obj,variant,out,county_sd=sd,county_time=time)

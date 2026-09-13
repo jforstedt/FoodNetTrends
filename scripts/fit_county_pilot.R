@@ -23,6 +23,11 @@ validate_panel <- function(audit, expected_production=TRUE) {
   if(any(!d$fips%in%nodes$fips)||any(d$state!=nodes$state[match(d$fips,nodes$fips)]))stop('State/FIPS mismatch')
   totals<-aggregate(d$count,d[c('state','year')],sum);names(totals)[3]<-'count'
   r<-merge(totals,rec,by=c('state','year'),all=TRUE)
+  if(!expected_production) {
+    # Aggregate case audits omit genuinely empty state-years; only zero totals may fill these.
+    empty<-!is.na(r$count)&r$count==0&is.na(r$selected_cases)&is.na(r$direct_matched_cases)
+    r$selected_cases[empty]<-0L;r$direct_matched_cases[empty]<-0L
+  }
   if(anyNA(r)||any(r$count!=r$selected_cases)||any(r$count!=r$direct_matched_cases))stop('Case totals differ from audit')
   if(expected_production && (nrow(d)!=7776||length(ids)!=486||!identical(years,2004:2019)||sum(d$count)!=122024))stop('Panel differs from reviewed pilot scope')
   if(anyNA(edges)||any(!edges$fips_a%in%ids)||any(!edges$fips_b%in%ids)||any(edges$fips_a>=edges$fips_b)||anyDuplicated(edges))stop('Invalid graph edges')

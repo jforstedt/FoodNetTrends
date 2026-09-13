@@ -13,4 +13,18 @@ out<-file.path(b,'reports');raw_review(raw,clean,report,audit,out)
 s<-read.csv(file.path(out,'summary.csv'));stopifnot(s$raw_mapped_records==122027,s$clean_records==122024,s$unexplained_cells==0)
 stopifnot(readLines(file.path(out,'status.txt'))[1]=='RAW_CLEAN_DEFAULT_HYPOTHESIS_MATCH')
 cat('PASS full SAS-to-CSV reconciliation with 3 known exclusions and 7776 panel cells\n')
+# Generic pathogen totals and Listeria CSTE exclusion must reconcile independently.
+x$pathogen<-'LISTERIA';x$cste<-'YES'
+write.csv(x,clean,row.names=FALSE)
+write.csv(data.frame(file=clean,md5=unname(tools::md5sum(clean))),file.path(audit,'reports/input_checksums.csv'),row.names=FALSE)
+write.csv(data.frame(original='LISTERIA',standardized='LISTERIA'),report,row.names=FALSE)
+extra<-x[1:2,];extra$cste<-c('NO',NA)
+haven::write_sas(rbind(x,extra),raw)
+out<-file.path(b,'listeria');raw_review(raw,clean,report,audit,out,'LISTERIA')
+stopifnot(readLines(file.path(out,'status.txt'))[1]=='RAW_CLEAN_DEFAULT_HYPOTHESIS_MATCH')
+# An extra eligible record cannot silently pass.
+extra$cste<-'YES';haven::write_sas(rbind(x,extra),raw)
+out<-file.path(b,'mismatch');raw_review(raw,clean,report,audit,out,'LISTERIA')
+stopifnot(readLines(file.path(out,'status.txt'))[1]=='RAW_CLEAN_REVIEW_REQUIRED')
+cat('PASS Listeria CSTE reconciliation and unexpected eligible-case gate\n')
 unlink(b,recursive=TRUE)

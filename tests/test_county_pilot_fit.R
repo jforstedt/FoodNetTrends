@@ -17,6 +17,14 @@ write.csv(r,file.path(audit,'reports/state_year_reconciliation.csv'),row.names=F
 f<-file.path(base,'source');writeLines('unchanged input',f)
 write.csv(data.frame(file=f,md5=unname(tools::md5sum(f))),file.path(audit,'reports/input_checksums.csv'),row.names=FALSE)
 validated<-validate_panel(audit,FALSE);stopifnot(identical(validated$adj,adj))
+# A missing audit aggregate is permissible only for a zero-count state/year.
+zero<-d;zero$count[zero$state=='AA'&zero$year==2004]<-0L
+saveRDS(zero,file.path(audit,'county_panel_INTERNAL.rds'))
+write.csv(r[!(r$state=='AA'&r$year==2004),],file.path(audit,'reports/state_year_reconciliation.csv'),row.names=FALSE)
+invisible(validate_panel(audit,FALSE))
+saveRDS(d,file.path(audit,'county_panel_INTERNAL.rds'))
+stopifnot(inherits(try(validate_panel(audit,FALSE),silent=TRUE),'try-error'))
+write.csv(r,file.path(audit,'reports/state_year_reconciliation.csv'),row.names=FALSE)
 for(bad in list(d[-1,],transform(d,population=population+1),transform(d,count=count+1))){
  saveRDS(bad,file.path(audit,'county_panel_INTERNAL.rds'))
  stopifnot(inherits(try(validate_panel(audit,FALSE),silent=TRUE),'try-error'))
