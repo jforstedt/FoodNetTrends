@@ -199,3 +199,10 @@ adjacency preserves components, isolated counties, and cross-state edges. The
 read-only launcher reuses the existing cleaned CSV and bacterial census file and
 writes one report archive. It does not fit the draft model. Local synthetic audit
 and launcher tests passed. Real-data audit execution and review remain pending.
+
+The real Salmonella pilot audit completed successfully (job 17818284). Local
+[archive review](county_pilot_audit_review.md) verified 122,024 reconciled cases,
+7,776 complete positive population rows, and 1,210 candidate graph edges. The ten
+components include a joined GA–TN component and two NY groups; there are no
+isolated counties. No input-audit rerun is indicated. Prior-predictive checks,
+real-data fitting, and statistical validation remain next.
