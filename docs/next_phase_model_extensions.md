@@ -299,3 +299,12 @@ historical dashboard and provide a clear path back to it.
 This phase does not promise causal testing adjustment, reliable long-range
 forecasts, universal pathogen performance, or automatic replacement of Daniel's
 model. Each extension must earn its intended use through the checks above.
+
+## Prepared parallel investigation batch
+
+The [parallel county batch](next_phase_parallel_batch.md) implements the immediate
+investigations: saved-posterior stability, raw definitions, controlled Cyclospora
+execution diagnostics and a numerically gated spline pilot. Its explicit candidate
+priors and unequal posterior sample sizes are documented. These are exploratory
+comparisons; monthly seasonality, testing adjustment and model promotion still
+require the definition and validation gates above.
