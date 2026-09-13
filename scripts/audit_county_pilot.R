@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # Read-only preparation of the Salmonella 2004–2019 pilot. No model fitting.
-audit_pilot <- function(clean, census_path, geography, out) {
+audit_pilot <- function(clean, census_path, geography, out, pathogen = "SALMONELLA") {
   if(dir.exists(out))stop('Output directory already exists')
   dir.create(out,recursive=TRUE)
   writeLines('RUNNING',file.path(out,'status.txt'))
@@ -11,9 +11,9 @@ audit_pilot <- function(clean, census_path, geography, out) {
                        col_select=tidyselect::all_of(required),show_col_types=FALSE)
   if(nrow(readr::problems(x)))stop('CSV parsing issues in pilot fields')
   x <- as.data.frame(x); x$pathogen<-norm(x$pathogen)
-  x <- x[x$pathogen=='SALMONELLA',]
+  x <- x[x$pathogen==pathogen,]
   y<-suppressWarnings(as.integer(x$year))
-  if(anyNA(y))stop('Salmonella records with invalid year')
+  if(anyNA(y))stop(pathogen, ': records with invalid year')
   x<-x[y>=2004&y<=2019,];x$year<-as.integer(x$year)
   x$state<-norm(x$state); x$county<-norm(x$county)
   categories<-as.data.frame(table(travel=norm(x$travelint),diagnosis=norm(x$cxcidt)))
@@ -21,7 +21,7 @@ audit_pilot <- function(clean, census_path, geography, out) {
   write(categories,'travel_diagnosis_inventory.csv')
   selected <- norm(x$travelint)%in%c('NO','UNKNOWN','YES') & norm(x$cxcidt)%in%c('CIDT+','CX+','PARASITIC') &
     !x$county%in%c('OUT OF STATE','UNKNOWN','99997')
-  flow<-data.frame(stage=c('Salmonella 2004-2019','Excluded by existing travel/CIDT/county filters','Selected'),
+  flow<-data.frame(stage=c(paste(pathogen,'2004-2019'),'Excluded by existing travel/CIDT/county filters','Selected'),
                    records=c(nrow(x),sum(!selected),sum(selected)))
   write(flow,'case_flow.csv');x<-x[selected,]
   if(!nrow(x))stop('No selected pilot cases')
@@ -39,6 +39,10 @@ audit_pilot <- function(clean, census_path, geography, out) {
   grid$population<-p$population[ix]
   grid$population_status<-ifelse(is.na(ix),'missing',ifelse(dup[ix],'duplicate',
     ifelse(p$state[ix]!=grid$state,'state_mismatch',ifelse(!is.finite(grid$population)|grid$population<=0,'nonpositive','ok'))))
+  if('entryyear'%in%names(p)) {
+    before_entry<-!is.na(ix)&!is.na(p$entryyear[ix])&grid$year<p$entryyear[ix]
+    grid$population_status[before_entry]<-'before_census_entryyear'
+  }
   write(grid,'population_audit.csv')
   # Match aggregate geographic tuples; no identifiers or individual rows exported.
   g<-x[c('year','state','county','fips')];g[]<-lapply(g,function(v){v<-as.character(v);v[is.na(v)]<-'';v})
