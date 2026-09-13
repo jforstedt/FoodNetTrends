@@ -176,3 +176,5 @@ spatial fit with its matched IID fit. Retain spline plus seasonality in the plan
 matrix, but require resolution or isolation of this numerical failure before
 running or interpreting that combination. Poor standalone performance does not
 by itself rule out a useful combination; numerical failure is a separate gate.
+
+Monthly preparation is implemented in [the preparation launcher](monthly_preparation.md), with a separate [public coverage evidence review](monthly_coverage_evidence.md). Completion creates a reconciled candidate inventory; it does not certify monthly observation eligibility or authorize automatic zero filling.
