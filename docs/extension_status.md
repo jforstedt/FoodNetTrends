@@ -217,3 +217,11 @@ that decision and remaining prior sensitivity are recorded explicitly. Actual
 synthetic fits, joint-draw aggregation/reference checks, input-change rejection,
 and launcher/collector tests passed locally. Real-data execution is pending.
 The launcher uses the existing repaired image; no container rebuild is required.
+
+Both exploratory county fits completed on HPC. The
+[first fit review](county_pilot_fit_review.md) confirms consistent aggregation,
+zero CPO computation failures, and lower spatial WAIC, but identifies a tendency
+to underproduce zero-case county/years and material county-level sensitivity to
+spatial pooling. State-level agreement does not resolve those issues. County
+results remain outside the dashboard pending localized saved-fit diagnostics,
+sensitivity analysis, and predictive validation.
