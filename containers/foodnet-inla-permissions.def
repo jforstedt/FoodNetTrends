@@ -1,0 +1,19 @@
+Bootstrap: localimage
+From: foodnet-inla.sif
+
+%labels
+    PermissionRepair "INLA executable access for ordinary cluster users"
+
+%files
+    scripts/inla_smoke.R /opt/foodnet-inla/inla_smoke.R
+
+%post
+    set -eu
+    chmod -R a+rX /usr/local/lib/R/site-library/INLA
+    chmod -R a+rX /opt/foodnet-inla
+
+%test
+    set -eu
+    smoke_dir=$(mktemp -d /tmp/foodnet-inla-repair-test.XXXXXX)
+    trap 'rm -rf "$smoke_dir"' EXIT
+    Rscript --vanilla /opt/foodnet-inla/inla_smoke.R "$smoke_dir" 2

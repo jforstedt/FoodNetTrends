@@ -33,6 +33,17 @@ check_summary <- function(x, label, expected_rows = NULL) {
       any(x$`0.5quant` > x$`0.975quant`)) stop("Invalid posterior summary: ", label)
 }
 
+check_inla_permissions <- function(bin_dir) {
+  paths <- file.path(bin_dir, c("inla.mkl.run", "inla.mkl"))
+  modes <- as.integer(file.info(paths)$mode)
+  # Check mode bits, not file.access(): root may execute a 0744 file, hiding
+  # the exact failure an ordinary cluster user would encounter.
+  if (anyNA(modes) || any(bitwAnd(modes, 73L) != 73L))
+    stop("INLA launcher/binary lacks execute permission for all users. ",
+         "Repair the image on its build host using --repair-permissions.")
+  invisible(TRUE)
+}
+
 run_smoke <- function(outdir, threads = 2L) {
   if (!is.finite(threads) || threads < 1L || threads > 64L || threads != as.integer(threads))
     stop("threads must be an integer from 1 to 64")
@@ -45,6 +56,7 @@ run_smoke <- function(outdir, threads = 2L) {
   started <- proc.time()[["elapsed"]]
   tryCatch({
     if (!requireNamespace("INLA", quietly = TRUE)) stop("INLA is not installed in this R environment")
+    check_inla_permissions(system.file("bin/linux/64bit", package = "INLA"))
     # Bound both numerical-library and INLA worker counts; no automatic downloads
     # or inla.binary.install() calls are allowed during the test.
     Sys.setenv(OPENBLAS_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OMP_NUM_THREADS = as.character(threads))

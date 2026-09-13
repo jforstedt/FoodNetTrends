@@ -81,3 +81,14 @@ No raw data files or existing fitted results are required.
 Coverage research continues independently: [current findings](county_coverage_research.md).
 Real-data county work still needs an explicit geographic/population scope,
 verified coverage, and statistical model validation.
+
+## Build-host success and compute-node permission failure
+
+The user built the image on `docker3`; both build and finished-image checks passed.
+The first SGE test (job 17817972) failed with permission denied executing
+`INLA/bin/linux/64bit/inla.mkl.run`. Inspection of the installed official package
+showed owner-only execute permissions (0744), which the root build masked.
+The recipe now normalizes INLA package permissions and the smoke check explicitly
+rejects missing group/other execute bits. A local-image repair avoids reinstalling
+dependencies; see [repair instructions](inla_container.md#repair-an-image-built-before-the-executable-permission-fix).
+Ordinary-user SGE execution is still pending after that repair.

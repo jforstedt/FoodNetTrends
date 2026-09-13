@@ -28,6 +28,9 @@ From: rocker/r-ver@sha256:62a0fbe9896e02bf19b408a39518da1fa1bca0d6fb85b4076c8d0f
     echo '9c0d94962b2be7e192ba8b5b9f7caa0be40574f79a0c18f8d861755dc55c5425  /tmp/foodnet-INLA.tar.gz' | sha256sum --check --strict
     R CMD INSTALL /tmp/foodnet-INLA.tar.gz
     rm /tmp/foodnet-INLA.tar.gz
+    # The distributed INLA binaries have owner-only execute bits (0744).
+    # The image must also work for an ordinary cluster user.
+    chmod -R a+rX /usr/local/lib/R/site-library/INLA
     Rscript --vanilla -e 'library(INLA); stopifnot(packageVersion("INLA") == package_version("26.08.07"), as.character(getRversion()) == "4.5.2"); write.csv(as.data.frame(installed.packages()[,c("Package","Version","Built")]), "/opt/foodnet-inla/installed_packages.csv", row.names=FALSE); capture.output(sessionInfo(), file="/opt/foodnet-inla/build_session.txt")'
     chmod -R a+rX /opt/foodnet-inla
 

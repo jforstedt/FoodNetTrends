@@ -15,3 +15,12 @@ tryCatch({run_smoke(d); stop('Should reject nonempty reports')}, error=function(
 stopifnot(readLines(file.path(d, 'status.txt')) == 'PASS')
 unlink(c(d, path), recursive = TRUE)
 cat('PASS deterministic synthetic fixture, disconnected/isolated graph, report overwrite guard\n')
+# Owner-only execution must fail even when a root build's file.access succeeds.
+b <- tempfile(); dir.create(b)
+files <- file.path(b, c('inla.mkl.run', 'inla.mkl')); file.create(files)
+Sys.chmod(files, '0744')
+tryCatch({check_inla_permissions(b); stop('Should reject owner-only execution')},
+         error=function(e) stopifnot(grepl('lacks execute permission', conditionMessage(e))))
+Sys.chmod(files, '0755'); check_inla_permissions(b)
+unlink(b, recursive=TRUE)
+cat('PASS owner-only executable permissions rejected; shared execution accepted\n')

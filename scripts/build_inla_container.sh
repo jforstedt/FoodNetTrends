@@ -6,11 +6,14 @@ repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 output="$repo_dir/foodnet-inla.sif"
 fakeroot=()
 output_set=false
+repair=false
+definition=containers/foodnet-inla.def
 for arg in "$@"; do
     case "$arg" in
         --fakeroot) fakeroot=(--fakeroot) ;;
+        --repair-permissions) repair=true ;;
         -h|--help)
-            echo "Usage: bash scripts/build_inla_container.sh [OUTPUT.sif] [--fakeroot]"
+            echo "Usage: bash scripts/build_inla_container.sh [OUTPUT.sif] [--fakeroot] [--repair-permissions]"
             echo "Set INLA_CONTAINER_RUNTIME to singularity or apptainer if needed."
             exit 0 ;;
         -*) echo "Unknown option: $arg" >&2; exit 2 ;;
@@ -19,6 +22,14 @@ for arg in "$@"; do
             output=$arg; output_set=true ;;
     esac
 done
+if "$repair"; then
+    definition=containers/foodnet-inla-permissions.def
+    if ! "$output_set"; then output="$repo_dir/foodnet-inla-fixed.sif"; fi
+    if [[ ! -f "$repo_dir/foodnet-inla.sif" ]]; then
+        echo "Permission repair requires the existing foodnet-inla.sif in the repository." >&2
+        exit 2
+    fi
+fi
 if [[ $(basename -- "$output") == foodnet.sif ]]; then
     echo "Refusing the production container name foodnet.sif; choose a separate INLA image." >&2
     exit 2
@@ -49,7 +60,7 @@ echo "Build log: $log"
 cd -- "$repo_dir"
 {
     "$runtime" --version
-    "$runtime" build "${fakeroot[@]}" "$stage/image.sif" containers/foodnet-inla.def
+    "$runtime" build "${fakeroot[@]}" "$stage/image.sif" "$definition"
     # Repeat the synthetic fit in the finished, read-only SIF.
     "$runtime" test --cleanenv "$stage/image.sif"
     # A hard link creates the destination atomically and refuses an existing path.

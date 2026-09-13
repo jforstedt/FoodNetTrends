@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test safe container publication without invoking a real container runtime."""
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -16,6 +17,7 @@ class ContainerBuilderTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="inla build test ")
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name)
+        self.builder = BUILDER
         self.runtime = self.directory / "fake runtime"
         self.runtime.write_text('''#!/usr/bin/env bash
 set -eu
@@ -24,6 +26,7 @@ case "$1" in
     build)
         shift
         if [[ "$1" == --fakeroot ]]; then shift; fi
+        if [[ -n "${EXPECTED_DEFINITION:-}" ]]; then [[ "$2" == "$EXPECTED_DEFINITION" ]]; fi
         printf 'fixture image' > "$1"
         exit "${FAKE_BUILD_STATUS:-0}" ;;
     test)
@@ -38,7 +41,7 @@ esac
 
     def run_builder(self, output, *args):
         return subprocess.run(
-            ["bash", str(BUILDER), str(output)] + list(args), env=self.env,
+            ["bash", str(self.builder), str(output)] + list(args), env=self.env,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
     def assert_cleaned(self):
@@ -81,6 +84,28 @@ esac
         result = self.run_builder(output)
         self.assertEqual(result.returncode, 2)
         self.assertFalse(output.exists())
+
+    def test_repair_reuses_existing_image_and_preserves_it(self):
+        fixture = self.directory / "checkout"
+        (fixture / "scripts").mkdir(parents=True)
+        self.builder = fixture / "scripts/build_inla_container.sh"
+        shutil.copyfile(str(BUILDER), str(self.builder))
+        base = fixture / "foodnet-inla.sif"
+        output = self.directory / "fixed.sif"
+        missing = self.run_builder(output, "--repair-permissions")
+        self.assertEqual(missing.returncode, 2)
+        self.assertFalse(output.exists())
+        base.write_text("original INLA image")
+        self.env["EXPECTED_DEFINITION"] = "containers/foodnet-inla-permissions.def"
+        result = self.run_builder(output, "--repair-permissions")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(base.read_text(), "original INLA image")
+        self.assertEqual(output.read_text(), "fixture image")
+        recipe = (ROOT / "containers/foodnet-inla-permissions.def").read_text()
+        self.assertIn("Bootstrap: localimage\nFrom: foodnet-inla.sif", recipe)
+        self.assertIn("chmod -R a+rX /usr/local/lib/R/site-library/INLA", recipe)
+        self.assertNotIn("install.packages", recipe)
+        self.assertNotIn("apt-get", recipe)
 
     def test_definition_smoke_uses_empty_report_directory(self):
         definition = (ROOT / "containers/foodnet-inla.def").read_text()

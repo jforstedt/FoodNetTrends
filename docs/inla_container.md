@@ -36,3 +36,36 @@ Sources: [Rocker versioned image behavior](https://rocker-project.org/images/ver
 [official Rocker tag metadata](https://hub.docker.com/v2/repositories/rocker/r-ver/tags/4.5.2),
 [INLA stable package metadata](https://inla.r-inla-download.org/R/stable/src/contrib/PACKAGES),
 [pinned INLA archive](https://inla.r-inla-download.org/R/stable/src/contrib/INLA_26.08.07.tar.gz).
+
+## Repair an image built before the executable-permission fix
+
+The official INLA archive installs `inla.mkl.run` and `inla.mkl` with mode 0744:
+only the owner can execute them. Root-owned files passed the root build test on
+`docker3`, but the SGE job could not execute the launcher as an ordinary user.
+The original definition normalized permissions only under `/opt/foodnet-inla`,
+not the INLA package directory. The definition now applies `chmod -R a+rX` to INLA
+as well. The smoke test checks execute bits explicitly, so root cannot hide this
+failure again.
+
+On **docker3 / the container-build host**, reuse the existing image:
+
+```bash
+bash scripts/build_inla_container.sh --repair-permissions
+```
+
+This derives `foodnet-inla-fixed.sif` from `foodnet-inla.sif`, corrects permissions,
+embeds the updated smoke check, and tests it. It does not download or reinstall
+packages and does not overwrite the original image. SIF unpacking/compression
+still takes time. The corrected image must be accessible on Rosalind.
+
+On **Rosalind**, submit the updated smoke test against the repaired image:
+
+```bash
+python3 scripts/launch_inla_smoke.py --container foodnet-inla-fixed.sif
+```
+
+The initial SGE smoke run `inla_smoke_20260912_202730_282889` failed before fitting.
+The earlier successful image hash was
+`5acfc326295d548fc07e704b78879a7f3dd4efd90ec46d941fdc271e1745f763`;
+that image's root-host success is not evidence of successful ordinary-user cluster
+execution. Keep the new image's checksum with the next result archive.
