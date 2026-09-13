@@ -223,9 +223,11 @@ Both exploratory county fits completed on HPC. The
 zero CPO computation failures, and lower spatial WAIC, but identifies a tendency
 to underproduce zero-case county/years and material county-level sensitivity to
 spatial pooling. State-level agreement does not resolve those issues. County
-results remain outside the dashboard pending localized saved-fit diagnostics,
+results remain outside the dashboard pending targeted county-history review,
 sensitivity analysis, and predictive validation.
 
 ### Saved county diagnostic follow-up
 
-The zero-count mismatch from the first county pilot now has a saved-fit diagnostic launcher: `scripts/launch_saved_county_diagnostics.py`. It uses the existing spatial/IID checkpoints and audited panel, produces grouped predictive checks and a paired pointwise comparison, and performs no refits. Local saved-fit tests passed; the real-data diagnostic archive remains pending. See [saved county diagnostics](saved_county_diagnostics.md). County dashboard integration remains pending statistical review.
+The zero-count mismatch from the first county pilot now has a saved-fit diagnostic launcher: `scripts/launch_saved_county_diagnostics.py`. It uses the existing spatial/IID checkpoints and audited panel, produces grouped predictive checks and a paired pointwise comparison, and performs no refits. Local tests and the real-data diagnostic job passed. The [diagnostic review](saved_county_diagnostics_review.md) locates the largest zero-count gaps in small counties and Minnesota, with marked spatial/IID sensitivity in Grant County, Oregon. Targeted county-history review is next; no further fits have been launched. See [saved county diagnostics](saved_county_diagnostics.md). County dashboard integration remains pending statistical review.
+
+A [county-history review job](county_history_review.md) now reconstructs the fitted county counts from the clean source and exports internal target/neighbor histories, category totals and plots. It performs no refits and cannot independently certify reporting completeness. Synthetic validation passed; the real-data history archive is pending.
