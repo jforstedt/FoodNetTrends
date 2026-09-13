@@ -37,3 +37,13 @@ The collector independently checks the full monthly domain, count/exposure recon
 Next, review the returned date issues and reconciliation together, document observation-calendar and exposure assumptions, and only then finalize the monthly seasonal comparison design. Numerically unreliable spline fits remain excluded; the later spline-plus-seasonality comparison remains conditional on resolving those issues.
 
 Local validation covers leap-year exposure, missing and conflicting dates, invalid month codes, annual mismatches, withheld modeled counts, launcher arguments, array dispatch, altered plans and partial collection. Actual SAS ingestion and audited production reconciliation require this cluster run.
+
+## Targeted month-definition follow-up
+
+`--pathogen SALMONELLA` submits only that pathogen's preparation and comparison, leaving the completed Campylobacter output in place:
+
+```bash
+git pull --ff-only personal feature/rinla-county && module load singularity && python3 scripts/launch_monthly_preparation.py --pathogen SALMONELLA
+```
+
+This reads the audited inputs again to produce the new `source_month_comparison.csv` in a fresh directory; it does not rerun preprocessing or models. The collector handles either one selected pathogen or both. Review the comparison under [the monthly analysis assumptions](monthly_analysis_assumptions.md). Original preparation archives use their original snapshotted validator; the updated validator requires the new comparison report for new jobs.

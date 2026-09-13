@@ -20,14 +20,15 @@ def sha(path):
         for b in iter(lambda:f.read(8388608),b''):h.update(b)
     return h.hexdigest()
 
-def prepare(root,dest,raw,clean,mapping,verified=True):
+def prepare(root,dest,raw,clean,mapping,verified=True,pathogens=('SALMONELLA','CAMPYLOBACTER')):
+    if not pathogens or len(set(pathogens))!=len(pathogens) or any(p not in ('SALMONELLA','CAMPYLOBACTER') for p in pathogens):raise ValueError('Invalid pathogen selection')
     root=Path(root).resolve();dest=Path(dest).resolve();sources=source_paths(root)
     container=root/'foodnet.sif';inputs={};tasks=[];cache={}
     if verified:
         for p in (raw,clean,mapping,container):inputs[str(Path(p).resolve())]=sha(p)
     dest.mkdir(parents=True,exist_ok=False);(dest/'scripts').mkdir()
     for n in FILES:shutil.copyfile(str(root/'scripts'/n),str(dest/'scripts'/n));inputs[str(dest/'scripts'/n)]=sha(dest/'scripts'/n)
-    for pathogen in ('SALMONELLA','CAMPYLOBACTER'):
+    for pathogen in pathogens:
         source=sources[pathogen]
         if verified:
             source=validate_source(pathogen,source,hash_cache=cache)
@@ -40,7 +41,9 @@ def prepare(root,dest,raw,clean,mapping,verified=True):
     plan=dict(verified=verified,inputs=inputs,tasks=tasks,models_fitted=False,scientific_readiness='REVIEW_REQUIRED',calendar_certified=False)
     (dest/'plan.json').write_text(json.dumps(plan,indent=2)+'\n');digest=sha(dest/'plan.json');q=shlex.quote
     worker='python3 '+q(str(dest/'scripts/launch_monthly_preparation.py'))
-    script='#!/bin/bash\nset -euo pipefail\ncase "${SGE_TASK_ID:-undefined}" in\n1) task=SALMONELLA;;\n2) task=CAMPYLOBACTER;;\n*) echo "Invalid task ID" >&2; exit 2;;\nesac\n'
+    script='#!/bin/bash\nset -euo pipefail\ncase "${SGE_TASK_ID:-undefined}" in\n'
+    for i,task in enumerate(tasks,1):script+=str(i)+') task='+task['id']+';;\n'
+    script+='*) echo "Invalid task ID" >&2; exit 2;;\nesac\n'
     script+='exec '+worker+' --worker '+q(str(dest))+' --task "$task" --expected-plan-sha '+digest+'\n'
     (dest/'run.sh').write_text(script)
     (dest/'collect.sh').write_text('#!/bin/bash\nset -euo pipefail\nexec '+worker+' --collect '+q(str(dest))+' --expected-plan-sha '+digest+'\n')
@@ -57,7 +60,7 @@ def validate_result(work):
     out=work/'result';reports=out
     status=(reports/'status.txt').read_text().splitlines()
     if not status or status[0]!='MONTHLY_PREPARATION_COMPLETE':raise ValueError('Monthly preparation incomplete')
-    required=('readiness.csv','state_month_records.csv','annual_reconciliation.csv','date_issues.csv','calendar_template.csv','input_checksums.csv')
+    required=('readiness.csv','state_month_records.csv','annual_reconciliation.csv','date_issues.csv','calendar_template.csv','input_checksums.csv','source_month_comparison.csv')
     for n in required:
         if not(reports/n).is_file() or not(reports/n).stat().st_size:raise ValueError('Missing report '+n)
     if not(out/'candidate_monthly_INTERNAL.rds').is_file():raise ValueError('Missing candidate checkpoint')
@@ -90,6 +93,12 @@ def validate_result(work):
         if number(r,'annual_records',True)!=number(r,'assigned_records',True)+number(r,'unassigned_records',True) or count!=number(r,'assigned_records',True):raise ValueError('Annual counts do not reconcile')
         population=number(r,'population')
         if population<=0 or not math.isclose(exposure,population,rel_tol=1e-10,abs_tol=1e-7) or not math.isclose(number(r,'candidate_person_years'),population,rel_tol=1e-10,abs_tol=1e-7):raise ValueError('Annual exposure does not reconcile')
+    comparison=read('source_month_comparison.csv')
+    if len(comparison)!=len(keys) or {key(r) for r in comparison}!=keys:raise ValueError('Invalid source-month comparison domain')
+    bykey={key(r):r for r in monthly}
+    for r in comparison:
+        specimen=number(r,'specimen_month_records',True);source=number(r,'source_month_records',True)
+        if specimen!=number(bykey[key(r)],'record_count',True) or float(r['difference'])!=source-specimen:raise ValueError('Invalid month comparison counts')
     return True
 
 def run(dest,name,expected):
@@ -118,7 +127,7 @@ def collect(dest,expected):
                 if not r.get('outputs') or any(sha(work/n)!=h for n,h in r['outputs'].items()):raise ValueError('Changed completed artifact')
         except (OSError,ValueError,KeyError) as e:r=dict(status='MISSING_OR_INVALID',reason=str(e))
         results.append(dict(task=task['id'],**{k:v for k,v in r.items() if k not in ('task','outputs')}))
-    summary=dict(tasks=results,issues=issues,execution_complete=len(results)==2 and all(r['status']=='COMPLETE' for r in results) and not issues,
+    summary=dict(tasks=results,issues=issues,execution_complete=len(results)==len(plan['tasks']) and len(results)>0 and all(r['status']=='COMPLETE' for r in results) and not issues,
       models_fitted=False,calendar_certified=False,scientific_readiness='REVIEW_REQUIRED')
     (dest/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
     files=[p for p in dest.rglob('*') if p.is_file() and not p.is_symlink() and p.suffix.lower() in ('.csv','.json','.txt','.log','.py','.r','.sh')]
@@ -131,7 +140,7 @@ def collect(dest,expected):
     return 0 if summary['execution_complete'] else 1
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--worker');p.add_argument('--collect');p.add_argument('--task');p.add_argument('--expected-plan-sha');p.add_argument('--prepare-only',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--worker');p.add_argument('--collect');p.add_argument('--task');p.add_argument('--expected-plan-sha');p.add_argument('--prepare-only',action='store_true');p.add_argument('--pathogen',choices=('SALMONELLA','CAMPYLOBACTER'));a=p.parse_args()
     if a.worker or a.collect:
         if not a.expected_plan_sha:p.error('Missing submitted plan hash')
         if a.worker:
@@ -144,12 +153,12 @@ def main():
             if not shutil.which(tool):p.error('Missing '+tool)
     dest=root/'output'/('monthly_preparation_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
     clean=root/'output/20260911_140750/preprocessed/clean_mmwr.csv';mapping=clean.with_name('clean_mmwr_preprocessing_report.csv')
-    try:prepare(root,dest,Path('/scicomp/groups-pure/EDEB/foodnet/trends/data/mmwr9625.sas7bdat'),clean,mapping,not a.prepare_only)
+    try:plan=prepare(root,dest,Path('/scicomp/groups-pure/EDEB/foodnet/trends/data/mmwr9625.sas7bdat'),clean,mapping,not a.prepare_only,pathogens=(a.pathogen,) if a.pathogen else ('SALMONELLA','CAMPYLOBACTER'))
     except (OSError,ValueError,KeyError) as e:p.error(str(e))
     print('Output: '+str(dest),flush=True)
     if a.prepare_only:print('Preparation only; no jobs submitted');return 0
     base=['qsub','-terse','-V','-cwd','-S','/bin/bash','-j','y']
-    job=subprocess.check_output(base+['-N','foodnet_monthly','-t','1-2','-pe','smp','2','-l','h_rt=02:00:00,h_rss=32768M,mem_free=32768M,h_vmem=64G','-o',str(dest/'array.log'),str(dest/'run.sh')],universal_newlines=True).strip()
+    job=subprocess.check_output(base+['-N','foodnet_monthly','-t','1-'+str(len(plan['tasks'])),'-pe','smp','2','-l','h_rt=02:00:00,h_rss=32768M,mem_free=32768M,h_vmem=64G','-o',str(dest/'array.log'),str(dest/'run.sh')],universal_newlines=True).strip()
     import re
     match=re.match(r'^(\d+)(?:[.\s]|$)',job)
     if not match:raise ValueError('Unexpected submission response; inspect queue before retry: '+job)

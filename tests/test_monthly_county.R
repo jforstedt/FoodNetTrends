@@ -22,4 +22,12 @@ stopifnot(inherits(try(monthly_inventory(z,p),silent=TRUE),'try-error'))
 p$count<-0L;z<-x[FALSE,]
 a<-monthly_inventory(z,p)
 stopifnot(all(a$grid$record_count==0),all(is.na(a$grid$modeled_count)))
+# One source-month disagreement moves one count between months, preserving the year.
+b<-data.frame(year=2004L,state='AA',fips='00001',population=366,count=1L)
+r<-data.frame(year=2004L,state='AA',fips='00001',dtspec=as.Date('2004-02-29'),month=3L)
+c<-monthly_inventory(r,b)$month_comparison
+stopifnot(c$difference[c$month==2]==-1,c$difference[c$month==3]==1,sum(c$difference)==0)
+r$month<-13L
+c<-monthly_inventory(r,b)$month_comparison
+stopifnot(sum(c$source_month_records)==0,sum(c$specimen_month_records)==1)
 cat('Monthly candidate inventory tests PASS\n')

@@ -35,8 +35,17 @@ monthly_inventory <- function(selected,panel) {
   annual$candidate_person_years<-as.numeric(sums[key(panel)])
   state_month<-aggregate(grid[c('record_count','candidate_person_years')],grid[c('state','year','month')],sum)
   state_month$observation_status<-'UNVERIFIED';state_month$modeled_count<-NA_integer_
+  # Compare two explicit month definitions without changing either source field.
+  source_ok<-!is.na(mo)&mo>=1&mo<=12
+  alternative<-selected[source_ok,,drop=FALSE];alternative$month<-mo[source_ok]
+  alternative_grid<-grid[c('state','fips','year','month')]
+  alternative_grid$source_month_records<-as.integer(table(factor(mkey(alternative),levels=mkey(grid))))
+  source_summary<-aggregate(alternative_grid['source_month_records'],alternative_grid[c('state','year','month')],sum)
+  month_comparison<-merge(state_month[c('state','year','month','record_count')],source_summary,by=c('state','year','month'),all=TRUE)
+  names(month_comparison)[names(month_comparison)=='record_count']<-'specimen_month_records'
+  month_comparison$difference<-month_comparison$source_month_records-month_comparison$specimen_month_records
   calendar<-unique(grid[c('state','year','month')]);calendar$observation_status<-'UNVERIFIED';calendar$observed_days<-NA_integer_;calendar$evidence_reference<-''
-  list(grid=grid,annual=annual,issues=issues,state_month=state_month,calendar=calendar)
+  list(grid=grid,annual=annual,issues=issues,state_month=state_month,calendar=calendar,month_comparison=month_comparison)
 }
 
 prepare_monthly_county <- function(rawpath,cleanpath,mappingpath,audit,out,pathogen) {
@@ -76,6 +85,7 @@ prepare_monthly_county <- function(rawpath,cleanpath,mappingpath,audit,out,patho
     if(any(clean_cmp$difference!=0))stop('Selected raw/clean county totals differ')
     result<-monthly_inventory(selected,panel)
     saveRDS(result$grid,file.path(out,'candidate_monthly_INTERNAL.rds'),version=2)
+    write.csv(result$month_comparison,file.path(out,'source_month_comparison.csv'),row.names=FALSE)
     write.csv(result$state_month,file.path(out,'state_month_records.csv'),row.names=FALSE,na='')
     annual<-aggregate(result$annual[c('annual_records','assigned_records','unassigned_records','population','candidate_person_years')],result$annual[c('state','year')],sum)
     write.csv(annual,file.path(out,'annual_reconciliation.csv'),row.names=FALSE)
