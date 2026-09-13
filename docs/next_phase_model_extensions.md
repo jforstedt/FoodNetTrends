@@ -56,6 +56,30 @@ known-truth simulations and a small matched higher-accuracy or MCMC reference.
 Successful smoke tests, finite summaries, and CPO flags do not establish tail
 accuracy. Set tolerances using simulation uncertainty before real comparisons.
 
+## Planned county spline comparator
+
+Requested for a later comparison on 13 September: evaluate a county extension
+that retains the published temporal spline approach alongside the exploratory
+RW1 county model. This is a planned candidate, not an authorized immediate refit
+or a replacement for the accepted state results.
+
+The paper already compared county-year and site-level versions, reporting similar
+catchment estimates with over an order of magnitude greater computation for the
+county-year versions. That comparison does not establish the performance of a
+new, independently varying spline for every county. Reconstruct the paper's exact
+county specification first; distinguish it from a proposed shared spline with
+regularized county departures.
+
+Keep case eligibility, exposures, years, outcomes, and forecast origins matched.
+Separate inference-engine differences from changes in temporal or spatial
+assumptions: document spline bases, penalties, priors and constraints, and test
+any INLA approximation against a manageable reference before claiming equivalence.
+Compare spline and RW1 temporal structures with spatial sharing held fixed, then
+compare spatial sharing within each temporal structure. Validate extrapolation,
+joint predictive uncertainty, and state-level aggregation as well as historical
+fit. Do not combine diagnostic-method, seasonal, and prior changes in the first
+comparison; their data audits can proceed independently.
+
 ## Parallel workstreams
 
 | Workstream | First deliverable | Candidate analysis | Required evidence before adoption |

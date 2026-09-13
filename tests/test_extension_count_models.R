@@ -1,0 +1,7 @@
+source('scripts/audit_extension_count_models.R')
+d<-expand.grid(fips=c('001','002'),year=2004:2006,stringsAsFactors=FALSE);d$state<-'AA';d$population<-100;d$count<-c(0,2,0,3,0,4)
+o<-list(data=d,ids=c('001','002'),adj=matrix(c(0,1,1,0),2))
+r<-audit_extension_count_models(o,'TEST');stopifnot(r$geography$components==1,r$county_history_support$all_zero_histories==1,nrow(r$state_year_count_support)==3)
+fails<-function(x)inherits(try(audit_extension_count_models(x,'TEST'),silent=TRUE),'try-error')
+x<-o;x$data<-x$data[-1,];stopifnot(fails(x));x<-o;x$data$population[1]<-0;stopifnot(fails(x));x<-o;x$data$count[1]<-NA;stopifnot(fails(x));x<-o;x$adj[1,2]<-0;stopifnot(fails(x))
+cat('PASS complete observed panel, sparse history, exposure and graph validation\n')
