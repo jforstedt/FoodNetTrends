@@ -167,3 +167,24 @@ and continue to disclose reuse of these development years.
 ### Predeclared broader combination follow-up
 
 The next batch tests whether a static BYM2 county effect changes the temporal and seasonal tradeoffs across all nine pathogens, including spline combinations that did not improve standalone forecasts. It retains every paired IID control and records spatial, temporal, seasonal and three-way contrasts. Six separate monthly diagnostic-classification preparations establish compatible denominators before fitting classification combinations. Inspection of all saved spline fits investigates extrapolation without changing fitted models. See broader_combination_batch.md; none of these steps automatically changes the accepted state model or promotes a county model.
+
+## Completed spatial structure review
+
+The complete spatial comparison and numerical recoveries remain development
+evidence. Static county smoothing has generally small or heterogeneous added
+value; it does not supply a universal improvement or repair the tested spline's
+extrapolation weaknesses. The strongest mean spatial contrast is concentrated
+by historical period and geography. A geographically concentrated gain warrants
+inspection of the existing errors, not a new state-specific fitting rule.
+
+The state/origin/horizon review retains all configurations and paired controls,
+examines score, bias, absolute error, coverage and width together, and records
+sensitivity to omitting an existing block. Omission summaries are not refits or
+independent holdouts. County residual structure requires saved county-level
+predictions and cannot be recovered from state aggregates. Remaining residual
+association alone does not authorize a dynamic spatial effect or demonstrate
+its predictive benefit. See [the validation plan](spatial_final_validation_plan.md).
+
+No accepted model or prior changes. Weak standalone components remain available
+for scientifically specified combination experiments; diagnostic-classification
+models remain a separate conditional outcome, not an incidence adjustment.
