@@ -1,0 +1,10 @@
+pathogen,review_status,archive_sha256,evidence_paths,scope_and_complete_blocks,pre_fit_rationale,score_and_component_evidence,annual_bias_coverage_width,tail_and_mc_stability,contrary_evidence,post_hoc_hypotheses,provisional_disposition,remaining_evidence,next_action,reviewer,review_date
+CAMPYLOBACTER,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+CRYPTOSPORIDIUM,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+CYCLOSPORA,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+LISTERIA,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+SALMONELLA,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+SHIGELLA,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+STEC,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+VIBRIO,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,
+YERSINIA,PENDING_CLUSTER_RESULTS,,,,,,,,,,,,,,

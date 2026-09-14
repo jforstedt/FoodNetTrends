@@ -32,13 +32,22 @@ tail_summary <- function(mu,predicted,truth,keys,stream) {
    lower95=q[,1],median_predictive=q[,2],upper95=q[,3],prob_above_twice_observed=rowMeans(predicted>2*truth))
 }
 
-audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=2000L,expected_trend_upper=.5,expected_temporal='rw1',adapter=NULL) {
+monthly_posterior_batch <- function(n,fit,indices,predictor,stream_seed,start,rng_protocol='legacy_v1') {
+ if(!rng_protocol%in%c('legacy_v1','explicit_config_v2'))stop('Unknown monthly sampling RNG protocol')
+ # INLA's seed controls latent Gaussian draws; selection of hyperparameter
+ # configurations also uses R's RNG. Keep the old path explicit for old reports.
+ if(rng_protocol=='explicit_config_v2')set.seed(as.integer(stream_seed+20000L+start))
+ INLA::inla.posterior.sample(n,fit,selection=setNames(list(indices),predictor),seed=as.integer(stream_seed+start),num.threads='1:1',skew.corr=FALSE)
+}
+
+audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=2000L,expected_trend_upper=.5,expected_temporal='rw1',adapter=NULL,rng_protocol='legacy_v1') {
  if(dir.exists(out))stop('Refusing existing diagnostic result');dir.create(out,recursive=TRUE)
  writeLines('RUNNING',file.path(out,'status.txt'))
  inputs<-c(fitpath,predpath);before<-tools::md5sum(inputs)
  tryCatch({
   if(packageVersion('INLA')!=package_version('26.08.07'))stop('Pinned INLA required')
   if(length(draws)!=1||!is.finite(draws)||draws<100||draws>4000||draws!=floor(draws)||length(seed)!=1||!is.finite(seed)||seed<1||seed>1e9||seed!=floor(seed))stop('Invalid sampling settings')
+  if(length(rng_protocol)!=1||is.na(rng_protocol)||!rng_protocol%in%c('legacy_v1','explicit_config_v2'))stop('Unknown monthly sampling RNG protocol')
   fit<-readRDS(fitpath);pred<-read.csv(predpath,colClasses=c(fips='character'))
   obj<-if(is.null(adapter))validate_monthly_saved(fit,pred,cutoff,seasonal,expected_trend_upper,expected_temporal) else adapter(fit,pred,cutoff,seasonal)
   ix<-obj$indices;truth<-obj$truth;d<-obj$data[ix,]
@@ -55,7 +64,7 @@ audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=
    stream_seed<-seed+(stream-1L)*50000L;moments<-NULL;total_mu<-total_y<-NULL;sizes<-numeric()
    for(start in seq.int(1L,draws,by=100L)) {
     n<-min(100L,draws-start+1L)
-    ss<-INLA::inla.posterior.sample(n,fit,selection=setNames(list(ix),predictor),seed=as.integer(stream_seed+start),num.threads='1:1',skew.corr=FALSE)
+    ss<-monthly_posterior_batch(n,fit,ix,predictor,stream_seed,start,rng_protocol)
     mu<-ld<-replicated<-matrix(NA_real_,length(ix),n);size<-numeric(n)
     # Separate predictive simulation RNG from INLA sampling seeds.
     set.seed(as.integer(stream_seed+10000L+start))
@@ -91,6 +100,7 @@ audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=
   if(!identical(before,tools::md5sum(inputs)))stop('Saved inputs changed during diagnostics')
   write.csv(data.frame(file=inputs,md5=unname(before)),file.path(out,'input_checksums.csv'),row.names=FALSE)
   write.csv(data.frame(cutoff=cutoff,seasonal=seasonal,streams=4,draws_per_stream=draws,base_seed=seed,refitted=FALSE,coverage_certified=FALSE),file.path(out,'settings.csv'),row.names=FALSE)
+  if(rng_protocol=='explicit_config_v2')write.csv(data.frame(protocol=rng_protocol,base_seed=seed,stream_stride=50000L,batch_size=100L,inla_seed_offset=0L,r_configuration_seed_offset=20000L,predictive_seed_offset=10000L,r_rng_kind=paste(RNGkind(),collapse=' / '),r_version=as.character(getRversion()),inla_version=as.character(packageVersion('INLA'))),file.path(out,'rng_protocol.csv'),row.names=FALSE)
   writeLines('SAVED_MONTHLY_DIAGNOSTICS_COMPLETE',file.path(out,'status.txt'))
  },error=function(e){writeLines(c('FAILED',conditionMessage(e)),file.path(out,'status.txt'));stop(e)})
 }

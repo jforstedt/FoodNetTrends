@@ -1,0 +1,17 @@
+source('scripts/inspect_monthly_spline_saved.R')
+tmp<-tempfile('saved-inspection-');dir.create(tmp)
+d<-expand.grid(month=1:12,year=2004:2007,state=c('AA','BB'),stringsAsFactors=FALSE)
+d$fips<-ifelse(d$state=='AA','00001','00002');d$state_id<-match(d$state,c('AA','BB'));d$count<-2;d$count[d$year>2004]<-NA;d$person_years<-100
+b<-list(years=2004*12+0:47,nonlinear=matrix(seq_len(192)/100,48,4),slope=seq_len(48)/12)
+f<-list(summary.random=list(state_slope=data.frame(ID=1:2,mean=c(.1,.2)),state_smooth=data.frame(ID=1:8,mean=seq_len(8)/10)))
+attr(f,'monthly_combination_data')<-d;attr(f,'monthly_combination_basis')<-b
+attr(f,'monthly_specification')<-list(version='monthly_training_phase_orthogonal_thin_plate_v1',temporal='spline',cutoff=2004*12+11,seasonal=FALSE,county_temporal=FALSE)
+fit<-file.path(tmp,'fit.rds');truth<-file.path(tmp,'truth.csv');saveRDS(f,fit)
+t<-d[d$year>2004,c('fips','state','year','month')];t$observed<-2;write.csv(t,truth,row.names=FALSE)
+before<-tools::md5sum(c(fit,truth));inspect_monthly_spline_saved(fit,truth,file.path(tmp,'result'),2004,FALSE)
+stopifnot(identical(before,tools::md5sum(c(fit,truth))))
+r<-read.csv(file.path(tmp,'result/state_month_components.csv'));stopifnot(nrow(r)==96,all(abs(r$mean_log_temporal-r$mean_log_linear-r$mean_log_nonlinear)<1e-12))
+err<-function(x)inherits(try(x,silent=TRUE),'try-error')
+t$fips[1]<-'99999';write.csv(t,truth,row.names=FALSE);stopifnot(err(inspect_monthly_spline_saved(fit,truth,file.path(tmp,'bad'),2004,FALSE)))
+t$fips[1]<-'00001';t$observed[1]<-.5;write.csv(t,truth,row.names=FALSE);stopifnot(err(inspect_monthly_spline_saved(fit,truth,file.path(tmp,'fraction'),2004,FALSE)))
+cat('SAVED SPLINE INSPECTION TEST PASS\n')

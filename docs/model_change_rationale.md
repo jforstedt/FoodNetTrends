@@ -135,3 +135,35 @@ and retained rather than tuned against the reviewed outcomes. This remains an
 exploratory candidate; no pathogen-specific default or state-model replacement
 is authorized by the protocol. Calibration, tail stability and paired component
 effects must accompany any later recommendation.
+
+## Completed spline combination review
+
+Reviewed 2026-09-14. All planned cells passed the portable review; reused
+control scores and calibration reproduce the preceding review. Detailed
+numerical evidence and the completed pathogen worksheets remain local in
+`output/monthly_spline_factorial_review_20260914_120120_LOCAL`.
+
+The current state-only spline specification is not supported as a general
+replacement. Seasonal improvements within a spline arm do not establish an
+advantage over both seasonal controls. Annual bias, missed intervals and
+extrapolation behavior limit adoption. This finding applies to the tested
+prior/model package, not all smoothing approaches or future combinations.
+
+| Scope | Provisional disposition and rationale |
+|---|---|
+| Campylobacter | Keep seasonal RW1 as an important comparator; spline's nonseasonal gains do not offset weaker seasonal comparisons and annual coverage. |
+| Cryptosporidium, Salmonella | Keep seasonal AR1 as a leading exploratory comparator; spline does not improve the full score/calibration tradeoff. |
+| Cyclospora | Preserve the temporal-seasonal combination hypothesis, but this spline does not resolve annual underprediction or outperform seasonal AR1 consistently. |
+| Listeria | No added spline complexity justified by the current comparison; score losses and annual overprediction argue for retaining simpler controls. |
+| Shigella | Do not promote either spline arm. Severe overprediction appears in medians as well as means; inspect saved temporal contributions and training trajectories before proposing another extrapolation specification. Its cause is not established from portable reports. |
+| STEC | Retain evidence of nonseasonal gains and a seasonal uncertainty tradeoff; mixed comparisons against seasonal RW1 and weaker coverage prevent a replacement recommendation. |
+| Vibrio, Yersinia | No practical replacement preference established; retain unresolved calibration and component evidence rather than force a winner. |
+
+No default or accepted state-model change follows. No blanket refit is needed.
+Any targeted saved-fit diagnostic or new specification must preserve the
+original outputs, distinguish simulation variability from model inadequacy,
+and continue to disclose reuse of these development years.
+
+### Predeclared broader combination follow-up
+
+The next batch tests whether a static BYM2 county effect changes the temporal and seasonal tradeoffs across all nine pathogens, including spline combinations that did not improve standalone forecasts. It retains every paired IID control and records spatial, temporal, seasonal and three-way contrasts. Six separate monthly diagnostic-classification preparations establish compatible denominators before fitting classification combinations. Inspection of all saved spline fits investigates extrapolation without changing fitted models. See broader_combination_batch.md; none of these steps automatically changes the accepted state model or promotes a county model.

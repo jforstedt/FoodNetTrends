@@ -30,10 +30,10 @@ validate_monthly_combination_basis <- function(basis,serial,cutoff) {
 }
 
 fit_monthly_combination <- function(d,cutoff,temporal='rw1',seasonal=TRUE,threads=4L,
-  coverage='SYNTHETIC_COMPLETE',basis=NULL) {
+  coverage='SYNTHETIC_COMPLETE',basis=NULL,area_effect=NULL) {
   if(length(temporal)!=1||!temporal%in%c('rw1','spline')||length(seasonal)!=1||is.na(seasonal)||!is.logical(seasonal)||
      length(threads)!=1||!is.finite(threads)||threads<1||threads!=floor(threads))stop('Invalid combination options')
-  if(temporal=='rw1')return(fit_monthly_model(d,cutoff,seasonal=seasonal,threads=threads,coverage=coverage,rate_center=.0002))
+  if(temporal=='rw1')return(fit_monthly_model(d,cutoff,seasonal=seasonal,threads=threads,coverage=coverage,rate_center=.0002,area_effect=area_effect))
   obj<-monthly_model_data(d,cutoff,coverage);d<-obj$data;spec<-obj$spec
   serial<-12*d$year+d$month-1L
   if(is.null(basis))basis<-monthly_combination_basis(serial,cutoff)
@@ -58,6 +58,7 @@ fit_monthly_combination <- function(d,cutoff,temporal='rw1',seasonal=TRUE,thread
   seasonal_prior<-list(prec=list(prior='pc.prec',param=c(.5/sqrt(cycle$scale),.01)))
   if(seasonal)formula<-update(formula,.~.+f(season,model='rw1',n=12,cyclic=TRUE,constr=FALSE,
     scale.model=FALSE,extraconstr=list(A=matrix(1/12,1,12),e=0),rankdef=1,hyper=seasonal_prior))
+  if(!is.null(area_effect))formula<-area_effect(formula,d)
   fit<-INLA::inla(formula,data=INLA::inla.stack.data(stack),family='nbinomial',E=d$person_years,
     num.threads=paste0(threads,':1'),control.fixed=list(mean=log(.0002),prec=1),
     control.family=list(variant=0,hyper=list(size=list(prior='normal',param=c(log(20),1),initial=log(20)))),

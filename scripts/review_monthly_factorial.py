@@ -134,9 +134,12 @@ def matrix():
     return result
 
 
-def validate(report):
+def validate(report, protocol=None):
+    config = protocol or {}
+    expected = config.get("matrix", matrix)()
+    total, new, reused = config.get("counts", (108, 48, 60))
     plan, summary = report.json('plan.json'), report.json('summary.json')
-    if plan.get('version') != 'monthly_factorial_v1' or plan.get('verified') is not True:
+    if plan.get('version') != config.get('version', 'monthly_factorial_v1') or plan.get('verified') is not True:
         raise ValueError('Unexpected or unverified plan')
     for obj in (plan, summary):
         for flag in ('accepted', 'independent_validation', 'cpo_ranking'):
@@ -146,7 +149,7 @@ def validate(report):
         raise ValueError('Unsupported coverage claim')
     # The manifest may have been generated after a source artifact changed.
     # Recheck earlier plan bindings for snapshots that travel in this archive.
-    suffix = '/scripts/launch_monthly_factorial.py'
+    suffix = '/scripts/' + config.get('launcher', 'launch_monthly_factorial.py')
     roots = [p[:-len(suffix)] for p in plan.get('inputs', {}) if p.endswith(suffix)]
     if len(roots) != 1:
         raise ValueError('Cannot identify bound snapshot root')
@@ -156,27 +159,26 @@ def validate(report):
             local = safe_name(path[len(prefix):])
             if local not in report.files or hashlib.sha256(report.read(local)).hexdigest() != digest:
                 raise ValueError('Changed plan-bound snapshot: ' + local)
-    expected = matrix()
     tasks = plan['tasks'] + plan['references']
-    if len(tasks) != 108 or {t['id'] for t in tasks} != set(expected):
-        raise ValueError('Plan is not the frozen 108-cell matrix')
+    if len(tasks) != total or {t['id'] for t in tasks} != set(expected):
+        raise ValueError('Plan is not the frozen %d-cell matrix' % total)
     for t in tasks:
         if any(t.get(k) != v for k, v in expected[t['id']].items()):
             raise ValueError('Task specification mismatch: ' + t['id'])
         if t['reused'] != (t in plan['references']):
             raise ValueError('Incorrect new/reference allocation')
-    if (plan.get('new_fits'), plan.get('reused_fits'), plan.get('total_cells')) != (48, 60, 108):
+    if (plan.get('new_fits'), plan.get('reused_fits'), plan.get('total_cells')) != (new, reused, total):
         raise ValueError('Wrong plan counts')
     records = summary['tasks']
-    if len(records) != 108 or {r['task'] for r in records} != set(expected):
-        raise ValueError('Summary must identify all 108 cells, including missing cells')
+    if len(records) != total or {r['task'] for r in records} != set(expected):
+        raise ValueError('Summary must identify all %d cells, including missing cells' % total)
     complete = set()
     for r in records:
         if r['reused'] is not expected[r['task']]['reused'] or r['status'] not in ('COMPLETE', 'FAILED_OR_MISSING'):
             raise ValueError('Invalid summary task label')
         if r['status'] == 'COMPLETE':
             complete.add(r['task'])
-    if (summary.get('complete'), summary.get('expected'), summary.get('new_fits'), summary.get('reused_fits')) != (len(complete), 108, 48, 60):
+    if (summary.get('complete'), summary.get('expected'), summary.get('new_fits'), summary.get('reused_fits')) != (len(complete), total, new, reused):
         raise ValueError('Summary completeness/count mismatch')
     issues = summary.get('issues')
     if not isinstance(issues, list) or not all(isinstance(x, str) for x in issues):
@@ -311,10 +313,11 @@ def recompute(scores, excluded):
     return site, equal
 
 
-def compare_published(actual, reported, site):
+def compare_published(actual, reported, site, metrics=METRICS, extra_keys=()):
     keys = ('pathogen', 'cutoff', 'state', 'year', 'stream') if site else ('pathogen', 'cutoff', 'year', 'stream')
+    keys = extra_keys + keys
     def key(r):
-        return tuple(r[k] if k in ('pathogen', 'state') else integer(r[k]) for k in keys)
+        return tuple(r[k] if k in ('pathogen', 'state') + extra_keys else integer(r[k]) for k in keys)
     published = {key(r): r for r in reported}
     if len(published) != len(reported) or set(published) != {key(r) for r in actual}:
         raise ValueError('Published contrast domain differs from recomputation')
@@ -322,7 +325,7 @@ def compare_published(actual, reported, site):
         source = published[key(r)]
         if not site and integer(source['sites']) != 10:
             raise ValueError('Published equal-site denominator differs')
-        for m in METRICS:
+        for m in metrics:
             if not math.isclose(number(source[m]), r[m], rel_tol=1e-9, abs_tol=1e-10):
                 raise ValueError('Published contrast differs from recomputation: ' + m)
 
@@ -380,25 +383,31 @@ def figures(out, contrasts, calibration):
         plt.close(fig)
 
 
-def review(source, destination, plots=True):
+def review(source, destination, plots=True, protocol=None):
+    config = protocol or {}
+    metrics = config.get("metrics", METRICS)
+    extra_keys = config.get("extra_keys", ())
+    total = config.get("counts", (108, 48, 60))[0]
     report = Report(source)
     try:
-        plan, summary, scores, tails, invalid, blocked, complete = validate(report)
+        plan, summary, scores, tails, invalid, blocked, complete = validate(report, protocol)
+        if config.get("validate_extra"):
+            config["validate_extra"](report, plan, summary)
         if blocked or invalid:
             site, equal = [], []
         else:
-            site, equal = recompute(scores, invalid)
-            compare_published(site, report.rows('factorial_site_contrasts.csv'), True)
-            compare_published(equal, report.rows('factorial_equal_site_contrasts.csv'), False)
+            site, equal = config.get("recompute", recompute)(scores, invalid)
+            compare_published(site, report.rows(config.get('site_file', 'factorial_site_contrasts.csv')), True, metrics, extra_keys)
+            compare_published(equal, report.rows(config.get('equal_file', 'factorial_equal_site_contrasts.csv')), False, metrics, extra_keys)
         out = Path(destination)
         out.mkdir(parents=True, exist_ok=False)
         pooled = []
         for r in equal:
             if r['stream'] != 0:
                 continue
-            group = [x for x in equal if (x['pathogen'], x['cutoff'], x['year']) == (r['pathogen'], r['cutoff'], r['year']) and x['stream'] != 0]
+            group = [x for x in equal if (x['pathogen'], x['cutoff'], x['year']) == (r['pathogen'], r['cutoff'], r['year']) and x['stream'] != 0 and all(x[k] == r[k] for k in extra_keys)]
             z = dict(r, horizon=r['year']-r['cutoff'])
-            for m in METRICS:
+            for m in metrics:
                 z[m+'_stream_min'] = min(x[m] for x in group)
                 z[m+'_stream_max'] = max(x[m] for x in group)
             pooled.append(z)
@@ -421,7 +430,7 @@ def review(source, destination, plots=True):
         for r in tails:
             if r['stream'] != 0:
                 continue
-            z = {k: r[k] for k in ('task', 'pathogen', 'cutoff', 'temporal', 'seasonal', 'reused', 'state', 'year', 'observed', 'mean_expected', 'lower95', 'upper95', 'top_one_percent_mean_share', 'prob_above_twice_observed')}
+            z = {k: r[k] for k in ('task', 'pathogen', 'cutoff', 'temporal', 'seasonal', 'reused', 'state', 'year', 'observed', 'mean_expected', 'median_expected', 'p975_expected', 'max_expected', 'median_predictive', 'lower95', 'upper95', 'top_one_percent_mean_share', 'prob_above_twice_observed')}
             z.update(horizon=r['year']-r['cutoff'], covered=r['lower95'] <= r['observed'] <= r['upper95'],
                      bias=r['mean_expected']-r['observed'], interval_width=r['upper95']-r['lower95'],
                      relative_bias=(r['mean_expected']/r['observed']-1) if r['observed'] else '',
@@ -443,9 +452,9 @@ def review(source, destination, plots=True):
                      catchment_bias=catchment['bias'], catchment_covered=catchment['covered'],
                      catchment_interval_width=catchment['interval_width'])
             calibration.append(z)
-        state = 'BLOCKED_COLLECTOR_OR_TRUTH_ISSUES' if blocked or invalid else ('COMPLETE_EXPLORATORY' if complete == 108 else 'PARTIAL_EXPLORATORY')
+        state = 'BLOCKED_COLLECTOR_OR_TRUTH_ISSUES' if blocked or invalid else ('COMPLETE_EXPLORATORY' if complete == total else 'PARTIAL_EXPLORATORY')
         counts = {label: sum(r['status'] == 'COMPLETE' and r['reused'] is reuse for r in summary['tasks']) for label, reuse in (('new_complete', False), ('reused_complete', True))}
-        result = dict(status=state, complete=complete, expected=108, manifest_files_verified=report.verified_files,
+        result = dict(status=state, complete=complete, expected=total, manifest_files_verified=report.verified_files,
                       invalid_truth_blocks=sorted(invalid), collector_issues=summary['issues'],
                       accepted=False, independent_validation=False, coverage_certified=False,
                       comparisons_interpretable=not (blocked or invalid), **counts)
@@ -460,17 +469,17 @@ def review(source, destination, plots=True):
             write_csv(out/'pooled_arm_scores.csv', arm_scores)
             write_csv(out/'pooled_site_and_catchment_details.csv', details)
             if plots and pooled:
-                figures(out, pooled, calibration)
-        text = '# Monthly factorial review\n\nStatus: **%s**. %d/108 cells complete (%d new, %d reused). %d manifest file hashes verified.\n\n' % (state, complete, counts['new_complete'], counts['reused_complete'], report.verified_files)
+                config.get("figures", figures)(out, pooled, calibration)
+        text = '# Monthly factorial review\n\nStatus: **%s**. %d/%d cells complete (%d new, %d reused). %d manifest file hashes verified.\n\n' % (state, complete, total, counts['new_complete'], counts['reused_complete'], report.verified_files)
         text += ('The portable manifest checks archive consistency, not authenticity or a fresh check of cluster-only source files. County-level held-out identity is taken from bound task/reference hashes; visible site totals are independently checked.\n\n'
                  'This is exploratory development-year evaluation, with assumed continuous coverage. No model is accepted or automatically selected. CPO is not used. Component contrasts compare specified model/prior packages; score interactions are not biological interactions.\n\n'
                  'Scores weight the ten sites equally within each pathogen, origin and horizon. Four-stream ranges describe Monte Carlo stability, not confidence intervals or independent replication. Origins overlap. Calibration uses pooled joint predictive intervals; endpoints are never added across sites. Zero-observation relative summaries are left undefined.\n\n')
         if blocked or invalid:
             text += 'Comparison exports and figures are suppressed because collector/truth issues require resolution. See review_summary.json.\n'
         else:
-            text += '| Pathogen | Origin | Horizon | AR1 effect, no seasonality | AR1 effect, seasonal | Seasonality, RW1 | Seasonality, AR1 | Score interaction |\n|---|---:|---:|---:|---:|---:|---:|---:|\n'
+            text += '| Pathogen | Origin | Horizon | ' + ' | '.join(extra_keys + metrics) + ' |\n|---|---:|---:|' + '---:|' * (len(extra_keys)+len(metrics)) + '\n'
             for r in pooled:
-                text += '| %s | %d | %d | %s |\n' % (r['pathogen'], r['cutoff'], r['horizon'], ' | '.join('%.5g' % r[m] for m in METRICS))
+                text += '| %s | %d | %d | %s |\n' % (r['pathogen'], r['cutoff'], r['horizon'], ' | '.join([str(r[k]) for k in extra_keys] + ['%.5g' % r[m] for m in metrics]))
             text += '\nRead these contrasts with pooled_calibration.csv and pooled_site_and_catchment_details.csv. A weak standalone result does not reject a combination candidate. No universal or pathogen-specific winner is inferred here.\n'
         (out/'review.md').write_text(text)
         return result

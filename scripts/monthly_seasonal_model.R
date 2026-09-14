@@ -35,7 +35,7 @@ monthly_cycle_scale <- function() {
   list(Q=Q,scale=exp(mean(log(diag(cov)))))
 }
 
-fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHETIC_COMPLETE',rate_center=.002,trend_sd_upper=.5,temporal_model='rw1') {
+fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHETIC_COMPLETE',rate_center=.002,trend_sd_upper=.5,temporal_model='rw1',area_effect=NULL) {
   if(length(seasonal)!=1||is.na(seasonal)||!is.logical(seasonal)||length(threads)!=1||!is.finite(threads)||threads<1||threads!=floor(threads))stop('Invalid fit options')
   if(length(rate_center)!=1||!is.finite(rate_center)||rate_center<=0)stop('Invalid prior rate')
   if(!temporal_model%in%c('rw1','ar1'))stop('Invalid temporal model')
@@ -61,6 +61,7 @@ fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHE
   }
   if(seasonal)formula<-update(formula,.~.+f(season,model='rw1',n=12,cyclic=TRUE,
     constr=FALSE,scale.model=FALSE,extraconstr=list(A=matrix(1/12,1,12),e=0),rankdef=1,hyper=seasonal_prior))
+  if(!is.null(area_effect))formula<-area_effect(formula,d)
   fit<-INLA::inla(formula,data=d,family='nbinomial',num.threads=paste0(threads,':1'),
     control.fixed=list(mean=log(rate_center),prec=1),
     control.family=list(variant=0,hyper=list(size=list(prior='normal',param=c(spec$nb_log_size_mean,1/spec$nb_log_size_sd^2),initial=spec$nb_log_size_mean))),
