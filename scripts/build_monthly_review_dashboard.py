@@ -61,7 +61,7 @@ def task_result(data,t,plan_name):
   result.append(z)
  return result
 
-def build(paths,decisions):
+def build(paths,decisions,diagnostics=None):
  expected=decisions['archives'];runs=[];provenance=[]
  if set(decisions['pathogens'])!=set(PATHOGENS):raise ValueError('Incomplete pathogen assessment')
  for pathogen,d in decisions['pathogens'].items():
@@ -85,15 +85,19 @@ def build(paths,decisions):
  for p,c,m in keys:
   left=idx[p,c,m]['rows'];right=idx[p,c,'ar1' if m=='rw1' else 'rw1']['rows']
   if {(r['state'],r['year']):r['observed'] for r in left}!={(r['state'],r['year']):r['observed'] for r in right}:raise ValueError('Paired observed totals differ')
- return dict(runs=runs,assessments=decisions['pathogens'],provenance=provenance,assessment_sha256=sha(json.dumps(decisions,sort_keys=True).encode()),coverage_certified=False)
+ diagnostic_data=None
+ if diagnostics is not None:
+  from monthly_diagnostic_view import load
+  diagnostic_data=load(diagnostics,decisions['diagnostics'][Path(diagnostics).name])
+ return dict(diagnostics=diagnostic_data,runs=runs,assessments=decisions['pathogens'],provenance=provenance,assessment_sha256=sha(json.dumps(decisions,sort_keys=True).encode()),coverage_certified=False)
 
 def render(payload,template):
  if template.count('__MONTHLY_DATA__')!=1:raise ValueError('Invalid template')
  return template.replace('__MONTHLY_DATA__',json.dumps(payload,allow_nan=False,separators=(',',':')).replace('&','\\u0026').replace('<','\\u003c').replace('>','\\u003e'))
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--archive',action='append',required=True);p.add_argument('--decisions',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--archive',action='append',required=True);p.add_argument('--diagnostics',type=Path);p.add_argument('--decisions',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
  if a.output.exists():p.error('Refusing existing output')
- payload=build(a.archive,json.loads(a.decisions.read_text()));html=render(payload,(Path(__file__).resolve().parents[1]/'dashboard/monthly_review_template.html').read_text())
+ payload=build(a.archive,json.loads(a.decisions.read_text()),a.diagnostics);html=render(payload,(Path(__file__).resolve().parents[1]/'dashboard/monthly_review_template.html').read_text())
  a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(html);print('Offline review: '+str(a.output));return 0
 if __name__=='__main__':main()

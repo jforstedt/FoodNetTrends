@@ -95,3 +95,7 @@ Audit semantics are recorded in [diagnostic audit readiness](extension_diagnosti
 The local review verified all eight definition-task output hashes and derived
 literal-code and field-completeness summaries directly from the saved crosswalk
 and code tables, without fitting, changing inputs, or exporting identifiers.
+
+## Implemented descriptive interface
+
+The optional diagnostic section of [the offline monthly review](monthly_review_dashboard.md) now presents the saved raw classification trends, supporting-field recording summaries, literal codes and cxcidt/culturestatus crosswalks. It uses independently controlled raw-universe filters and a hash-bound definition archive. Denominator and crosswalk reconciliation are checked before rendering. This completes the initial raw descriptive interface; eligible case-category aggregation and any classification association fit remain separate work.

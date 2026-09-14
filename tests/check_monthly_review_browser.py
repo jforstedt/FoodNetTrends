@@ -22,6 +22,18 @@ def main():
   with page.expect_download() as event:page.locator('#download').click()
   with open(event.value.path(),newline='') as f:rows=list(csv.DictReader(f))
   assert len(rows)==6 and all(r['state']=='GA' and r['status']=='EXPLORATORY_ASSUMED_CONTINUOUS' for r in rows)
+  if data.get('diagnostics'):
+   assert page.locator('#diagnosticsSection').is_visible()
+   for pathogen in data['assessments']:
+    page.select_option('#diagPathogen',pathogen)
+    assert page.locator('#completeness tr').count()>0
+   page.select_option('#diagPathogen','SALMONELLA');page.select_option('#diagState','GA');page.select_option('#diagField','pcrclinic')
+   assert 'CX+CIDT+' in page.locator('#crosswalk').inner_text()
+   with page.expect_download() as event:page.locator('#diagDownload').click()
+   with open(event.value.path(),newline='') as f:raw=list(csv.DictReader(f))
+   expected=[r for r in data['diagnostics']['codes'] if r[0]=='SALMONELLA' and r[1]=='GA' and r[3]=='pcrclinic']
+   assert len(raw)==len(expected) and sum(int(r['records']) for r in raw)==sum(r[5] for r in expected)
+   assert all(r['universe']=='RAW_RECORDS_NOT_MODEL_ELIGIBILITY' for r in raw)
   page.set_viewport_size({'width':390,'height':844});assert not page.evaluate('document.documentElement.scrollWidth>innerWidth')
   assert not errors,errors;assert all(u.startswith('file:') for u in requests),requests
   print('PASS all 54 selections, nine assessments, CSV, mobile layout, no browser errors or external requests');browser.close()
