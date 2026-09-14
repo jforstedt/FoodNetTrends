@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
-from county_forecast_protocol import source_paths,validate_source
+from county_forecast_protocol import source_paths,validate_source,PATHOGENS
 
 FILES=('launch_monthly_preparation.py','prepare_monthly_county.R','county_matching.R','reconcile_raw_county.R','fit_county_pilot.R','county_forecast_protocol.py')
 
@@ -21,7 +21,7 @@ def sha(path):
     return h.hexdigest()
 
 def prepare(root,dest,raw,clean,mapping,verified=True,pathogens=('SALMONELLA','CAMPYLOBACTER')):
-    if not pathogens or len(set(pathogens))!=len(pathogens) or any(p not in ('SALMONELLA','CAMPYLOBACTER') for p in pathogens):raise ValueError('Invalid pathogen selection')
+    if not pathogens or len(set(pathogens))!=len(pathogens) or any(p not in PATHOGENS for p in pathogens):raise ValueError('Invalid pathogen selection')
     root=Path(root).resolve();dest=Path(dest).resolve();sources=source_paths(root)
     container=root/'foodnet.sif';inputs={};tasks=[];cache={}
     if verified:
@@ -72,22 +72,23 @@ def validate_result(work):
         if not math.isfinite(x) or x<0 or (integer and x!=int(x)):raise ValueError('Invalid '+key)
         return x
     calendar=read('calendar_template.csv');monthly=read('state_month_records.csv');annual=read('annual_reconciliation.csv');ready=read('readiness.csv')
+    end_year=2017 if work.name=='CRYPTOSPORIDIUM' else 2019
     states={'CA','CO','CT','GA','MD','MN','NM','NY','OR','TN'}
-    keys={(state,str(year),str(month)) for state in states for year in range(2004,2020) for month in range(1,13)}
+    keys={(state,str(year),str(month)) for state in states for year in range(2004,end_year+1) for month in range(1,13)}
     key=lambda row:(row['state'],row['year'],row['month'])
     for rows in (calendar,monthly):
         if len(rows)!=len(keys) or {key(r) for r in rows}!=keys:raise ValueError('Incomplete or duplicate monthly domain')
         if any(r['observation_status']!='UNVERIFIED' for r in rows):raise ValueError('Uncertified observation status changed')
     if any(r['observed_days'] or r['evidence_reference'] for r in calendar):raise ValueError('Unexpected calendar certification')
     if any(r['modeled_count'] for r in monthly):raise ValueError('Inventory incorrectly promoted to modeled counts')
-    if len(ready)!=1 or ready[0]['pathogen']!=work.name or ready[0]['status']!='REVIEW_REQUIRED' or ready[0]['monthly_observation_verified']!='FALSE' or ready[0]['individual_linkage_validated']!='FALSE' or ready[0]['raw_clean_strata_match']!='TRUE' or ready[0]['candidate_rows']!='93312':raise ValueError('Unexpected readiness report')
+    if len(ready)!=1 or ready[0]['pathogen']!=work.name or ready[0]['status']!='REVIEW_REQUIRED' or ready[0]['monthly_observation_verified']!='FALSE' or ready[0]['individual_linkage_validated']!='FALSE' or ready[0]['raw_clean_strata_match']!='TRUE' or int(ready[0]['candidate_rows'])!=486*12*(end_year-2004+1):raise ValueError('Unexpected readiness report')
     sums={}
     for r in monthly:
         k=(r['state'],r['year']);count,exposure=sums.get(k,(0,0))
         value=number(r,'candidate_person_years')
         if value<=0:raise ValueError('Nonpositive exposure')
         sums[k]=(count+number(r,'record_count',True),exposure+value)
-    if len(annual)!=160 or {(r['state'],r['year']) for r in annual}!=set(sums):raise ValueError('Invalid annual domain')
+    if len(annual)!=10*(end_year-2004+1) or {(r['state'],r['year']) for r in annual}!=set(sums):raise ValueError('Invalid annual domain')
     for r in annual:
         count,exposure=sums[(r['state'],r['year'])]
         if number(r,'annual_records',True)!=number(r,'assigned_records',True)+number(r,'unassigned_records',True) or count!=number(r,'assigned_records',True):raise ValueError('Annual counts do not reconcile')

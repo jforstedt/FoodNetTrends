@@ -49,19 +49,21 @@ monthly_inventory <- function(selected,panel) {
 }
 
 prepare_monthly_county <- function(rawpath,cleanpath,mappingpath,audit,out,pathogen) {
-  if(!pathogen%in%c('SALMONELLA','CAMPYLOBACTER'))stop('Monthly preparation limited to Salmonella/Campylobacter')
+  if(!pathogen%in%c('SALMONELLA','CAMPYLOBACTER','CRYPTOSPORIDIUM','CYCLOSPORA','LISTERIA','SHIGELLA','STEC','VIBRIO','YERSINIA'))stop('Unsupported pathogen')
+  end_year<-if(pathogen=='CRYPTOSPORIDIUM')2017L else 2019L
   if(dir.exists(out))stop('Refusing existing output')
   dir.create(out,recursive=TRUE);writeLines('RUNNING',file.path(out,'status.txt'))
   files<-c(rawpath,cleanpath,mappingpath,file.path(audit,'county_panel_INTERNAL.rds'));before<-tools::md5sum(files)
   tryCatch({
     if(anyNA(before))stop('Missing monthly input')
     obj<-validate_panel(audit,expected_production=FALSE);panel<-obj$data
-    if(nrow(panel)!=7776L||!identical(sort(unique(panel$year)),2004:2019))stop('Unexpected monthly pilot domain')
+    if(nrow(panel)!=486L*(end_year-2004L+1L)||!identical(sort(unique(panel$year)),2004:end_year))stop('Unexpected monthly pilot domain')
     auditchecks<-read.csv(file.path(audit,'reports/input_checksums.csv'),stringsAsFactors=FALSE)
     ix<-match(normalizePath(cleanpath),normalizePath(auditchecks$file,mustWork=FALSE))
     if(is.na(ix)||auditchecks$md5[ix]!=unname(before[2]))stop('Clean input differs from annual audit')
     raw<-as.data.frame(haven::read_sas(rawpath));names(raw)<-tolower(names(raw))
     fields<-c('year','state','county','fips','pathogen','travelint','cxcidt','siteid')
+    if(pathogen=='LISTERIA')fields<-c(fields,'cste')
     if(!all(c(fields,'dtspec','month')%in%names(raw)))stop('Missing raw monthly fields')
     raw<-raw[c(fields,'dtspec','month')]
     clean<-as.data.frame(readr::read_csv(cleanpath,col_types=readr::cols(.default=readr::col_character()),col_select=tidyselect::all_of(fields),show_col_types=FALSE,num_threads=2))
@@ -71,10 +73,14 @@ prepare_monthly_county <- function(rawpath,cleanpath,mappingpath,audit,out,patho
     aliases<-unique(as.character(map$original[county_norm(map$standardized)==pathogen]));if(!length(aliases))stop('No authoritative recorded pathogen aliases')
     for(n in c('raw','clean')) {x<-get(n);x$year<-suppressWarnings(as.integer(x$year));assign(n,x)}
     if(anyNA(raw$year[as.character(raw$pathogen)%in%aliases])||anyNA(clean$year[county_norm(clean$pathogen)==pathogen]))stop('Invalid relevant year')
-    raw<-raw[!is.na(raw$year)&raw$year>=2004&raw$year<=2019&as.character(raw$pathogen)%in%aliases,,drop=FALSE]
-    clean<-clean[!is.na(clean$year)&clean$year>=2004&clean$year<=2019&county_norm(clean$pathogen)==pathogen,,drop=FALSE]
+    raw<-raw[!is.na(raw$year)&raw$year>=2004&raw$year<=end_year&as.character(raw$pathogen)%in%aliases,,drop=FALSE]
+    clean<-clean[!is.na(clean$year)&clean$year>=2004&clean$year<=end_year&county_norm(clean$pathogen)==pathogen,,drop=FALSE]
     for(k in c('county','siteid')){raw[[k]]<-as.character(raw[[k]]);raw[[k]][is.na(raw[[k]])]<-''}
     keep<-classify_removals(raw)=='retained_candidate'
+    if(pathogen=='LISTERIA') {
+      keep<-keep&county_norm(raw$cste)=='YES'
+      if(any(county_norm(clean$cste)!='YES'))stop('Clean Listeria CSTE eligibility differs')
+    }
     for(k in c('state','county','travelint','cxcidt','siteid')){raw[[k]]<-county_norm(raw[[k]]);clean[[k]]<-county_norm(clean[[k]])}
     raw$fips<-county_fips(raw$fips);clean$fips<-county_fips(clean$fips);raw<-raw[keep,,drop=FALSE]
     comparison<-reconcile_counts(raw,clean,c('year','state','fips','travelint','cxcidt','siteid'))

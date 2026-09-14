@@ -3,10 +3,11 @@
 .here<-if(!is.null(.source))dirname(.source) else dirname(sub('^--file=','',grep('^--file=',commandArgs(),value=TRUE)[1]))
 source(file.path(.here,'county_forecast_model.R'));source(file.path(.here,'monthly_seasonal_model.R'));source(file.path(.here,'fit_county_pilot.R'))
 
-load_monthly_comparison <- function(candidate,audit,cutoff) {
+load_monthly_comparison <- function(candidate,audit,cutoff,end_year=2019L) {
+ if(!end_year%in%c(2017L,2019L)||cutoff+3L>end_year)stop('Invalid monthly evaluation window')
  d<-readRDS(candidate);annual<-validate_panel(audit,expected_production=FALSE)$data
  needed<-c('fips','state','year','month','record_count','modeled_count','observation_status','population','candidate_person_years','exposure_status')
- if(!all(needed%in%names(d))||nrow(d)!=93312L||!setequal(unique(d$year),2004:2019)||anyNA(d[setdiff(needed,'modeled_count')]))stop('Invalid candidate domain')
+ if(!all(needed%in%names(d))||nrow(d)!=486L*12L*(end_year-2004L+1L)||!setequal(unique(d$year),2004:end_year)||anyNA(d[setdiff(needed,'modeled_count')]))stop('Invalid candidate domain')
  if(any(!is.na(d$modeled_count))||any(d$observation_status!='UNVERIFIED')||any(d$exposure_status!='UNVALIDATED_ANNUAL_POPULATION_DAY_FRACTION'))stop('Unexpected prior candidate certification')
  key<-function(x)paste(x$fips,x$year)
  if(any(!is.finite(d$month)|d$month!=floor(d$month)|d$month<1|d$month>12)||anyDuplicated(paste(key(d),d$month))||any(!key(d)%in%key(annual)))stop('Invalid monthly keys')
