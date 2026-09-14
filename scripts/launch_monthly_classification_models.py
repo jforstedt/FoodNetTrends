@@ -143,7 +143,7 @@ def number(x):
  if not math.isfinite(n):raise ValueError('Nonfinite metric')
  return n
 
-def validate(work,t):
+def validate(work,t,require_internal=True):
  out=work/'result'
  if (out/'status.txt').read_text().strip()!='MONTHLY_CLASSIFICATION_MODEL_COMPLETE':raise ValueError('Incomplete classification fit')
  settings=rows(out/'settings.csv')
@@ -154,7 +154,8 @@ def validate(work,t):
  for k,v in dict(cutoff=t['cutoff'],base_seed=t['seed'],streams=4,draws_per_stream=2000,train_start=2012,horizon=36).items():
   if integer(r[k])!=v:raise ValueError('Changed sampling '+k)
  if r['seasonal']!=str(t['seasonal']).upper() or any(r[k]!='FALSE' for k in ('coverage_certified','incidence_adjustment','independent_validation')) or r['target']!='CIDT_CLASSIFICATION_GIVEN_ELIGIBLE_CX_OR_CIDT' or r['rng_protocol']!='explicit_config_v2' or r['fitting_threads']!='4:1':raise ValueError('Changed fitted flags')
- if not (out/'fit_INTERNAL.rds').is_file() or not (out/'rng_protocol.csv').is_file() or not (out/'input_checksums.csv').is_file():raise ValueError('Missing saved fit or sampling provenance')
+ if require_internal and not (out/'fit_INTERNAL.rds').is_file():raise ValueError('Missing saved fit')
+ if not (out/'rng_protocol.csv').is_file() or not (out/'input_checksums.csv').is_file():raise ValueError('Missing sampling provenance')
  diagnostics=rows(out/'fit_diagnostics.csv')
  if len(diagnostics)!=1 or diagnostics[0]['fit_ok']!='TRUE' or integer(diagnostics[0]['mode_status'])!=0:raise ValueError('Numerical quality gate failed')
  # Independent site/year category totals provide the common paired identity for both resolutions.

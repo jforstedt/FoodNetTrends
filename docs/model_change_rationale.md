@@ -188,3 +188,20 @@ its predictive benefit. See [the validation plan](spatial_final_validation_plan.
 No accepted model or prior changes. Weak standalone components remain available
 for scientifically specified combination experiments; diagnostic-classification
 models remain a separate conditional outcome, not an incidence adjustment.
+
+## Completed conditional-classification comparison
+
+The separate binomial diagnostic-mix experiment favors the tested RW1 temporal
+package over stationary AR1 on its development comparisons. Seasonality and
+static county borrowing have mixed incremental contributions; favorable
+interactions do not establish that the full candidate beats its better reference.
+The result concerns recorded CIDT share conditional on CX-or-CIDT totals, not
+incidence. It does not revise the pathogen-specific incidence comparator ledger.
+
+Persistent share bias and missed predictive intervals prevent automatic
+promotion even where scores improve. Saved trajectories can expose extrapolation
+limitations but do not identify diagnostic adoption, ascertainment or reporting
+mechanisms. Preserve weak components as candidates for justified combinations,
+and distinguish implementation success from calibrated predictions. The
+[portable result review](monthly_classification_results_review.md) records the
+scope and the next scientific gates. No fitted model or prior changes follow.
