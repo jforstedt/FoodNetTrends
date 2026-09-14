@@ -104,6 +104,83 @@ def add_recovery(path,original,plan,summary,scores,tails):
  finally:recovery.close()
 
 
+def validate_restart_numerics(rows):
+ if len(rows)!=1:raise ValueError('Missing unique restart numerical record')
+ r=rows[0]
+ if not base.boolean(r['initial_ok']) or not base.boolean(r['restart_ok']) or base.integer(r['restart_mode_status'])!=0 or base.boolean(r['model_changed']) or base.boolean(r['quality_gate_relaxed']) or r['fitting_threads']!='1:1' or r['strategy']!='INLA_inla.rerun_once':raise ValueError('Failed restart numerical gate')
+ initial=base.integer(r['initial_mode_status'])
+ return dict(initial_mode_status=initial,restart_mode_status=0,initial_already_passed=initial==0,restart_proved_cure=False)
+
+
+def verify_restart_previous_inputs(previous,plan):
+ root=plan['successful_recovery'];name='SHIGELLA_2011_ar1_seasonal_bym2';listeria='LISTERIA_2011_ar1_seasonal_bym2'
+ for local in ('plan.json','summary.json',listeria+'/task_status.json',name+'/task_status.json',name+'/recovery_numerics.csv'):
+  absolute=root+'/'+local
+  if absolute not in plan['inputs']:raise ValueError('Missing bound preceding recovery evidence')
+  assert_hash(previous,local,plan['inputs'][absolute])
+
+
+def ensure_restart_slot(scores,summary):
+ name='SHIGELLA_2011_ar1_seasonal_bym2';listeria='LISTERIA_2011_ar1_seasonal_bym2'
+ if any(r['task']==name for r in scores) or not any(r['task']==listeria and r['spatial']=='bym2' for r in scores) or next(r for r in summary['tasks'] if r['task']==name)['status']=='COMPLETE':raise ValueError('Restart would overwrite completed evidence or omit recovered Listeria')
+
+
+def add_restart(path,previous_path,original,plan,summary,scores,tails):
+ if not previous_path:raise ValueError('Restart requires the preceding recovery archive')
+ restart=Archive(path,'report_sha256.json');previous=Archive(previous_path,'report_sha256.json')
+ try:
+  rp=restart.json('plan.json');rs=restart.json('summary.json');pp=previous.json('plan.json');ps=previous.json('summary.json')
+  name='SHIGELLA_2011_ar1_seasonal_bym2';listeria='LISTERIA_2011_ar1_seasonal_bym2'
+  if rp.get('version')!='shigella_numerical_restart_v1' or rp.get('model_changed') is not False or rp.get('quality_gate_relaxed') is not False or rp.get('numerical_strategy')!='INLA_inla.rerun_once' or rp.get('fitting_threads')!='1:1' or rp.get('reused_complete')!=323:raise ValueError('Unrecognized restart protocol')
+  if len(rp['tasks'])!=1 or rp['tasks'][0]['id']!=name or rs.get('issues') or rs.get('complete')!=1 or rs.get('expected')!=1 or rs.get('source_complete')!=323 or rs.get('execution_complete') is not True or rs.get('tasks')!=[dict(task=name,status='COMPLETE')]:raise ValueError('Invalid restart scope/summary')
+  if pp.get('version')!='monthly_spatial_recovery_v1' or pp.get('model_changed') is not False or pp.get('quality_gate_relaxed') is not False or ps.get('issues') or ps.get('complete')!=1 or {r['task']:r['status'] for r in ps['tasks']}!={listeria:'COMPLETE',name:'FAILED_OR_MISSING'}:raise ValueError('Unexpected preceding recovery')
+  original_digest=hashlib.sha256(original.read('plan.json')).hexdigest()
+  if rp['source_plan_sha256']!=original_digest or pp['source_plan_sha256']!=original_digest or rp['source']!=pp['source']:raise ValueError('Restart original lineage differs')
+  prevroot=rp['successful_recovery']
+  verify_restart_previous_inputs(previous,rp)
+  prior_fail=previous.json(name+'/task_status.json')
+  if prior_fail.get('task')!=name or prior_fail.get('status')!='FAILED' or prior_fail.get('plan_sha256')!=hashlib.sha256(previous.read('plan.json')).hexdigest():raise ValueError('Previous failure identity differs')
+  prior_numbers=csvrows(previous,name+'/recovery_numerics.csv')
+  if len(prior_numbers)!=1 or not base.boolean(prior_numbers[0]['fit_ok']) or base.integer(prior_numbers[0]['mode_status'])!=2 or base.boolean(prior_numbers[0]['quality_gate_relaxed']):raise ValueError('Previous numerical failure differs')
+  roots=[p.rsplit('/scripts/',1)[0] for p in rp['inputs'] if p.endswith('/scripts/recover_shigella_numerics.py')]
+  if len(roots)!=1:raise ValueError('Unknown restart snapshot')
+  for absolute,digest in rp['inputs'].items():
+   for root,archive in ((roots[0],restart),(rp['source'],original),(prevroot,previous)):
+    if absolute.startswith(root+'/'):
+     local=absolute[len(root)+1:]
+     if local in archive.files:assert_hash(archive,local,digest)
+     elif root==roots[0] or Path(local).suffix.lower() in ('.csv','.json','.txt','.log','.py','.r','.sh','.md') and '_INTERNAL' not in Path(local).name:raise ValueError('Missing frozen restart input')
+  t=rp['tasks'][0];old=next(t for t in plan['tasks'] if t['id']==name)
+  if any(t.get(k)!=old.get(k) for k in ('pathogen','cutoff','temporal','seasonal','spatial','seed','end_year','inputs')):raise ValueError('Restart task differs')
+  ensure_restart_slot(scores,summary)
+  done=restart.json(name+'/task_status.json')
+  if done.get('task')!=name or done.get('status')!='COMPLETE' or done.get('exit_status')!=0 or done.get('plan_sha256')!=hashlib.sha256(restart.read('plan.json')).hexdigest():raise ValueError('Invalid restart completion')
+  ref=next(x for x in plan['references'] if all(x[k]==t[k] for k in ('pathogen','cutoff','temporal','seasonal')))
+  if done.get('truth_sha256')!=ref['reference']['truth_sha256']:raise ValueError('Restart truth differs')
+  required={'result/status.txt','result/settings.csv','result/sensitivity_settings.csv','result/stream_scores.csv','result/aggregate_tails.csv','restart_numerics.csv'}
+  if not required.issubset(done.get('outputs',{})):raise ValueError('Unbound required restart outputs')
+  for local,digest in done['outputs'].items():
+   if '_INTERNAL' not in Path(local).name:assert_hash(restart,name+'/'+local,digest)
+  if restart.read(name+'/result/status.txt').decode().strip()!='SAVED_MONTHLY_DIAGNOSTICS_COMPLETE':raise ValueError('Restart diagnostic status differs')
+  validate_settings(restart,t,name+'/result');evidence=validate_restart_numerics(csvrows(restart,name+'/restart_numerics.csv'))
+  new_scores=[];new_tails=[]
+  for file,destination,states in (('stream_scores.csv',new_scores,base.STATES),('aggregate_tails.csv',new_tails,base.STATES+('ALL',))):
+   seen=set()
+   for r in csvrows(restart,name+'/result/'+file):
+    for k in ('year','stream','draws'):r[k]=base.integer(r[k])
+    key=(r['state'],r['year'],r['stream'])
+    if key in seen or r['draws']!=(8000 if r['stream']==0 else 2000):raise ValueError('Restart metric identity/draws differ')
+    seen.add(key)
+    for k in r:
+     if k not in ('state','year','stream','draws'):r[k]=base.number(r[k])
+    validate_metric(r,file=='aggregate_tails.csv')
+    destination.append(dict(task=name,pathogen=t['pathogen'],cutoff=t['cutoff'],temporal=t['temporal'],seasonal=t['seasonal'],spatial=t['spatial'],reused=False,**r))
+   if seen!={(state,y,k) for state in states for y in range(t['cutoff']+1,t['cutoff']+4) for k in range(5)}:raise ValueError('Incomplete restart domain')
+  scores.extend(new_scores);tails.extend(new_tails)
+  return [name],evidence
+ finally:restart.close();previous.close()
+
+
 def validate_metric(r,tail):
  if tail:
   fields=('observed','mean_expected','median_expected','p975_expected','max_expected','top_one_percent_mean_share','lower95','median_predictive','upper95','prob_above_twice_observed')
@@ -164,7 +241,7 @@ def summaries(rows):
  return result
 
 
-def review(bundle,recovery,out,plots=True):
+def review(bundle,recovery,out,plots=True,restart=None):
  out=Path(out)
  if out.exists():raise ValueError('Refusing existing review directory')
  outer=Archive(bundle,'archive_sha256.json')
@@ -189,11 +266,12 @@ def review(bundle,recovery,out,plots=True):
     if len(pub)!=len(expected) or {keys(r) for r in pub}!=set(expected):raise ValueError('Published pair domain differs')
     if any(not math.isclose(float(r['bym2_minus_iid']),expected[keys(r)],rel_tol=1e-10,abs_tol=1e-10) for r in pub):raise ValueError('Published pair values differ')
     added=add_recovery(recovery,report,plan,summary,scores,tails) if recovery else []
+    restarted,restart_evidence=add_restart(restart,recovery,report,plan,summary,scores,tails) if restart else ([],None)
    finally:report.close()
  finally:outer.close()
  data=paired(scores,tails);aggregate=summaries(data);out.mkdir(parents=True)
  base.write_csv(out/'paired_site_metrics_LOCAL.csv',data);base.write_csv(out/'spatial_tradeoffs_LOCAL.csv',aggregate)
- result=dict(original_complete=complete,recovered=added,complete=complete+len(added),expected=324,original_paired_score_rows_verified=len(original_pairs),complete_three_origin_configurations=sum(r['complete_three_origins'] for r in aggregate),expected_configurations=54,scientific_acceptance=False,independent_validation=False)
+ result=dict(original_complete=complete,recovered=added,restarted=restarted,restart_evidence=restart_evidence,complete=complete+len(added)+len(restarted),expected=324,original_paired_score_rows_verified=len(original_pairs),complete_three_origin_configurations=sum(r['complete_three_origins'] for r in aggregate),expected_configurations=54,scientific_acceptance=False,independent_validation=False)
  (out/'review_summary.json').write_text(json.dumps(result,indent=2)+'\n')
  if plots:
   import matplotlib;matplotlib.use('Agg')
@@ -208,5 +286,5 @@ def review(bundle,recovery,out,plots=True):
  return result
 
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('bundle');p.add_argument('--recovery');p.add_argument('--output',required=True);p.add_argument('--no-plots',action='store_true');a=p.parse_args()
- print(json.dumps(review(a.bundle,a.recovery,a.output,not a.no_plots),indent=2))
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('bundle');p.add_argument('--recovery');p.add_argument('--restart');p.add_argument('--output',required=True);p.add_argument('--no-plots',action='store_true');a=p.parse_args()
+ print(json.dumps(review(a.bundle,a.recovery,a.output,not a.no_plots,restart=a.restart),indent=2))

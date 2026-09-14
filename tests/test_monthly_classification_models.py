@@ -40,7 +40,7 @@ class ClassificationModelLauncherTests(unittest.TestCase):
    for n in ('classification_site.csv','classification_county_month_INTERNAL.rds','classification_annual.csv','classification_date_issues_by_category.csv','classification_readiness.csv','source_month_comparison.csv'):(out/n).write_text('bound source')
    self.csv(out/'date_issues.csv',[dict(missing_specimen_date=0,specimen_year_disagreement=0,unassigned_records=0,month_disagreement={'SALMONELLA':1,'SHIGELLA':2}.get(pathogen,0))])
    tasks.append(dict(id=pathogen,annual_support=str(support)))
-  old=dict(tasks=tasks,inputs={});m.write(origin/'plan.json',old);digest=m.sha(origin/'plan.json')
+  old=dict(version='classification_monthly_preparation_v1',verified=True,models_fitted=False,incidence_adjustment=False,tasks=tasks,inputs={t['annual_support']:m.sha(t['annual_support']) for t in tasks});old['inputs']['/historical/raw.sas7bdat']='historical-hash';m.write(origin/'plan.json',old);digest=m.sha(origin/'plan.json')
   for t in tasks:
    work=origin/t['id'];m.write(work/'task_status.json',dict(task=t['id'],status='COMPLETE',exit_status=0,plan_sha256=digest,outputs={str(p.relative_to(work)):m.sha(p) for p in (work/'result').iterdir()}))
   m.write(origin/'summary.json',dict(execution_complete=True,issues=[],tasks=[dict(task=t['id'],status='COMPLETE') for t in tasks]));(root/'foodnet-inla-fixed.sif').write_text('container');return origin
@@ -112,5 +112,32 @@ class ClassificationModelLauncherTests(unittest.TestCase):
     self.assertEqual(m.collect(d,m.sha(d/'plan.json')),1)
    summary=json.loads((d/'summary.json').read_text());self.assertEqual(summary['complete'],0);self.assertFalse(summary['scientific_acceptance'])
    with tarfile.open(str(d)+'.tar.gz') as a:self.assertNotIn('private_INTERNAL.rds',a.getnames())
+ def preparation_sources(self,root):
+  self.prepared(root);folder=root/'analysis_configs/monthly_classification_priors';folder.mkdir();(folder/'manifest.json').write_text('{}')
+ def test_preparation_job_visible_before_data_hashing(self):
+  with tempfile.TemporaryDirectory() as td:
+   root=Path(td);self.preparation_sources(root);dest=root/'output/new';original=m.sha;hashed=[]
+   def small_only(path):
+    hashed.append(str(path));self.assertNotIn('.sif',str(path));self.assertNotIn('.sas7bdat',str(path));self.assertNotIn('_INTERNAL',str(path));return original(path)
+   with patch.object(m,'sha',side_effect=small_only),patch.object(m,'prepare') as prepare,patch.object(m.subprocess,'check_output',return_value='12345') as qsub:
+    self.assertEqual(m.submit_preparation(root,dest),'12345');prepare.assert_not_called()
+   command=qsub.call_args[0][0];self.assertIn('foodnet_class_prepare',command);self.assertNotIn('-t',command);self.assertEqual(command[command.index('-pe')+2],'1');self.assertFalse(dest.exists())
+   folder=Path(str(dest)+'_preparation');digest=m.sha(folder/'submission_pin.json');m.verify_submission_pin(folder,digest,root);subprocess.check_call(['bash','-n',str(folder/'prepare.sh')])
+   (root/'scripts/monthly_classification_model.R').write_text('changed while queued')
+   with self.assertRaises(ValueError):m.verify_submission_pin(folder,digest,root)
+ def test_array_then_held_collector_after_preparation(self):
+  with tempfile.TemporaryDirectory() as td:
+   root=Path(td);dest=root/'run';events=[]
+   def prepare(*args):
+    events.append('prepare');dest.mkdir();m.write(dest/'plan.json',{});(dest/'run.sh').write_text('run');(dest/'collect.sh').write_text('collect')
+   def qsub(command,**kwargs):
+    events.append(command);return '456.1-144:1' if '-t' in command else '457'
+   with patch.object(m,'prepare',side_effect=prepare),patch.object(m.subprocess,'check_output',side_effect=qsub):m.launch(root,dest)
+   self.assertEqual(events[0],'prepare');self.assertIn('1-144',events[1]);self.assertEqual(events[2][events[2].index('-hold_jid')+1],'456');self.assertEqual(json.loads((dest/'submission.json').read_text())['collector'],'457')
+ def test_historical_raw_not_rehashed_but_support_is(self):
+  with tempfile.TemporaryDirectory() as td:
+   root=Path(td);self.prepared(root);origin=self.verified_source(root);old=json.loads((origin/'plan.json').read_text());m.verify_source_metadata(origin,old,m.sha(origin/'plan.json'))
+   support=Path(old['tasks'][0]['annual_support']);support.write_text('changed source support')
+   with patch.object(m.prep,'validate'),self.assertRaisesRegex(ValueError,'Annual support differs|Changed source preparation snapshot'):m.prepare(root,root/'new',True)
  def test_python36(self):ast.parse(Path(m.__file__).read_text(),feature_version=(3,6))
 if __name__=='__main__':unittest.main()
