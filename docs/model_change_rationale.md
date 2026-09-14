@@ -89,3 +89,12 @@ claims require an explicit source before being promoted beyond hypotheses.
 - More posterior draws reduce Monte Carlo uncertainty in score estimates; they
   do not change the fitted model, repair numerical approximation or make the
   same historical evaluation data independent.
+
+## Activated combination comparison
+
+The [monthly temporal × seasonality factorial](monthly_factorial.md) applies the
+same complete comparison to all nine pathogens. It reuses completed controls,
+adds only absent arms, and evaluates paired component and combination effects.
+Previous pathogen-specific AR1/RW1 dispositions remain provisional references,
+not a reason to omit a candidate. The state-only spline candidate stays separate
+until its engineering and prior checks support a comparable matrix.

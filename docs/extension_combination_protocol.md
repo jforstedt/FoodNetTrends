@@ -1,5 +1,15 @@
 # Protocol for combined county extensions
 
+## Current execution scope — 14 September 2026
+
+The [monthly factorial](monthly_factorial.md) now freezes the ready RW1/AR1 ×
+seasonality comparison across all nine pathogens under the previously accepted
+EXPLORATORY_ASSUMED_CONTINUOUS coverage assumption. It reuses completed controls
+and fits only missing arms. The older planning text below records the broader
+spline/testing intentions; it is not a requirement to re-certify coverage or
+rerun completed monthly batches. State-only spline engineering proceeds separately
+under [its candidate specification](monthly_spline_combination.md).
+
 Status: planned exploratory comparisons, 13 September 2026. This document defines
 what can proceed after the current spline and definition review. It does not
 launch jobs, accept a candidate, or alter Daniel's accepted state analysis.
