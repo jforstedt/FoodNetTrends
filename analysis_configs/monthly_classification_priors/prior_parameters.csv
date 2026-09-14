@@ -1,0 +1,6 @@
+"parameter","upper","tail_probability","pc_exponential_rate"
+"site_sd",1.5,0.01,3.07011345732539
+"cell_sd",1,0.01,4.60517018598809
+"spatial_sd",1,0.01,4.60517018598809
+"trend_sd",1,0.01,4.60517018598809
+"seasonal_sd",1,0.01,4.60517018598809

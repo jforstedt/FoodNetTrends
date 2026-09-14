@@ -1,0 +1,2 @@
+"seed","draws","graph_nodes","graph_components","graph_phi_median","graph_phi_cdf_half","graph_phi_table_integral","outcome_data_used","prior_selection","INLA_version"
+741321,5000,486,10,0.290267416357995,0.66564043725399,1,FALSE,"fixed_shared_logit_scale_before_outcome_fits","26.8.7"

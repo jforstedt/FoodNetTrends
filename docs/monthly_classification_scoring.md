@@ -1,0 +1,15 @@
+# Conditional monthly diagnostic-mix scoring
+
+The response is CIDT-classified records among eligible CX-or-CIDT records, with the observed classified-case total as binomial denominator. These conditional retrospective predictions are not incidence forecasts, test positivity estimates or detection adjustments.
+
+The runner saves the fit and numerical status before enforcing the unchanged numerical gate. Failed checkpoints remain internal and do not receive a complete result status. Successful fits are scored on exactly 36 held-out months. Future outcome fields are masked in fitted data; predictor row identity, binomial family, saved denominators and truth alignment are checked again before sampling.
+
+For each model, four posterior streams of 2,000 draws produce conditional-binomial predictive densities and counts; pooled reports use 8,000 draws. Hyperparameter-configuration sampling receives an explicit R seed, INLA latent sampling a distinct seed, and predictive simulation another seed. Stream offsets and software versions are recorded. Log densities use a stable logit-domain formula rather than clipping probabilities near zero or one.
+
+Zero-denominator cells remain in the latent model grid but provide no binomial likelihood or scoring information. The scorer samples only eligible held-out predictor rows; zero-denominator contributions to predicted counts are exactly zero. State/year score rows with no eligible months/cells retain missing scores and Monte Carlo errors. They are never filled with an apparently favorable zero score. Missing conditional shares remain undefined.
+
+Joint posterior draws and their binomial simulations are summed to state/year and catchment/year before quantiles are taken. Annual intervals are not sums of marginal monthly interval endpoints. Aggregation retains the common latent effects across counties, sites and months. The summed marginal log-density score is not a joint predictive density. Site-month and county-month score scales cannot be ranked against one another as identical outcomes; keep comparisons within resolution and matching support.
+
+Reports include per-stream and pooled mean log scores, maximum cell density relative Monte Carlo error, observed/expected category counts, conditional denominator, predictive intervals and eligibility counts. Aggregate draws stay internal; portable reports contain aggregate evidence and provenance. Annual coverage and stream variability are diagnostics, not automatic model-selection thresholds or independent validation.
+
+Local tests check stable binomial log densities at extreme logits, exact joint aggregation, empty denominators, all-zero-success sites, future-outcome masking and reproducibility despite unrelated R RNG state. A full county seasonal AR1/BYM2 runner test covers fitting, saving and scoring. Twelve saved synthetic model structures are also compared with independent fitted-marginal probability means to catch predictor or binomial count-scale errors. Real-data adequacy remains a cluster-result review.

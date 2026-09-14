@@ -1,5 +1,7 @@
 # Diagnostic classification with temporal, seasonal and spatial structure
 
+Implementation update: monthly preparation has been reviewed, and the shared RW1/AR1 prior and synthetic execution checks are complete. The next candidate batch contains 48 site fits and 96 county fits (144 total), covering all six supported pathogens and both prespecified origins. Spline arms remain part of the registered extension but await their separate gate. See [model specification](monthly_classification_model.md), [launcher](monthly_classification_launch.md), and [independent review](monthly_classification_adversarial_review.md). The original protocol below records the target and gates; no fitted model is accepted by this update.
+
 ## Target and immediate action
 
 The estimand is the probability of a CIDT+ label conditional on an eligible record
