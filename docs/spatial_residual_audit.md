@@ -28,4 +28,15 @@ County/month counts and residuals remain in `county_month_residuals_INTERNAL.csv
 
 ## Validation
 
+The first cluster audit exposed a reporting defect: saved model state columns
+are factors, and the R state loop converted their labels to integer codes.
+All 162 reports were rejected by the state/year-domain validator, with empty
+state summaries; these are not accepted audit results. Geographic identifiers
+are now converted explicitly to character before aggregation. A regression test
+uses reversed factor levels and checks equality with character inputs, correct
+state labels and reconciliation with the whole-catchment totals. The correction
+changes only reporting, not fitted models or expected counts. Rerun the command
+above to create a fresh audit directory; retain the failed directory as evidence.
+No model refitting or container rebuild is required.
+
 Pure-R tests exercise graph degeneracy, uniform state bias, within-state centering, reordered rows, invalid means, duplicate cells and temporal gaps. Python tests exercise digest-pinned preparation, original graph identity, archive exclusions, unsafe output paths and final container-hash verification. Actual pinned-INLA synthetic seasonal AR1/BYM2 and spline/BYM2 saved fits passed the complete audit interface. The spline check caught the appended latent Predictor rows in its fitted summary; the final adapter explicitly selects and validates the observation APredictor IDs before applying exposure. Python checks also verify that preparation defers fit-byte reads to workers and that altered fit payloads are rejected before audit execution. These checks verify implementation; actual source-file availability and the 162 completed reports are cluster checks.

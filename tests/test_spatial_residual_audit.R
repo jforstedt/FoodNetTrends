@@ -6,6 +6,11 @@ stopifnot(is.na(spatial_residual_moran(rep(1,4),g$adj)),is.na(spatial_residual_m
 d<-expand.grid(fips=nodes$fips,month=1:6,year=2013);d$state<-nodes$state[match(d$fips,nodes$fips)];d$observed<-10
 mu<-11/exp(ifelse(d$state=='A',1,-1))-1
 r<-spatial_residual_reports(d,mu,g);stopifnot(all(is.na(r$monthly$within_state_centered_moran)),all(abs(r$monthly$log1p_residual_moran-1)<1e-12))
+factor_data<-d;factor_data$state<-factor(d$state,levels=c('B','A'));factor_data$fips<-factor(d$fips,levels=rev(nodes$fips))
+factor_report<-spatial_residual_reports(factor_data,mu,g)
+stopifnot(isTRUE(all.equal(r,factor_report)),setequal(factor_report$state_year$state,c('A','B','ALL')),
+ all(factor_report$state_year$counties==c(2,2,4)),
+ sum(factor_report$state_year$observed[factor_report$state_year$state!='ALL'])==factor_report$state_year$observed[factor_report$state_year$state=='ALL'])
 j<-rev(seq_len(nrow(d)));r2<-spatial_residual_reports(d[j,],mu[j],g);stopifnot(isTRUE(all.equal(r$state_year,r2$state_year)),isTRUE(all.equal(r$monthly,r2$monthly)))
 # January/February then April/May/June: no February-to-April lag is invented.
 keep<-d$month!=3;r3<-spatial_residual_reports(d[keep,],mu[keep]+d$month[keep]/10,g)

@@ -9,6 +9,10 @@ spatial_residual_moran <- function(residual,adj) {
  length(z)/w*sum(adj*outer(z,z))/sum(z^2)
 }
 spatial_residual_reports <- function(d,expected,graph) {
+ # Saved INLA data use factors. Iterating a factor strips its class and yields
+ # integer codes, so normalize identifiers before building state summaries.
+ d$state<-as.character(d$state);d$fips<-as.character(d$fips)
+ if(anyNA(d$state)||anyNA(d$fips)||any(!nzchar(d$state))||any(!nzchar(d$fips)))stop('Missing residual geographic identity')
  if(length(expected)!=nrow(d)||any(!is.finite(expected)|expected<0)||any(!is.finite(d$observed)|d$observed<0))stop('Invalid count-scale residual inputs')
  if(!setequal(unique(d$fips),graph$ids)||anyDuplicated(paste(d$fips,d$year,d$month)))stop('Residual county/month identity differs')
  d$expected<-expected;d$count_residual<-d$observed-d$expected;d$log1p_residual<-log1p(d$observed)-log1p(d$expected)
