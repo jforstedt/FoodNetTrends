@@ -54,7 +54,7 @@ explicitly listed. Completion does not confer statistical acceptance, certify
 monthly coverage, or promote a dashboard model.
 
 Run `python3 scripts/launch_monthly_classification_models.py` on the SGE host with
-Singularity loaded. The command copies only small code, protocol, graph and prior
+Singularity loaded. The command first checks the small frozen prior manifest and its source files, then copies only small code, protocol, graph and prior
 files, then submits a visible `foodnet_class_prepare` scheduler job and prints its
 job ID, preparation log, collector log and archive paths. Preparation requests one
 CPU, 8 GiB RSS, 16 GiB virtual memory and 4 hours; it appears in `qstat` while queued or
@@ -73,3 +73,14 @@ created by preparation. This change applies to new launches; already submitted
 experiments continue with their frozen code and should not be restarted. `--prepare-only` creates an
 unverified plan that workers refuse to execute. Portable archives exclude
 `_INTERNAL` panels, fits and posterior draws.
+
+## Prior manifest checkout correction
+
+The original manifest recorded CRLF bytes for counties.csv and edges.csv from
+its generating working tree, whereas Git checks out these CSV files with LF.
+The correction records the existing Git blob hashes after verifying that only
+line endings differed. County IDs, adjacency, row order, priors and prior-check
+results are unchanged. The geography writer now emits LF explicitly. A real
+asset regression check and a Git-blob snapshot verification cover this packaging
+boundary. The launcher checks the small prior manifest before submission, so
+this class of mismatch fails promptly rather than after large input reads.

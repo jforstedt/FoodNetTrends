@@ -113,7 +113,9 @@ class ClassificationModelLauncherTests(unittest.TestCase):
    summary=json.loads((d/'summary.json').read_text());self.assertEqual(summary['complete'],0);self.assertFalse(summary['scientific_acceptance'])
    with tarfile.open(str(d)+'.tar.gz') as a:self.assertNotIn('private_INTERNAL.rds',a.getnames())
  def preparation_sources(self,root):
-  self.prepared(root);folder=root/'analysis_configs/monthly_classification_priors';folder.mkdir();(folder/'manifest.json').write_text('{}')
+  self.prepared(root);folder=root/'analysis_configs/monthly_classification_priors';folder.mkdir();(folder/'prior.csv').write_text('synthetic prior\n')
+  sources=['scripts/monthly_classification_model.R','scripts/check_monthly_classification_priors.R','scripts/monthly_spatial_combination.R','analysis_configs/county_pilot/counties.csv','analysis_configs/county_pilot/edges.csv']
+  m.write(folder/'manifest.json',dict(version='monthly_classification_priors_v1',status='PRIOR_CHECK_PASS',sources={n:m.sha(root/n) for n in sources},files={'prior.csv':m.sha(folder/'prior.csv')}))
  def test_preparation_job_visible_before_data_hashing(self):
   with tempfile.TemporaryDirectory() as td:
    root=Path(td);self.preparation_sources(root);dest=root/'output/new';original=m.sha;hashed=[]
@@ -139,5 +141,13 @@ class ClassificationModelLauncherTests(unittest.TestCase):
    root=Path(td);self.prepared(root);origin=self.verified_source(root);old=json.loads((origin/'plan.json').read_text());m.verify_source_metadata(origin,old,m.sha(origin/'plan.json'))
    support=Path(old['tasks'][0]['annual_support']);support.write_text('changed source support')
    with patch.object(m.prep,'validate'),self.assertRaisesRegex(ValueError,'Annual support differs|Changed source preparation snapshot'):m.prepare(root,root/'new',True)
+ def test_actual_prior_assets_match_lf_checkout_policy(self):
+  root=Path(__file__).resolve().parents[1];self.assertTrue(m.verify_prior(root))
+  for name in ('counties.csv','edges.csv'):self.assertNotIn(b'\r\n',(root/'analysis_configs/county_pilot'/name).read_bytes())
+ def test_changed_prior_source_fails_before_submission(self):
+  with tempfile.TemporaryDirectory() as td:
+   root=Path(td);self.preparation_sources(root);(root/'analysis_configs/county_pilot/counties.csv').write_text('changed county')
+   with patch.object(m.subprocess,'check_output') as qsub,self.assertRaisesRegex(ValueError,'Changed prior-check source'):m.submit_preparation(root,root/'new')
+   qsub.assert_not_called();self.assertFalse((root/'new_preparation').exists())
  def test_python36(self):ast.parse(Path(m.__file__).read_text(),feature_version=(3,6))
 if __name__=='__main__':unittest.main()

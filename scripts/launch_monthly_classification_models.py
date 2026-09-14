@@ -255,6 +255,7 @@ def verify_submission_pin(folder,digest,root,dest=None):
 
 def submit_preparation(root,dest):
  root=Path(root).resolve();dest=Path(dest).resolve();folder=Path(str(dest)+'_preparation')
+ verify_prior(root)  # Small files only: reject broken calibration packaging before queueing or panel I/O.
  folder.mkdir(parents=True,exist_ok=False);files={}
  # Only small implementation/protocol files are read before qsub, never a panel, raw SAS file or container.
  paths=[root/'scripts'/n for n in FILES]+[root/'docs'/n for n in ('classification_combination_protocol.md','monthly_classification_launch.md')]

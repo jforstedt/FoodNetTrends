@@ -46,7 +46,7 @@ def build(source, gazetteer, output):
     out=Path(output);out.mkdir(parents=True,exist_ok=False)
     def write(name,rows):
         with (out/name).open('w',newline='') as h:
-            w=csv.DictWriter(h,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
+            w=csv.DictWriter(h,fieldnames=list(rows[0]),lineterminator="\n");w.writeheader();w.writerows(rows)
     write('counties.csv',selected)
     write('edges.csv',[dict(fips_a=a,fips_b=b) for a,b in sorted(edges) if a<b and a in ids and b in ids])
     issues=[dict(source_fips=a,neighbor_fips=b,neighbor_label=n,canonical_label=names[b])
