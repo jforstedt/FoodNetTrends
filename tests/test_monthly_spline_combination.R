@@ -18,6 +18,11 @@ phase<-factor(b$years%%12,levels=0:11)
 X<-cbind(1,b$slope,model.matrix(~phase)[,-1])
 stopifnot(max(abs(crossprod(X[tr,],b$nonlinear[tr,])))<1e-8,
  abs(exp(mean(log(rowSums(b$nonlinear[tr,]^2))))-1)<1e-9)
+validate_monthly_combination_basis(b,serial,cutoff)
+bad<-b;bad$nonlinear<-bad$nonlinear*2
+stopifnot(inherits(try(validate_monthly_combination_basis(bad,serial,cutoff),silent=TRUE),'try-error'))
+bad<-b;bad$slope<-bad$slope+.1
+stopifnot(inherits(try(validate_monthly_combination_basis(bad,serial,cutoff),silent=TRUE),'try-error'))
 d<-expand.grid(area=c('a','b','c','d'),serial=serial)
 d$state<-ifelse(d$area%in%c('a','b'),'A','B');d$year<-d$serial%/%12;d$month<-d$serial%%12+1
 set.seed(100);d$person_years<-20000;d$count<-rnbinom(nrow(d),mu=4*exp(.3*sin(2*pi*d$month/12)),size=20)

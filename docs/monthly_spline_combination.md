@@ -1,6 +1,6 @@
 # Monthly spline combination engineering candidate
 
-This candidate tests whether a smooth state temporal trend and a cyclic seasonal effect can work together. It is retained for later evaluation, including possible benefits that standalone comparisons did not establish. It does not change Daniel's state model, any accepted outputs, or the older annual county spline implementation. It is not part of the current real-data temporal-by-seasonality batch.
+This candidate tests whether a smooth state temporal trend and a cyclic seasonal effect can work together, including possible benefits that standalone comparisons did not establish. It does not change Daniel's state model, any accepted outputs, or the older annual county spline implementation. Its separately frozen real-data evaluation is specified in [monthly_spline_factorial.md](monthly_spline_factorial.md); the completed RW1/AR1 batch supplies reused controls.
 
 ## Controlled comparison
 
@@ -21,3 +21,9 @@ Source `county_forecast_model.R`, `county_spline_candidate.R`, and `monthly_seas
 `tests/test_monthly_spline_combination.R` checks training-basis invariance when future months are appended, full nonlinear rank, training phase orthogonality, variance normalization, held-out count poisoning, and the shared state-only design for counties in the same state. Its optional `--fit` gate fits all four synthetic candidates and checks finite count-scale predictions and consistency with fitted marginal count means. These checks establish implementation properties, not forecast superiority, scientific acceptance or adequacy for any pathogen.
 
 Before a real-data comparison, freeze the origin/eligibility contract and outcome scoring, inspect joint prior-predictive behavior and extrapolation, and run a matched factorial comparison. Preserve simple reference models and label any pathogen-specific preference with its scientific hypothesis, uncertainty and empirical evidence. Do not use unstable CPO values as a model-selection gate. Explicit held-out predictions remain necessary.
+
+The data-free prior review is recorded in `monthly_combination_prior_audit.md`.
+Prepared numeric bases now have source/file manifests and consumption checks;
+the real-data launcher binds them into its immutable snapshot. Saved fits also
+retain their masked observation metadata for the APredictor scoring adapter.
+This metadata addition does not change the formula or priors.

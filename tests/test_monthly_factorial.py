@@ -80,6 +80,27 @@ class MonthlyFactorialTests(unittest.TestCase):
   m.prepare(ROOT,self.dest,False)
   with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(m.collect(self.dest,m.sha(self.dest/'plan.json')),1)
   self.assertTrue(Path(str(self.dest)+'.tar.gz').is_file());self.assertEqual(json.loads((self.dest/'summary.json').read_text())['complete'],0)
+ def test_corrupted_copy_blocks_contrasts_and_removes_stale_outputs(self):
+  plan=m.prepare(ROOT,self.dest,False);plan.update(verified=True,tasks=[],references=[],provenance={})
+  copies=[]
+  for temporal,seasonal,value in [('rw1',False,-10),('ar1',False,-8),('rw1',True,-7),('ar1',True,-3)]:
+   name=m.task_id('STEC',2011,temporal,seasonal);out=self.dest/'references'/name;out.mkdir(parents=True)
+   for filename,content in [('stream_scores.csv','state,year,stream,mean_log_score\nCA,2012,0,%s\n'%value),('aggregate_tails.csv','state,year,stream\nCA,2012,0\n'),('settings.csv','setting\nsynthetic\n')]:
+    path=out/filename;path.write_text(content);plan['inputs'][str(path)]=m.sha(path)
+   copies.append(out/'stream_scores.csv')
+   plan['references'].append(dict(id=name,pathogen='STEC',cutoff=2011,temporal=temporal,seasonal=seasonal,reused=True,reference=dict(inputs={},truth_sha256='same')))
+  (self.dest/'plan.json').write_text(json.dumps(plan));digest=m.sha(self.dest/'plan.json')
+  copies[-1].write_text('state,year,stream,mean_log_score\nCA,2012,0,100\n')
+  for name in ('factorial_site_contrasts.csv','factorial_equal_site_contrasts.csv'):(self.dest/name).write_text('stale')
+  with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(m.collect(self.dest,digest),1)
+  summary=json.loads((self.dest/'summary.json').read_text());self.assertTrue(summary['issues'])
+  self.assertEqual(summary['tasks'][-1]['status'],'FAILED_OR_MISSING')
+  self.assertFalse((self.dest/'factorial_site_contrasts.csv').exists());self.assertFalse((self.dest/'factorial_equal_site_contrasts.csv').exists())
+  self.assertNotIn('100', (self.dest/'all_stream_scores.csv').read_text())
+  # Even if the global verification is bypassed, each copied report is checked.
+  with patch.object(m,'verify'),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(m.collect(self.dest,digest),1)
+  self.assertEqual(json.loads((self.dest/'summary.json').read_text())['tasks'][-1]['status'],'FAILED_OR_MISSING')
+  self.assertFalse((self.dest/'factorial_site_contrasts.csv').exists())
  def test_python36_and_no_cap(self):
   source=(ROOT/'scripts/launch_monthly_factorial.py').read_text();ast.parse(source,feature_version=(3,6));self.assertNotIn("'-tc'",source)
   self.assertIn("'48:00:00',53248,68,'1-48'",source)

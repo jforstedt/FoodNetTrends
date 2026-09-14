@@ -1,0 +1,19 @@
+{
+  "version": "monthly_spline_basis_v1",
+  "data_used": false,
+  "k": 6,
+  "training_start": 2004,
+  "horizon_years": 3,
+  "sources": {
+    "scripts/prepare_monthly_spline_basis.R": "7bc35270745fb4b07940646bfabb45cedcd685a896a9ba7c77a14c373f482ded",
+    "scripts/monthly_spline_combination.R": "4ed9743db61388dfb300096fc0ddfbe7a49f7632b925538925eafdb3ed9ca6d3",
+    "scripts/county_spline_candidate.R": "53b0d8067c99876c2e044447b7ca8fcb9c62be59eb938d2218c87b8825251b3f"
+  },
+  "files": {
+    "2011.csv": "e0f062b31e5ef702509ecbb4d576f2a8ecb9d9e6c7dbb430deed15dca2b18576",
+    "2013.csv": "bb367fd7208e46b0269ae86017bfe18015b34b0a1fe3a798b9e80fac19a0b954",
+    "2014.csv": "64801f1bafdb2946d76aba7eada77615daa6c083db5d5f097b9fe1d8b147c57a",
+    "2016.csv": "ebd8cc98d8612cb2a00e59b20c9ac19eb4f77106bc395092ba5a9dff0bc74002",
+    "generation_session.txt": "a9d6c684b22748844a62c09d34e5e80fdda7d2266f6a6fd433bd57a2276b8f05"
+  }
+}

@@ -202,6 +202,10 @@ def collect(dest,digest):
   try:
    if t['reused']:
     ref=t['reference'];check_hashes(ref['inputs']);out=dest/'references'/t['id'];truth=ref['truth_sha256']
+    for name in ('stream_scores.csv','aggregate_tails.csv','settings.csv'):
+     path=str(out/name)
+     if path not in plan['inputs']:raise ValueError('Unbound copied reference: '+path)
+     check_hashes({path:plan['inputs'][path]})
    else:
     work=dest/t['id'];record=json.loads((work/'task_status.json').read_text())
     if record.get('status')!='COMPLETE' or record.get('task')!=t['id'] or record.get('plan_sha256')!=digest or record.get('exit_status')!=0:raise ValueError(record.get('reason','Incomplete task'))
@@ -214,7 +218,11 @@ def collect(dest,digest):
   except (OSError,ValueError,KeyError) as e:summary.append(dict(task=t['id'],status='FAILED_OR_MISSING',reason=str(e),reused=t['reused']))
  invalid={k for k,v in truths.items() if len(v)!=1}
  if invalid:issues.append('Inconsistent paired truth: '+str(sorted(invalid)))
- paired,equal=contrasts([r for r in scores if (r['pathogen'],r['cutoff']) not in invalid])
+ paired,equal=([],[]) if issues else contrasts([r for r in scores if (r['pathogen'],r['cutoff']) not in invalid])
+ # A failed or now-incomplete recollection must not leave old comparison tables.
+ for name in ('all_stream_scores.csv','all_aggregate_tails.csv','factorial_site_contrasts.csv','factorial_equal_site_contrasts.csv'):
+  path=dest/name
+  if path.exists():path.unlink()
  def write(name,data):
   if data:
    with (dest/name).open('w',newline='') as f:w=csv.DictWriter(f,fieldnames=list(data[0]));w.writeheader();w.writerows(data)

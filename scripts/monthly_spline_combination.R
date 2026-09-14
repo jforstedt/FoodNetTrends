@@ -18,6 +18,17 @@ monthly_combination_basis <- function(serial,cutoff,k=6L) {
   b
 }
 
+validate_monthly_combination_basis <- function(basis,serial,cutoff) {
+  years<-sort(unique(as.numeric(serial)));train<-years<=cutoff
+  if(!is.list(basis)||!identical(as.numeric(basis$years),years)||length(basis$cutoff)!=1||basis$cutoff!=cutoff||
+     !identical(basis$version,'monthly_training_phase_orthogonal_thin_plate_v1')||length(basis$k)!=1||!is.finite(basis$k)||basis$k<4||basis$k!=floor(basis$k))stop('Prepared basis identity differs')
+  z<-basis$nonlinear;line<-(years-mean(years[train]))/diff(range(years[train]))
+  if(!is.matrix(z)||nrow(z)!=length(years)||ncol(z)!=basis$k-2||length(basis$slope)!=length(years)||any(!is.finite(z))||any(!is.finite(basis$slope))||max(abs(basis$slope-line))>1e-12)stop('Prepared basis dimensions or slope differ')
+  phase<-factor(years%%12,levels=0:11);X<-cbind(1,line,model.matrix(~phase)[,-1,drop=FALSE])
+  if(qr(z[train,,drop=FALSE])$rank!=ncol(z)||max(abs(crossprod(X[train,,drop=FALSE],z[train,,drop=FALSE])))>1e-7||abs(exp(mean(log(rowSums(z[train,,drop=FALSE]^2))))-1)>1e-9)stop('Prepared basis violates training constraints')
+  invisible(TRUE)
+}
+
 fit_monthly_combination <- function(d,cutoff,temporal='rw1',seasonal=TRUE,threads=4L,
   coverage='SYNTHETIC_COMPLETE',basis=NULL) {
   if(length(temporal)!=1||!temporal%in%c('rw1','spline')||length(seasonal)!=1||is.na(seasonal)||!is.logical(seasonal)||
@@ -30,6 +41,7 @@ fit_monthly_combination <- function(d,cutoff,temporal='rw1',seasonal=TRUE,thread
      basis$version!='monthly_training_phase_orthogonal_thin_plate_v1'||!is.matrix(basis$nonlinear)||
      nrow(basis$nonlinear)!=length(basis$years)||ncol(basis$nonlinear)!=basis$k-2||
      length(basis$slope)!=length(basis$years)||any(!is.finite(basis$nonlinear))||any(!is.finite(basis$slope)))stop('Invalid prepared monthly basis')
+  validate_monthly_combination_basis(basis,serial,cutoff)
   if(packageVersion('INLA')!=package_version('26.08.07'))stop('Pinned INLA required')
   design_data<-d;design_data$year<-serial
   z<-county_spline_design(basis,design_data,d$state_id)
@@ -51,6 +63,7 @@ fit_monthly_combination <- function(d,cutoff,temporal='rw1',seasonal=TRUE,thread
     control.family=list(variant=0,hyper=list(size=list(prior='normal',param=c(log(20),1),initial=log(20)))),
     control.predictor=list(A=INLA::inla.stack.A(stack),compute=TRUE,link=1),
     control.compute=list(config=TRUE,waic=TRUE,cpo=TRUE))
+  attr(fit,'monthly_combination_data')<-d
   attr(fit,'monthly_combination_indices')<-seq_len(nrow(d))
   attr(fit,'monthly_combination_exposure')<-d$person_years
   attr(fit,'monthly_combination_basis')<-basis

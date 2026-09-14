@@ -32,7 +32,7 @@ tail_summary <- function(mu,predicted,truth,keys,stream) {
    lower95=q[,1],median_predictive=q[,2],upper95=q[,3],prob_above_twice_observed=rowMeans(predicted>2*truth))
 }
 
-audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=2000L,expected_trend_upper=.5,expected_temporal='rw1') {
+audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=2000L,expected_trend_upper=.5,expected_temporal='rw1',adapter=NULL) {
  if(dir.exists(out))stop('Refusing existing diagnostic result');dir.create(out,recursive=TRUE)
  writeLines('RUNNING',file.path(out,'status.txt'))
  inputs<-c(fitpath,predpath);before<-tools::md5sum(inputs)
@@ -40,7 +40,11 @@ audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=
   if(packageVersion('INLA')!=package_version('26.08.07'))stop('Pinned INLA required')
   if(length(draws)!=1||!is.finite(draws)||draws<100||draws>4000||draws!=floor(draws)||length(seed)!=1||!is.finite(seed)||seed<1||seed>1e9||seed!=floor(seed))stop('Invalid sampling settings')
   fit<-readRDS(fitpath);pred<-read.csv(predpath,colClasses=c(fips='character'))
-  obj<-validate_monthly_saved(fit,pred,cutoff,seasonal,expected_trend_upper,expected_temporal);ix<-obj$indices;truth<-obj$truth;d<-obj$data[ix,]
+  obj<-if(is.null(adapter))validate_monthly_saved(fit,pred,cutoff,seasonal,expected_trend_upper,expected_temporal) else adapter(fit,pred,cutoff,seasonal)
+  ix<-obj$indices;truth<-obj$truth;d<-obj$data[ix,]
+  predictor<-if(is.null(obj$predictor))'Predictor' else obj$predictor
+  exposure<-if(is.null(obj$exposure))rep(1,length(ix)) else obj$exposure
+  if(!predictor%in%c('Predictor','APredictor')||length(exposure)!=length(ix)||any(!is.finite(exposure)|exposure<=0))stop('Invalid predictor adapter')
   cell_group<-paste(d$state,d$year,sep='|');levels<-unique(cell_group);first<-match(levels,cell_group)
   keys<-data.frame(state=as.character(d$state[first]),year=d$year[first]);catchyears<-sort(unique(d$year))
   aggregate_keys<-rbind(keys,data.frame(state='ALL',year=catchyears))
@@ -51,14 +55,14 @@ audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=
    stream_seed<-seed+(stream-1L)*50000L;moments<-NULL;total_mu<-total_y<-NULL;sizes<-numeric()
    for(start in seq.int(1L,draws,by=100L)) {
     n<-min(100L,draws-start+1L)
-    ss<-INLA::inla.posterior.sample(n,fit,selection=list(Predictor=ix),seed=as.integer(stream_seed+start),num.threads='1:1',skew.corr=FALSE)
+    ss<-INLA::inla.posterior.sample(n,fit,selection=setNames(list(ix),predictor),seed=as.integer(stream_seed+start),num.threads='1:1',skew.corr=FALSE)
     mu<-ld<-replicated<-matrix(NA_real_,length(ix),n);size<-numeric(n)
     # Separate predictive simulation RNG from INLA sampling seeds.
     set.seed(as.integer(stream_seed+10000L+start))
     for(j in seq_len(n)) {
-     s<-ss[[j]];ids<-as.integer(sub('^Predictor:','',rownames(s$latent)));si<-grep('size for',names(s$hyperpar),fixed=TRUE)
+     s<-ss[[j]];ids<-as.integer(sub(paste0('^',predictor,':'),'',rownames(s$latent)));si<-grep('size for',names(s$hyperpar),fixed=TRUE)
      if(anyNA(ids)||anyDuplicated(ids)||!setequal(ids,ix)||length(si)!=1L)stop('Unexpected sampled predictor/shape identity')
-     mu[,j]<-exp(as.numeric(s$latent[match(ix,ids),1]));size[j]<-as.numeric(s$hyperpar[si])
+     mu[,j]<-exp(as.numeric(s$latent[match(ix,ids),1]))*exposure;size[j]<-as.numeric(s$hyperpar[si])
      if(any(!is.finite(mu[,j]))||!is.finite(size[j])||size[j]<=0)stop('Invalid sampled mean/shape')
      ld[,j]<-dnbinom(truth,mu=mu[,j],size=size[j],log=TRUE)
      replicated[,j]<-rnbinom(length(ix),mu=mu[,j],size=size[j])

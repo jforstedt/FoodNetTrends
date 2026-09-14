@@ -98,3 +98,40 @@ adds only absent arms, and evaluates paired component and combination effects.
 Previous pathogen-specific AR1/RW1 dispositions remain provisional references,
 not a reason to omit a candidate. The state-only spline candidate stays separate
 until its engineering and prior checks support a comparable matrix.
+
+## Completed monthly factorial review
+
+Reviewed 2026-09-14. The complete temporal-package × seasonality comparison
+passed portable report consistency checks. Numerical evidence, paired plots and
+limitations are retained locally in
+`output/monthly_factorial_review_20260914_111339_LOCAL/scientific_review_LOCAL.md`.
+This is exploratory historical evaluation, not independent final validation.
+No production default or accepted state-model specification changes follow.
+
+| Pathogen | Rationale for provisional disposition | Remaining question |
+|---|---|---|
+| Salmonella | Seasonal AR1 is a leading exploratory comparator: its score advantage accompanies less inflated uncertainty than RW1 in these evaluations. | Confirm practical calibration and prediction stability before adoption; retain component-only controls. |
+| Cryptosporidium | Seasonal AR1 is a leading comparator; RW1's very broad upper tails weaken the interpretation of its high coverage. | Preserve the documented surveillance cutoff and examine rare-event density stability. |
+| Shigella | Seasonal AR1 is a useful comparator, although its small seasonal score gain does not resolve annual bias. | Establish whether extra seasonal structure improves practical predictions beyond nonseasonal AR1. |
+| Campylobacter | Seasonal RW1 remains important: AR1's nonseasonal advantage does not carry through consistently after adding seasonality, and seasonal AR1 undercovers annual outcomes. | Test other justified combinations without treating narrower intervals as automatically better. |
+| STEC | Seasonal RW1 remains important because both scores and annual coverage expose weaknesses in seasonal AR1. | Investigate trend/extrapolation alternatives with identical eligibility and paired controls. |
+| Cyclospora | Retain seasonal AR1 for combination research: adding seasonality changes the temporal comparison, supporting the decision not to discard a component solely on standalone performance. | Underprediction, missed intervals and unstable tails prevent acceptance. The score interaction does not establish a biological mechanism. |
+| Listeria | Small differences do not justify a strong pathogen-specific rule. | Compare practical benefit against complexity and retain simpler controls. |
+| Vibrio | Seasonal RW1 is an important comparator, but neither seasonal arm resolves calibration concerns. Extreme nonseasonal tails make broad coverage misleading. | Examine alternative extrapolation and uncertainty rather than selecting by coverage alone. |
+| Yersinia | Keep the comparison unresolved: seasonal effects depend on temporal package and period, and calibration is incomplete. | Retain both components for justified combinations; do not generalize a weak standalone seasonal result. |
+
+These interpretations describe the specified prior/model packages, not proven
+pathogen biology. Four posterior streams assess simulation stability, not
+generalization uncertainty. Some individual density estimates remain noisy even
+when averaged score contrasts are stable. No CPO-based ranking is used.
+
+## Activated spline combination experiment
+
+`monthly_spline_factorial.md` freezes 54 new spline fits and reuse of the 108
+completed temporal/seasonality controls. Its rationale is gradual nonlinear
+state trends with explicit, proper extrapolation priors, tested with and without
+seasonality for every pathogen. The wider prior forecast ranges are disclosed
+and retained rather than tuned against the reviewed outcomes. This remains an
+exploratory candidate; no pathogen-specific default or state-model replacement
+is authorized by the protocol. Calibration, tail stability and paired component
+effects must accompany any later recommendation.
