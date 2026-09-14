@@ -1,0 +1,7 @@
+# Reviewed Shigella event-month decision
+
+Use specimen collection month, the existing monthly analysis target, for the two reviewed Georgia 2013 Shigella records. Their specimen dates are assigned and their specimen years agree with surveillance year. The source month inventory places two additional cases in January and two fewer in December. Annual totals reconcile. This decision is consistent with the earlier Salmonella specimen-month convention; it is not a claim that the raw source-month field is erroneous or that the true illness-onset month has been established.
+
+The recovery permits only the exact reviewed Shigella date-issue, month-comparison and completed-preparation hashes from monthly_expansion_20260913_223222_865377. Changed reports, unassigned dates, other pathogens or other disagreements still block execution. No source records are edited; the existing specimen-month candidate is reused. The choice is based on the declared event-time target before examining Shigella model performance.
+
+Run `python3 scripts/recover_monthly_shigella.py` on Rosalind. Six previously blocked tasks run concurrently, four cores each, comparing seasonal RW1 and AR1 at origins 2011, 2013 and 2016. No preparation or completed other-pathogen fits are rerun. The collector produces one archive with reviewed decision, source snapshots, diagnostics and provenance. The original batch remains unchanged. These results remain exploratory and coverage-assumed; no automatic dashboard or model promotion follows.

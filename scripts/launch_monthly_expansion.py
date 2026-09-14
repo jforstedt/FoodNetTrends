@@ -48,17 +48,21 @@ def prepare(root,dest,verified=True):
 
 def verify(dest,plan,digest):
  if not plan['verified'] or sha(dest/'expansion.json')!=digest:raise ValueError('Unverified/changed expansion')
- pp=json.loads((dest/'plan.json').read_text());prep.verify(dest,pp,plan['preparation_sha256'])
+ origin=Path(plan.get('preparation_root',dest))
+ pp=json.loads((origin/'plan.json').read_text());prep.verify(origin,pp,plan['preparation_sha256'])
  for p,h in plan['inputs'].items():
   if sha(p)!=h:raise ValueError('Changed expansion source/input: '+p)
 
 def gate(dest,plan,pathogen):
- work=dest/pathogen;record=json.loads((work/'task_status.json').read_text())
+ work=Path(plan.get('preparation_root',dest))/pathogen;record=json.loads((work/'task_status.json').read_text())
  if record.get('status')!='COMPLETE' or record.get('exit_status')!=0 or record.get('task')!=pathogen or record.get('plan_sha256')!=plan['preparation_sha256']:raise ValueError('Monthly preparation unavailable or failed')
  prep.validate_result(work)
  if not record.get('outputs') or any(sha(work/n)!=h for n,h in record['outputs'].items()):raise ValueError('Preparation artifacts changed')
  if any(float(r['unassigned_records'])!=0 for r in rows(work/'result/annual_reconciliation.csv')):raise ValueError('Unassigned specimen dates require review')
- if any(float(r['month_disagreement'])!=0 for r in rows(work/'result/date_issues.csv')):raise ValueError('Month-definition disagreements require review')
+ if any(float(r['month_disagreement'])!=0 for r in rows(work/'result/date_issues.csv')):
+  reviewed=plan.get('month_decision')=='SHIGELLA_SPECIMEN_20260913' and pathogen=='SHIGELLA'
+  expected={'result/date_issues.csv':'bbeae4d38a0098ce763e24fe05fdba708b1a776ba3202f28f1863e0e80615546','result/source_month_comparison.csv':'bfd18daf5f5a88fd6bd60cd20fd5ada35b21f554b04f18176b76d235d0bc60f8','task_status.json':'2f92d7b5b7913ae9ba9b68add879b17b077fd91fd1269bee71a5440aac337c16'}
+  if not reviewed or any(sha(work/n)!=h for n,h in expected.items()):raise ValueError('Month-definition disagreements require review')
  return sha(work/'task_status.json')
 
 def validate(work,t):
@@ -112,13 +116,13 @@ def collect(dest,digest):
    issues.append('Paired truth differs: '+r['task']);continue
   paired.append(dict(pathogen=r['pathogen'],cutoff=r['cutoff'],state=r['state'],year=r['year'],stream=r['stream'],log_score_ar1_minus_rw1=float(r['mean_log_score'])-float(b['mean_log_score'])))
  write('paired_site_stream_scores.csv',paired)
- result=dict(tasks=summary,issues=issues,complete=sum(r['status']=='COMPLETE' for r in summary),expected=42,accepted=False,coverage_certified=False)
+ result=dict(tasks=summary,issues=issues,complete=sum(r['status']=='COMPLETE' for r in summary),expected=len(plan['tasks']),accepted=False,coverage_certified=False)
  (dest/'summary.json').write_text(json.dumps(result,indent=2)+'\n')
  files=[p for p in dest.rglob('*') if p.is_file() and not p.is_symlink() and p.suffix.lower() in ('.csv','.json','.txt','.log','.py','.r','.sh','.md') and '_INTERNAL' not in p.name and p.name!='report_sha256.json']
  (dest/'report_sha256.json').write_text(json.dumps({str(p.relative_to(dest)):sha(p) for p in files},indent=2)+'\n')
  with tarfile.open(str(dest)+'.tar.gz','w:gz') as arc:
   for p in files+[dest/'report_sha256.json']:arc.add(str(p),arcname=str(p.relative_to(dest)))
- print(json.dumps(result,indent=2));print('Archive: '+str(dest)+'.tar.gz');return 0 if result['complete']==42 and not issues else 1
+ print(json.dumps(result,indent=2));print('Archive: '+str(dest)+'.tar.gz');return 0 if result['complete']==len(plan['tasks']) and not issues else 1
 
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--prepare-only',action='store_true');p.add_argument('--worker');p.add_argument('--task');p.add_argument('--collect');p.add_argument('--digest');a=p.parse_args()
