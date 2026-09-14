@@ -182,3 +182,5 @@ Monthly preparation is implemented in [the preparation launcher](monthly_prepara
 The [synthetic monthly prototype](monthly_seasonal_prototype.md) implements the IID-county monthly RW1 reference and shared cyclic-seasonal addition for local engineering checks. It has no production entry point, does not implement the spline pair, and does not satisfy the monthly observation or production prior gates by itself.
 
 The first [real-data monthly batch](monthly_comparison.md) freezes the IID-county RW1 reference/seasonal pair, priors, horizons and equal-site score weights. It proceeds conditionally under a recorded continuity assumption, not independently certified monthly coverage. The spline/spatial pairs and confirmatory acceptance remain outside this batch.
+
+The [temporal-prior sensitivity](monthly_temporal_sensitivity.md) tests one stronger shrinkage setting in the seasonal models while reusing the completed seasonal references. It is an exploratory response to the calibration review, not an automatic replacement or renewed spline comparison.

@@ -2,7 +2,8 @@
 # Shared monthly reference and cyclic-seasonal implementation.
 # Coverage is an explicit analysis contract, not certification of ascertainment.
 # Source county_forecast_model.R first for training-origin RW1 scaling.
-monthly_model_data <- function(d,cutoff,coverage='SYNTHETIC_COMPLETE') {
+monthly_model_data <- function(d,cutoff,coverage='SYNTHETIC_COMPLETE',trend_sd_upper=.5) {
+  if(length(trend_sd_upper)!=1||!is.finite(trend_sd_upper)||trend_sd_upper<=0)stop('Invalid temporal SD prior bound')
   needed<-c('area','state','year','month','person_years','count','observation_status')
   if(!coverage%in%c('SYNTHETIC_COMPLETE','EXPLORATORY_ASSUMED_CONTINUOUS')||!all(needed%in%names(d)))stop('Invalid coverage contract or monthly fields')
   if(coverage=='SYNTHETIC_COMPLETE'&&!isTRUE(attr(d,'synthetic')))stop('Synthetic marker required')
@@ -21,7 +22,7 @@ monthly_model_data <- function(d,cutoff,coverage='SYNTHETIC_COMPLETE') {
   d$state_id<-as.integer(d$state);d$time<-match(serial,times);d$season<-d$month
   nt<-sum(times<=cutoff);scale<-rw1_training_scale(nt)
   list(data=d,training=train,spec=list(version='monthly_rw1_cycle_v1',cutoff=cutoff,
-    n_training=nt,n_time=length(times),trend_scale=scale,trend_sd_bound=.5/sqrt(scale),
+    n_training=nt,n_time=length(times),trend_scale=scale,trend_sd_upper=trend_sd_upper,trend_sd_bound=trend_sd_upper/sqrt(scale),
     trend_constraint=list(A=matrix(as.numeric(times<=cutoff)/nt,nrow=1),e=0),
     seasonal_sd_bound=.5,pc_tail=.01,nb_log_size_mean=log(20),nb_log_size_sd=1,
     coverage=coverage))
@@ -34,10 +35,10 @@ monthly_cycle_scale <- function() {
   list(Q=Q,scale=exp(mean(log(diag(cov)))))
 }
 
-fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHETIC_COMPLETE',rate_center=.002) {
+fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHETIC_COMPLETE',rate_center=.002,trend_sd_upper=.5) {
   if(length(seasonal)!=1||is.na(seasonal)||!is.logical(seasonal)||length(threads)!=1||!is.finite(threads)||threads<1||threads!=floor(threads))stop('Invalid fit options')
   if(length(rate_center)!=1||!is.finite(rate_center)||rate_center<=0)stop('Invalid prior rate')
-  obj<-monthly_model_data(d,cutoff,coverage);d<-obj$data;spec<-obj$spec
+  obj<-monthly_model_data(d,cutoff,coverage,trend_sd_upper);d<-obj$data;spec<-obj$spec
   if(packageVersion('INLA')!=package_version('26.08.07'))stop('Pinned INLA required')
   f<-INLA::f;nt<-spec$n_time;constraint<-spec$trend_constraint
   temporal<-list(prec=list(prior='pc.prec',param=c(spec$trend_sd_bound,spec$pc_tail)))

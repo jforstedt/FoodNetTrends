@@ -4,9 +4,10 @@
 .here<-if(!is.null(.src))dirname(.src) else dirname(sub('^--file=','',grep('^--file=',commandArgs(),value=TRUE)[1]))
 source(file.path(.here,'audit_saved_forecast_sampling.R'))
 
-validate_monthly_saved <- function(fit,predictions,cutoff,seasonal) {
+validate_monthly_saved <- function(fit,predictions,cutoff,seasonal,expected_trend_upper=.5) {
  spec<-attr(fit,'monthly_specification');d<-fit$.args$data
  if(is.null(spec)||spec$version!='monthly_rw1_cycle_v1'||spec$cutoff!=cutoff*12+11L||!identical(spec$seasonal,seasonal)||spec$coverage!='EXPLORATORY_ASSUMED_CONTINUOUS'||spec$rate_center!=.0002)stop('Saved model specification mismatch')
+ if(length(expected_trend_upper)!=1||!is.finite(expected_trend_upper)||expected_trend_upper<=0||!isTRUE(all.equal(spec$trend_sd_bound*sqrt(spec$trend_scale),expected_trend_upper,tolerance=1e-10)))stop('Saved temporal prior differs')
  if(!is.data.frame(d)||!all(c('fips','state','year','month','count','person_years','time')%in%names(d)))stop('Saved model data missing')
  serial<-d$year*12+d$month-1;held<-d$year>cutoff
  if(!any(held)||max(d$year)!=cutoff+3||any(!is.na(d$count[held]))||any(!is.finite(d$count[!held]))||any(!is.finite(d$person_years)|d$person_years<=0))stop('Saved masking/exposure mismatch')
@@ -29,7 +30,7 @@ tail_summary <- function(mu,predicted,truth,keys,stream) {
    lower95=q[,1],median_predictive=q[,2],upper95=q[,3],prob_above_twice_observed=rowMeans(predicted>2*truth))
 }
 
-audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=2000L) {
+audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=2000L,expected_trend_upper=.5) {
  if(dir.exists(out))stop('Refusing existing diagnostic result');dir.create(out,recursive=TRUE)
  writeLines('RUNNING',file.path(out,'status.txt'))
  inputs<-c(fitpath,predpath);before<-tools::md5sum(inputs)
@@ -37,7 +38,7 @@ audit_monthly_saved <- function(fitpath,predpath,cutoff,seasonal,out,seed,draws=
   if(packageVersion('INLA')!=package_version('26.08.07'))stop('Pinned INLA required')
   if(length(draws)!=1||!is.finite(draws)||draws<100||draws>4000||draws!=floor(draws)||length(seed)!=1||!is.finite(seed)||seed<1||seed>1e9||seed!=floor(seed))stop('Invalid sampling settings')
   fit<-readRDS(fitpath);pred<-read.csv(predpath,colClasses=c(fips='character'))
-  obj<-validate_monthly_saved(fit,pred,cutoff,seasonal);ix<-obj$indices;truth<-obj$truth;d<-obj$data[ix,]
+  obj<-validate_monthly_saved(fit,pred,cutoff,seasonal,expected_trend_upper);ix<-obj$indices;truth<-obj$truth;d<-obj$data[ix,]
   cell_group<-paste(d$state,d$year,sep='|');levels<-unique(cell_group);first<-match(levels,cell_group)
   keys<-data.frame(state=as.character(d$state[first]),year=d$year[first]);catchyears<-sort(unique(d$year))
   aggregate_keys<-rbind(keys,data.frame(state='ALL',year=catchyears))
