@@ -35,9 +35,10 @@ monthly_cycle_scale <- function() {
   list(Q=Q,scale=exp(mean(log(diag(cov)))))
 }
 
-fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHETIC_COMPLETE',rate_center=.002,trend_sd_upper=.5) {
+fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHETIC_COMPLETE',rate_center=.002,trend_sd_upper=.5,temporal_model='rw1') {
   if(length(seasonal)!=1||is.na(seasonal)||!is.logical(seasonal)||length(threads)!=1||!is.finite(threads)||threads<1||threads!=floor(threads))stop('Invalid fit options')
   if(length(rate_center)!=1||!is.finite(rate_center)||rate_center<=0)stop('Invalid prior rate')
+  if(!temporal_model%in%c('rw1','ar1'))stop('Invalid temporal model')
   obj<-monthly_model_data(d,cutoff,coverage,trend_sd_upper);d<-obj$data;spec<-obj$spec
   if(packageVersion('INLA')!=package_version('26.08.07'))stop('Pinned INLA required')
   f<-INLA::f;nt<-spec$n_time;constraint<-spec$trend_constraint
@@ -48,6 +49,16 @@ fit_monthly_model <- function(d,cutoff,seasonal=TRUE,threads=2L,coverage='SYNTHE
     f(area,model='iid',hyper=list(prec=list(prior='pc.prec',param=c(1,.01))))+
     f(time,model='rw1',n=nt,replicate=state_id,constr=FALSE,scale.model=FALSE,
       extraconstr=constraint,rankdef=1,hyper=temporal)
+  if(temporal_model=='ar1') {
+    # Proper stationary AR1: prec is MARGINAL precision, not innovation precision.
+    spec$version<-'monthly_ar1_cycle_v1';spec$trend_constraint<-NULL
+    spec$trend_scale<-NULL;spec$trend_sd_bound<-NULL;spec$trend_sd_upper<-NULL
+    spec$ar1_marginal_sd_upper<-1;spec$ar1_rho_internal_mean<-log(19);spec$ar1_rho_internal_sd<-1.5
+    ar_prior<-list(prec=list(prior='pc.prec',param=c(1,.01)),rho=list(prior='normal',param=c(log(19),1/1.5^2)))
+    formula<-count~0+state+offset(log(person_years))+
+      f(area,model='iid',hyper=list(prec=list(prior='pc.prec',param=c(1,.01))))+
+      f(time,model='ar1',n=nt,replicate=state_id,constr=FALSE,hyper=ar_prior)
+  }
   if(seasonal)formula<-update(formula,.~.+f(season,model='rw1',n=12,cyclic=TRUE,
     constr=FALSE,scale.model=FALSE,extraconstr=list(A=matrix(1/12,1,12),e=0),rankdef=1,hyper=seasonal_prior))
   fit<-INLA::inla(formula,data=d,family='nbinomial',num.threads=paste0(threads,':1'),
