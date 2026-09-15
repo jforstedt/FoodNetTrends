@@ -95,7 +95,8 @@ audit_campylobacter_regional_history <- function(taskpath) {
   }
   if(!any(grepl('fips|county',names(x),ignore.case=TRUE)))write.csv(x,file.path(task$output,paste0('original_',basename(p))),row.names=FALSE)
  }
- cleanpaths<-if(is.null(prepchecks))character() else prepchecks$file[grepl('^clean.*[.]csv$',basename(prepchecks$file),ignore.case=TRUE)]
+ # The preprocessing mapping also starts with clean_; it is not the case table.
+ cleanpaths<-if(is.null(prepchecks))character() else prepchecks$file[basename(prepchecks$file)=='clean_mmwr.csv']
  cleanmeta<-list(status='UNAVAILABLE',reason='No unique hash-bound clean CSV identified in original monthly preparation inputs')
  if(length(cleanpaths)==1L){
   clean<-read.csv(cleanpaths,colClasses='character',check.names=FALSE,stringsAsFactors=FALSE)

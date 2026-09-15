@@ -36,7 +36,10 @@ if(requireNamespace('jsonlite',quietly=TRUE)) {
  write.csv(data.frame(state=a$state,year=a$year,assigned_records=a$count,annual_records=a$count,unassigned_records=0,population=a$person_years,candidate_person_years=a$person_years),file.path(td,'annual_reconciliation.csv'),row.names=FALSE)
  candidate<-file.path(td,'candidate.rds');saveRDS(d,candidate);saveRDS(d,file.path(audit,'county_panel_INTERNAL.rds'))
  cleanpath<-file.path(td,'clean_mmwr.csv');write.csv(clean,cleanpath,row.names=FALSE,na='')
- write.csv(data.frame(file=cleanpath,md5=unname(tools::md5sum(cleanpath))),file.path(td,'input_checksums.csv'),row.names=FALSE)
+ mappingpath<-file.path(td,'clean_mmwr_preprocessing_report.csv')
+ write.csv(data.frame(original='CAMPYLOBACTER',standardized='CAMPYLOBACTER'),mappingpath,row.names=FALSE)
+ sourcefiles<-c(cleanpath,mappingpath)
+ write.csv(data.frame(file=sourcefiles,md5=unname(tools::md5sum(sourcefiles))),file.path(td,'input_checksums.csv'),row.names=FALSE)
  write.csv(data.frame(file=candidate,md5=unname(tools::md5sum(candidate))),file.path(audit,'reports','input_checksums.csv'),row.names=FALSE)
  # Inject only frozen loader boundary; exercise actual discovery, source binding,
  # read-only checks, stratification, report serialization and completion handling.
