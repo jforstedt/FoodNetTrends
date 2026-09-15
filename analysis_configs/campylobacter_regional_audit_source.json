@@ -1,0 +1,16 @@
+{
+  "version": "campylobacter_regional_audit_v1",
+  "source_run": "county_covariate_experiment_20260915_113139_060588",
+  "plan_sha256": "65a28c4db66015c5fb750f4b03521d07d946bf309b66dc2bc33fb3332a0c2df0",
+  "summary_sha256": "519bf33a40e5ab04e7d72246618a5b69188f88ce5c8b11e21ca76ecce9928906",
+  "derive_inputs": true,
+  "preparation_files": {
+    "status.txt": "7e7bffd1e8a78210cb1d1a705b5e8f54354521ed7472d039771946d5b6a1346b",
+    "state_month_records.csv": "ab8ac2c336c747c6274cc77877ff59308ca2b3b37b6220d694eeddbafa555bc7",
+    "annual_reconciliation.csv": "c399154920a0fddac90c37370710dc8c50c650b7931dc472899eeefd822710db",
+    "date_issues.csv": "fdf462b4fe131a79f56a3c78ec5c347609926e3a492a1fb9017790a24cade295",
+    "calendar_template.csv": "655c98afeba1a564969eaa26b155817095248ad0b31182348db58aa9e3337d3c",
+    "readiness.csv": "8d1e8e8b86a00e83f491829861df12bcf3695c34e718d9afc9acf2f22c963bcf",
+    "input_checksums.csv": "0f121f88ba38a1d0ee3056cc27d74811d80dc7b9f9ef92159980a563276d5dd7"
+  }
+}
