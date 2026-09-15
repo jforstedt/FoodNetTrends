@@ -23,6 +23,10 @@ class Launcher(unittest.TestCase):
             with patch.object(m.shutil,'which',return_value='/bin/tool'),patch.object(m.base,'submit',return_value='123'):
                 dest=m.launch(root)
             m.package_check(dest/'bundle',m.base.sha(dest/'bundle/bundle.json'))
+            # A fresh worker interpreter must not create extra files in its snapshot.
+            import subprocess
+            subprocess.run([sys.executable,'-E',str(dest/'bundle/launch_campylobacter_regional_audit.py'),'--help'],stdout=subprocess.DEVNULL,check=True)
+            m.package_check(dest/'bundle',m.base.sha(dest/'bundle/bundle.json'))
             self.assertTrue(m.base.read(dest/'bundle/source_receipt.json')['derive_inputs'])
             self.assertFalse((dest/'plan.json').exists())
     def package(self,p):

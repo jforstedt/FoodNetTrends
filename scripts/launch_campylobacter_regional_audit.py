@@ -9,6 +9,8 @@ import shlex
 import shutil
 import subprocess
 import sys
+# Keep the verified code snapshot immutable when this entry point imports helpers.
+sys.dont_write_bytecode = True
 import regional_audit_runtime as base
 
 VERSION='campylobacter_regional_audit_v1'
