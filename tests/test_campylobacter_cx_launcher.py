@@ -11,6 +11,17 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import launch_campylobacter_cx_comparison as m
 
 class Launcher(unittest.TestCase):
+    def test_preparation_uses_original_sas_image_without_inla_library(self):
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d);image=p/'foodnet.sif';image.write_text('original runtime')
+            plan=dict(inputs={str(image):m.base.sha(image)},tasks=[dict(id='CAMPYLOBACTER',command=['singularity','exec',str(image),'Rscript','--vanilla','old.R'])])
+            m.base.write(p/'plan.json',plan);bindings={}
+            with patch.object(m,'PREP_PLAN',m.base.sha(p/'plan.json')):
+                cmd=m.preparation_command(p,'new.R','task.json',bindings)
+                self.assertEqual(cmd[7],str(image));self.assertEqual(cmd[-2:],['new.R','task.json'])
+                self.assertNotIn('R_LIBS',' '.join(cmd));self.assertEqual(bindings[str(image)],m.base.sha(image))
+                image.write_text('changed')
+                with self.assertRaises(ValueError):m.preparation_command(p,'new.R','task.json',{})
     def test_six_matched_tasks_with_disjoint_seeds(self):
         tasks=m.matrix();self.assertEqual(len(tasks),6);self.assertEqual(len({t['seed'] for t in tasks}),6)
         self.assertEqual({(t['cutoff'],t['local_seasonality']) for t in tasks},{(c,l) for c in (2011,2013,2016) for l in (False,True)})

@@ -54,7 +54,10 @@ CX+ and combined training counts coincide; the worker additionally verifies the
 saved fit identity, training counts, keys and exposure. It then reuses that fit
 and scores the narrower held-out CX+ outcome. If those checks fail, stop rather
 than silently refitting or relaxing the equivalence requirement.
-Reuse the established container, compiled library and frozen fitter. Four
+Use the hash-bound original monthly-preparation image for SAS import, with its
+own R packages and no INLA-library override. Check the required import packages
+before reading data. Fitting and scoring reuse the established INLA container,
+compiled library and frozen fitter. Record both runtime identities. Four
 streams of 1,000 posterior draws per CX+ task provide an initial numerical check;
 the saved combined reports may have more draws. Report this difference rather
 than interpreting unequal Monte Carlo noise as a scientific effect. No automatic

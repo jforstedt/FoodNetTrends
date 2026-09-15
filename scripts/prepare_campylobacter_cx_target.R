@@ -15,7 +15,9 @@ cx_subset_inventory <- function(selected,panel,combined,inventory) {
  result
 }
 prepare_campylobacter_cx_target <- function(taskpath) {
- if(!requireNamespace('jsonlite',quietly=TRUE))stop('jsonlite required')
+ required<-c('jsonlite','haven','readr','tidyselect')
+ missing<-required[!vapply(required,requireNamespace,logical(1),quietly=TRUE)]
+ if(length(missing))stop('SAS preparation runtime missing packages: ',paste(missing,collapse=', '))
  task<-jsonlite::read_json(taskpath,simplifyVector=TRUE)
  if(!all(c('source_run','source_scripts','preparation_scripts','output')%in%names(task))||dir.exists(task$output))stop('Invalid/existing preparation task')
  files<-list.files(task$source_run,pattern='^CAMPYLOBACTER_.*[.]json$',full.names=TRUE)

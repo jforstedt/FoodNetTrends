@@ -83,6 +83,20 @@ def copy_combined(root,old,dest,bindings):
     return reuse
 
 
+def preparation_command(prep,script,task,bindings):
+    # SAS import belongs to the original preprocessing image, not the INLA image.
+    base.check({str(prep/'plan.json'):PREP_PLAN})
+    plan=base.read(prep/'plan.json')
+    matches=[t for t in plan['tasks'] if t.get('id')=='CAMPYLOBACTER']
+    if len(matches)!=1:raise ValueError('Ambiguous original preparation task')
+    cmd=matches[0]['command'];index=cmd.index('Rscript')
+    container=cmd[index-1]
+    if index<1 or not container.endswith('.sif') or container not in plan['inputs']:raise ValueError('Unbound preparation container')
+    h=plan['inputs'][container];base.check({container:h});bindings[container]=h
+    return ['singularity','exec','--cleanenv','--env','OPENBLAS_NUM_THREADS=1,OMP_NUM_THREADS=1',
+            '--bind','/scicomp',container,'Rscript','--vanilla',str(script),str(task)]
+
+
 def prepare(dest,digest):
     if base.sha(dest/'bootstrap.json')!=digest:raise ValueError('Bootstrap changed')
     boot=base.read(dest/'bootstrap.json');bundle=dest/'bundle';bm=package_check(bundle,boot['bundle_sha256']);root=Path(boot['root'])
@@ -104,8 +118,12 @@ def prepare(dest,digest):
     task=dict(source_run=str(source),source_scripts=str(source/'bundle/scripts'),preparation_scripts=str(prep/'scripts'),output=str(dest/'preparation'))
     base.write(dest/'preparation_task.json',task);bindings[str(dest/'preparation_task.json')]=base.sha(dest/'preparation_task.json')
     print('Replaying frozen combined selection and validating the CX+ target; no fits yet',flush=True)
+    command=preparation_command(prep,bundle/'prepare_campylobacter_cx_target.R',dest/'preparation_task.json',bindings)
+    base.write(dest/'preparation_runtime.json',dict(container=command[7],container_sha256=bindings[command[7]],
+        purpose='Original SAS import runtime; INLA fitting runtime remains separate'))
+    bindings[str(dest/'preparation_runtime.json')]=base.sha(dest/'preparation_runtime.json')
     with (dest/'preparation.log').open('w') as log:
-        code=subprocess.call(base.runtime_command(old['container'],bundle/'prepare_campylobacter_cx_target.R',dest/'preparation_task.json'),stdout=log,stderr=subprocess.STDOUT)
+        code=subprocess.call(command,stdout=log,stderr=subprocess.STDOUT)
     if code:raise ValueError('Target preparation failed; see preparation.log')
     if (dest/'preparation/status.txt').read_text().strip()!='CX_TARGET_PREPARATION_COMPLETE':raise ValueError('Target preparation incomplete')
     metadata=base.read(dest/'preparation/preparation_metadata.json')
