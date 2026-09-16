@@ -22,7 +22,7 @@ REFERENCES={'CRYPTOSPORIDIUM':('ar1',),'CYCLOSPORA':('ar1',),'LISTERIA':('ar1',)
 FILES=('launch_covariate_expansion.py','regional_audit_runtime.py','rebase_covariate_features.py',
        'prepare_covariate_expansion.R','run_covariate_expansion.R')
 
-def matrix():
+def matrix(seed_start=200000000):
     tasks=[]
     for pathogen,models in REFERENCES.items():
         end=2017 if pathogen=='CRYPTOSPORIDIUM' else 2019
@@ -34,7 +34,7 @@ def matrix():
                             tasks.append(dict(task_id='%s_%s_%s_local%d_weather%s_age%d'%(pathogen,temporal,cutoff,local,window,age),
                                 pathogen=pathogen,temporal=temporal,cutoff=cutoff,end_year=end,local_seasonality=local,
                                 weather=window!='off',weather_window='current' if window=='off' else window,age=age,
-                                seed=900000000+len(tasks)*1000000,threads=4,draws_per_stream=1000,expansion_version=VERSION))
+                                seed=seed_start+len(tasks)*1000000,threads=4,draws_per_stream=1000,expansion_version=VERSION))
     return tasks
 
 def legacy(path):
@@ -171,7 +171,7 @@ def prepare(dest,digest):
     for pathogen in REFERENCES:
         path=dest/(pathogen+'_preflight.json');base.write(path,[e['task'] for e in tasks if e['task']['pathogen']==pathogen])
         bindings[str(path)]=base.sha(path);checks.append(dict(pathogen=pathogen,path=str(path)))
-    plan=dict(version=VERSION,tasks=tasks,reused=reused,preflights=checks,bindings=bindings,container=old['container'],
+    plan=dict(version=VERSION,seed_start=200000000,tasks=tasks,reused=reused,preflights=checks,bindings=bindings,container=old['container'],
         container_sha256=old['container_sha256'],container_stat=old['container_stat'],validator=str(validator_path),
         mode='historical_conditional',new_fits=288,reused_fits=72,scientific_acceptance=False,independent_validation=False)
     base.write(dest/'plan.json',plan);pd=base.sha(dest/'plan.json');verify(dest,plan,pd)
@@ -189,7 +189,9 @@ def prepare(dest,digest):
 def verify(dest,p,digest):
     if base.sha(dest/'plan.json')!=digest or p.get('version')!=VERSION or p.get('scientific_acceptance') is not False or p.get('mode')!='historical_conditional':raise ValueError('Changed expansion plan')
     if len(p['tasks'])!=288 or len(p['reused'])!=72:raise ValueError('Wrong experiment size')
-    for entry,t in zip(p['tasks'],matrix()):
+    # Old plans remain verifiable for checkpoint recovery. New launches always
+    # record the bounded seed schedule above; old snapshots are never rewritten.
+    for entry,t in zip(p['tasks'],matrix(p.get('seed_start',900000000))):
         if any(entry['task'].get(k)!=v for k,v in t.items()):raise ValueError('Changed task matrix')
     base.check(p['bindings']);container=Path(p['container'])
     if dict(size=container.stat().st_size,mtime_ns=container.stat().st_mtime_ns)!=p['container_stat']:raise ValueError('Runtime snapshot changed')

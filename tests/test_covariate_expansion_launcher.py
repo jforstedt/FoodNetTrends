@@ -31,12 +31,43 @@ class ExpansionLauncherTests(unittest.TestCase):
         self.assertEqual(len(m.base.matrix()), 72)
         self.assertGreater(min(t['seed'] for t in tasks), max(t['seed'] for t in m.base.matrix()) + 200000)
 
+    def test_all_new_sampler_seeds_stay_inside_supported_range(self):
+        tasks=m.matrix()
+        self.assertEqual(tasks[0]['seed'],200000000)
+        self.assertEqual(tasks[-1]['seed'],487000000)
+        all_seeds=[]
+        for task in tasks:
+            self.assertTrue(1 <= task['seed'] <= 1000000000)
+            # Exercise all four streams, every 100-draw batch and each RNG role.
+            values=[task['seed']+stream*50000+start+offset
+                    for stream in range(4)
+                    for start in range(1,task['draws_per_stream']+1,100)
+                    for offset in (0,10000,20000)]
+            self.assertTrue(all(1 <= seed <= 1000000000 for seed in values))
+            all_seeds.extend(values)
+        self.assertEqual(len(all_seeds),len(set(all_seeds)))
+        self.assertEqual(max(all_seeds),487170901)
+
+    def test_legacy_seed_plan_remains_readonly_verifiable(self):
+        with tempfile.TemporaryDirectory() as d:
+            dest=Path(d)
+            plan,_=self.fixture_plan(dest)
+            plan.pop('seed_start')
+            plan['tasks']=[dict(task=t) for t in m.matrix(900000000)]
+            self.assertGreater(plan['tasks'][-1]['task']['seed'],1000000000)
+            m.base.write(dest/'plan.json',plan)
+            digest=m.base.sha(dest/'plan.json')
+            before={str(p):p.read_bytes() for p in dest.rglob('*') if p.is_file()}
+            m.verify(dest,plan,digest)
+            self.assertEqual(before,{str(p):p.read_bytes() for p in dest.rglob('*') if p.is_file()})
+            self.assertNotIn('seed_start',plan)
+
     def fixture_plan(self, dest):
         image = dest / 'runtime.sif'
         image.write_text('runtime')
         code = dest / 'bound.py'
         code.write_text('frozen')
-        plan = dict(version=m.VERSION, mode='historical_conditional', scientific_acceptance=False,
+        plan = dict(version=m.VERSION, seed_start=200000000, mode='historical_conditional', scientific_acceptance=False,
                     tasks=[dict(task=t) for t in m.matrix()], reused=[dict(task=t) for t in m.base.matrix()],
                     bindings={str(code): m.base.sha(code)}, container=str(image), container_sha256=m.base.sha(image),
                     container_stat=dict(size=image.stat().st_size, mtime_ns=image.stat().st_mtime_ns))

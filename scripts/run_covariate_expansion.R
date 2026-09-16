@@ -6,6 +6,8 @@ source(file.path(.here,'prepare_covariate_expansion.R'))
 
 run_covariate_expansion <- function(taskpath) {
  task<-jsonlite::read_json(taskpath,simplifyVector=TRUE)
+ # Check the frozen sampler's actual bound before doing any fitting work.
+ if(!is.numeric(task$seed)||length(task$seed)!=1L||!is.finite(task$seed)||task$seed<1||task$seed>1e9||task$seed!=floor(task$seed))stop('Sampling seed must be an integer in 1..1000000000 before fitting')
  load_covariate_expansion_helpers(task)
  if(is.null(task$age))task$age<-FALSE
  if(is.null(task$weather_window))task$weather_window<-'current'
